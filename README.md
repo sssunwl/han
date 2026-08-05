@@ -139,8 +139,9 @@ npm run dev --prefix /Users/sws/Sun/Claude/han
 
 1. `touch-action:none` + `overscroll-behavior:none` + `position:fixed` —— 擋掉捲動與下拉重整
 2. 攔截 `gesturestart` / `contextmenu` / `dblclick` —— 擋掉雙指縮放、長按選單、雙擊放大
-3. Android:按下開始時呼叫 `requestFullscreen()` + 鎖橫向
-4. **iPhone 只能靠「加到主畫面」**。iOS Safari 不支援網頁全螢幕 API,只有從主畫面圖示啟動(`apple-mobile-web-app-capable`)才會沒有網址列、沒有左滑返回。大廳會依裝置顯示對應的加入步驟
+3. **全螢幕**:按「開始玩」時要求 `requestFullscreen()`(含 webkit 前綴),另外有一顆 ⛶ 切換鈕。電腦與 Android 都適用
+4. **版面用 `100dvh`,不是 `100vh`**。`vh` 算的是工具列收起來後的高度,手機工具列還在時,底部的快捷列與動作鍵會被蓋掉。canvas 也改成 `position:fixed; inset:0` 由 CSS 撐滿,JS 用 `setSize(w, h, false)` 只調繪圖緩衝
+5. **iPhone 只能靠「加到主畫面」**。iOS Safari 沒有全螢幕 API,只有從主畫面圖示啟動(`apple-mobile-web-app-capable`)才會沒有網址列、沒有左滑返回。偵測到這種情況時,開始畫面與大廳都會直接把步驟寫出來
 
 ### 效能
 
