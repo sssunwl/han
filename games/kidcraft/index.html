@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>方塊世界 KidCraft</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { overflow:hidden; font-family:"PingFang TC","Microsoft JhengHei",sans-serif; background:#87ceeb; }
+  canvas { display:block; }
+
+  #crosshair {
+    position:fixed; left:50%; top:50%; width:22px; height:22px;
+    transform:translate(-50%,-50%); pointer-events:none; opacity:.8;
+  }
+  #crosshair::before, #crosshair::after {
+    content:""; position:absolute; background:#fff;
+    box-shadow:0 0 2px rgba(0,0,0,.8);
+  }
+  #crosshair::before { left:50%; top:0; width:2px; height:100%; margin-left:-1px; }
+  #crosshair::after { top:50%; left:0; height:2px; width:100%; margin-top:-1px; }
+
+  #hotbar {
+    position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+    display:flex; gap:6px; padding:6px; border-radius:12px;
+    background:rgba(0,0,0,.35); pointer-events:none;
+  }
+  .slot {
+    width:58px; height:58px; border-radius:9px; border:3px solid rgba(255,255,255,.35);
+    background:rgba(255,255,255,.12); display:flex; flex-direction:column;
+    align-items:center; justify-content:center; color:#fff; position:relative;
+  }
+  .slot.on { border-color:#fff; background:rgba(255,255,255,.3); transform:scale(1.08); }
+  .slot .sw { width:28px; height:28px; border-radius:5px; box-shadow:inset 0 -6px rgba(0,0,0,.18); }
+  .slot .nm { font-size:11px; margin-top:3px; text-shadow:0 1px 2px #000; }
+  .slot .no { position:absolute; top:2px; left:5px; font-size:10px; opacity:.75; }
+
+  #hint {
+    position:fixed; top:14px; left:14px; color:#fff; font-size:14px; line-height:1.7;
+    text-shadow:0 1px 3px rgba(0,0,0,.9); pointer-events:none;
+  }
+  #toast {
+    position:fixed; top:14px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,.6); color:#fff; padding:8px 16px; border-radius:20px;
+    font-size:14px; opacity:0; transition:opacity .3s; pointer-events:none;
+  }
+
+  /* ---- 任務面板 ---- */
+  #quest {
+    position:fixed; top:14px; right:14px; width:230px; padding:12px 14px;
+    border-radius:14px; background:rgba(0,0,0,.42); color:#fff;
+    backdrop-filter:blur(4px); pointer-events:none;
+    transition:transform .25s, opacity .25s;
+  }
+  #quest.pop { transform:scale(1.06); }
+  #quest .q-label {
+    font-size:11px; letter-spacing:3px; color:#ffe08a; margin-bottom:4px;
+  }
+  #quest .q-title { font-size:16px; font-weight:bold; line-height:1.45; }
+  #quest .q-hint { font-size:12px; opacity:.75; margin-top:5px; line-height:1.5; }
+  #quest .q-bar {
+    height:7px; border-radius:4px; background:rgba(255,255,255,.22);
+    margin-top:9px; overflow:hidden;
+  }
+  #quest .q-bar i { display:block; height:100%; width:0; background:#ffd257; transition:width .3s; }
+  #quest .q-count { font-size:11px; opacity:.7; margin-top:4px; text-align:right; }
+  #quest.done .q-bar i { background:#7bdc7b; }
+
+  /* ---- 完成慶祝 ---- */
+  #celebrate {
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    pointer-events:none; opacity:0; transition:opacity .3s;
+  }
+  #celebrate.show { opacity:1; }
+  #celebrate .c-card {
+    background:rgba(255,255,255,.94); border-radius:20px; padding:22px 44px;
+    text-align:center; box-shadow:0 14px 40px rgba(0,0,0,.3);
+    transform:scale(.8); transition:transform .35s cubic-bezier(.2,1.6,.4,1);
+  }
+  #celebrate.show .c-card { transform:scale(1); }
+  #celebrate .c-big { font-size:30px; font-weight:bold; color:#2e9e4f; }
+  #celebrate .c-sub { font-size:15px; color:#555; margin-top:6px; }
+
+  #confetti { position:fixed; inset:0; pointer-events:none; overflow:hidden; }
+  #confetti i {
+    position:absolute; width:9px; height:14px; border-radius:2px;
+    animation:fall linear forwards;
+  }
+  @keyframes fall {
+    from { transform:translateY(-20px) rotate(0deg); opacity:1; }
+    to   { transform:translateY(105vh) rotate(720deg); opacity:.9; }
+  }
+
+  #start {
+    position:fixed; inset:0; background:linear-gradient(#7ec0ee,#c7e9ff);
+    display:flex; align-items:center; justify-content:center; z-index:10;
+  }
+  #start .card {
+    background:#fff; border-radius:22px; padding:34px 40px; max-width:540px;
+    box-shadow:0 18px 50px rgba(0,0,0,.25); text-align:center;
+  }
+  #start h1 { font-size:34px; color:#3b7d3b; margin-bottom:6px; }
+  #start p.sub { color:#666; margin-bottom:20px; }
+  #start ul { text-align:left; color:#444; line-height:2; margin:0 auto 22px; display:block; width:fit-content; font-size:15px; }
+  #playBtn { display:block; margin:0 auto; }
+  kbd {
+    background:#eee; border:1px solid #ccc; border-bottom-width:2px; border-radius:5px;
+    padding:1px 7px; font-family:inherit; font-size:13px;
+  }
+  #start button {
+    font-size:20px; padding:13px 44px; border:none; border-radius:14px;
+    background:#4caf50; color:#fff; cursor:pointer; font-weight:bold;
+  }
+  #start button:hover { background:#43a047; }
+  #start .reset { display:block; margin:14px auto 0; background:none; color:#888; font-size:13px; padding:4px; text-decoration:underline; }
+  #start .back { display:inline-block; margin-top:10px; color:#888; font-size:13px; text-decoration:none; }
+  #start .back:hover { color:#4c7dff; }
+  #who {
+    display:inline-flex; align-items:center; gap:8px; margin-bottom:14px;
+    padding:6px 16px 6px 8px; border-radius:30px; background:#f1f4fa; font-size:15px;
+  }
+  #who .face { font-size:24px; }
+  #who b { font-weight:bold; }
+</style>
+</head>
+<body>
+  <div id="crosshair"></div>
+  <div id="hotbar"></div>
+  <div id="hint"></div>
+  <div id="toast"></div>
+
+  <div id="quest">
+    <div class="q-label">任 務</div>
+    <div class="q-title"></div>
+    <div class="q-hint"></div>
+    <div class="q-bar"><i></i></div>
+    <div class="q-count"></div>
+  </div>
+
+  <div id="confetti"></div>
+  <div id="celebrate">
+    <div class="c-card">
+      <div class="c-big">任務完成!</div>
+      <div class="c-sub"></div>
+    </div>
+  </div>
+
+  <div id="start">
+    <div class="card">
+      <div id="who"></div>
+      <h1>方塊世界</h1>
+      <p class="sub">蓋房子、挖地道、想做什麼都可以 —— 不會死掉，不用怕<br><b>照著右上角的任務做，就知道怎麼玩了</b></p>
+      <ul>
+        <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走路 · <kbd>空白鍵</kbd> 跳</li>
+        <li>移動滑鼠 = 看四周</li>
+        <li><b>左鍵</b> 挖掉方塊 · <b>右鍵</b> 放方塊</li>
+        <li><kbd>1</kbd>～<kbd>9</kbd> 或滾輪 = 換方塊</li>
+        <li><kbd>F</kbd> 飛行模式 · <kbd>R</kbd> 回到出生點</li>
+        <li><kbd>Esc</kbd> 暫停（會自動存檔）</li>
+      </ul>
+      <button id="playBtn">開始玩</button>
+      <button class="reset" id="resetBtn">重新產生一個新世界</button>
+      <a class="back" href="../../">← 回遊戲間換人</a>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
