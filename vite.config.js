@@ -6,6 +6,7 @@ export default {
       input: {
         lobby: 'index.html',
         kidcraft: 'games/kidcraft/index.html',
+        pinball: 'games/pinball/index.html',
       },
     },
   },
