@@ -190,17 +190,28 @@ scene.background = new THREE.Color(0x9fd8f5);
 // 霧只用來柔化世界最外圈,拉太近的話中距離地形會整片褪成天空色,看起來像破洞
 scene.fog = new THREE.Fog(0x9fd8f5, 95, 190);
 
-const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 260);
+const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 260);
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 // 手機的 devicePixelRatio 常常是 3,照著畫等於多算 9 倍的像素,是行動裝置最常見的掉幀原因
 renderer.setPixelRatio(Math.min(devicePixelRatio, matchMedia('(pointer: coarse)').matches ? 1.5 : 2));
-renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
-addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight;
+
+// 尺寸交給 CSS(canvas 是 position:fixed + 100dvh),JS 只跟著實際盒子調整繪圖緩衝。
+// 這樣手機瀏覽器的網址列伸縮時,畫面與按鈕會一起貼齊「看得到的那塊」,不會被工具列蓋住。
+function resizeToViewport() {
+  const el = renderer.domElement;
+  const w = el.clientWidth || innerWidth;
+  const h = el.clientHeight || innerHeight;
+  if (w < 1 || h < 1) return;           // 分頁被收起來時尺寸會是 0,別把 aspect 算成 NaN
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
+  renderer.setSize(w, h, false);        // false = 不要讓 three.js 覆寫 CSS 尺寸
+}
+addEventListener('resize', resizeToViewport);
+addEventListener('orientationchange', () => setTimeout(resizeToViewport, 250));
+visualViewport?.addEventListener('resize', resizeToViewport);
+document.addEventListener('fullscreenchange', () => setTimeout(resizeToViewport, 100));
+resizeToViewport();
 
 const material = new THREE.MeshBasicMaterial({ map: ATLAS.tex, vertexColors: true });
 
@@ -338,15 +349,43 @@ const isLocked = () => document.pointerLockElement === canvas;
 const active = () => playing && (isLocked() || !lockWorks);
 function lockPointer() { try { canvas.requestPointerLock(); } catch (e) { } }
 
+/* ---------- 全螢幕 ----------
+   瀏覽器只允許在使用者手勢裡進全螢幕,所以按「開始玩」時就一起要。
+   iPhone 的 Safari 完全不支援這個 API —— 那邊唯一的解法是「加到主畫面」。 */
+const root = document.documentElement;
+const fsRequest = root.requestFullscreen || root.webkitRequestFullscreen;
+const fsExit = document.exitFullscreen || document.webkitExitFullscreen;
+const CAN_FULLSCREEN = !!fsRequest;
+const inFullscreen = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+
+if (CAN_FULLSCREEN) document.body.classList.add('can-fullscreen');
+
+// 沒有全螢幕 API 又不是從主畫面開的(= iPhone Safari),就把加到主畫面的步驟講出來
+const IS_STANDALONE = matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches
+  || navigator.standalone === true;
+if (!CAN_FULLSCREEN && !IS_STANDALONE) document.body.classList.add('needs-a2hs');
+
+function enterFullscreen() {
+  if (!fsRequest || inFullscreen()) return;
+  try { const r = fsRequest.call(root); if (r && r.catch) r.catch(() => { }); } catch (e) { }
+  screen.orientation?.lock?.('landscape').catch(() => { });
+}
+function toggleFullscreen() {
+  if (inFullscreen()) { try { fsExit?.call(document); } catch (e) { } }
+  else enterFullscreen();
+}
+document.getElementById('fsBtn').addEventListener('click', toggleFullscreen);
+document.addEventListener('fullscreenchange', () => {
+  document.getElementById('fsBtn').textContent = inFullscreen() ? '⤡' : '⛶';
+  // 同一個手勢裡同時要全螢幕與滑鼠鎖定時,鎖定有機會被瀏覽器丟掉,進去之後補一次
+  if (inFullscreen() && playing && !IS_TOUCH && !isLocked()) lockPointer();
+});
+
 document.getElementById('playBtn').onclick = () => {
   startEl.style.display = 'none';
   playing = true;
-  if (IS_TOUCH) {
-    // 全螢幕能擋掉網址列與返回手勢。iPhone 的 Safari 不支援,
-    // 那邊真正的解法是「加到主畫面」,大廳有教。
-    document.documentElement.requestFullscreen?.().catch(() => { });
-    screen.orientation?.lock?.('landscape').catch(() => { });
-  } else {
+  enterFullscreen();                     // 電腦跟 Android 都會進全螢幕
+  if (!IS_TOUCH) {
     lockPointer();
     setTimeout(() => { if (!lockWorks) toast('提示:按住滑鼠拖曳可以轉視角'); }, 500);
   }
