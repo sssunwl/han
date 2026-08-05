@@ -2,12 +2,26 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#9fd8f5">
+<!-- 從主畫面開啟時不顯示瀏覽器介面,才不會誤觸上一頁 / 網址列 -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="方塊世界">
+<link rel="manifest" href="/han/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/han/icon-192.png">
 <title>方塊世界 KidCraft</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body { overflow:hidden; font-family:"PingFang TC","Microsoft JhengHei",sans-serif; background:#87ceeb; }
-  canvas { display:block; }
+  html, body {
+    overflow:hidden; overscroll-behavior:none; touch-action:none;
+    -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
+    -webkit-tap-highlight-color:transparent;
+    width:100%; height:100%; position:fixed;
+  }
+  body { font-family:"PingFang TC","Microsoft JhengHei",sans-serif; background:#87ceeb; }
+  canvas { display:block; touch-action:none; }
 
   #crosshair {
     position:fixed; left:50%; top:50%; width:22px; height:22px;
@@ -45,6 +59,83 @@
     font-size:14px; opacity:0; transition:opacity .3s; pointer-events:none;
   }
 
+  /* ============ 觸控操作(只在手機/平板顯示) ============ */
+  #touch { display:none; }
+  body.touch #touch { display:block; }
+  #touch > * { position:fixed; pointer-events:auto; touch-action:none; }
+
+  /* 左下:走路搖桿 */
+  #stick {
+    left:calc(22px + env(safe-area-inset-left)); bottom:calc(22px + env(safe-area-inset-bottom));
+    width:132px; height:132px; border-radius:50%;
+    background:rgba(255,255,255,.16); border:3px solid rgba(255,255,255,.4);
+  }
+  #stick i {
+    position:absolute; left:50%; top:50%; width:56px; height:56px; margin:-28px 0 0 -28px;
+    border-radius:50%; background:rgba(255,255,255,.75);
+    box-shadow:0 2px 8px rgba(0,0,0,.3);
+  }
+
+  /* 右下:動作鍵 */
+  #acts {
+    right:calc(20px + env(safe-area-inset-right)); bottom:calc(20px + env(safe-area-inset-bottom));
+    display:grid; grid-template-columns:repeat(2,78px); gap:12px;
+  }
+  #acts button {
+    width:78px; height:78px; border-radius:50%; border:3px solid rgba(255,255,255,.45);
+    background:rgba(0,0,0,.32); color:#fff; font-size:19px; font-weight:bold;
+    font-family:inherit; backdrop-filter:blur(3px);
+  }
+  #acts button:active { background:rgba(255,255,255,.4); transform:scale(.94); }
+  #acts .jump { grid-column:2; background:rgba(76,125,255,.45); }
+  #acts .fly { width:52px; height:52px; font-size:14px; justify-self:end; align-self:end; }
+
+  /* 左上:暫停(手機沒有 Esc) */
+  #pauseBtn {
+    display:none; top:calc(12px + env(safe-area-inset-top)); left:calc(12px + env(safe-area-inset-left));
+    width:44px; height:44px; border-radius:14px; border:none;
+    background:rgba(0,0,0,.4); color:#fff; font-size:17px; font-family:inherit; z-index:5;
+  }
+  body.touch #pauseBtn { display:block; position:fixed; }
+
+  /* 直向時要求轉橫 */
+  #rotate {
+    position:fixed; inset:0; z-index:20; display:none;
+    background:#1d2433; color:#fff; align-items:center; justify-content:center;
+    text-align:center; font-size:19px; line-height:2;
+  }
+  #rotate .icon { font-size:60px; display:block; margin-bottom:12px; }
+  #rotate button {
+    display:block; margin:22px auto 0; font-family:inherit; font-size:14px;
+    padding:9px 20px; border-radius:10px; border:1px solid rgba(255,255,255,.35);
+    background:transparent; color:rgba(255,255,255,.7);
+  }
+  body.touch.portrait:not(.keep-portrait) #rotate { display:flex; }
+
+  /* 手機版面:快捷列縮小讓開搖桿跟動作鍵,鍵盤提示直接收起來 */
+  body.touch #hint { display:none; }
+  /* 快捷列夾在左邊搖桿與右邊動作鍵中間。格子大小跟著螢幕寬度縮,
+     不然 iPhone SE 這種窄機橫放時,「放」鍵會壓到最後一格,一按就誤觸。 */
+  body.touch #hotbar {
+    bottom:8px; gap:3px; padding:4px;
+    --slot:clamp(22px, calc((100vw - 400px) / 9 - 4px), 40px);
+  }
+  body.touch .slot {
+    width:var(--slot); height:var(--slot);
+    border-width:2px; border-radius:7px; overflow:hidden;
+  }
+  body.touch .slot .sw { width:52%; height:52%; }
+  body.touch .slot .nm { font-size:9px; margin-top:1px; }
+  body.touch .slot .no { display:none; }
+  body.touch #quest { width:172px; padding:9px 11px; top:calc(10px + env(safe-area-inset-top)); right:calc(10px + env(safe-area-inset-right)); }
+  body.touch #quest .q-title { font-size:14px; }
+  body.touch #quest .q-hint { font-size:11px; }
+  @media (max-width:680px) {
+    body.touch .slot .nm { display:none; }
+    body.touch #stick { width:112px; height:112px; }
+    body.touch #acts { grid-template-columns:repeat(2,66px); gap:10px; }
+    body.touch #acts button { width:66px; height:66px; font-size:17px; }
+  }
   /* ---- 任務面板 ---- */
   #quest {
     position:fixed; top:14px; right:14px; width:230px; padding:12px 14px;
@@ -113,8 +204,28 @@
   }
   #start button:hover { background:#43a047; }
   #start .reset { display:block; margin:14px auto 0; background:none; color:#888; font-size:13px; padding:4px; text-decoration:underline; }
+  /* 這幾條要跟上面的 #start ul 一樣帶 id,否則特異性輸掉、兩份說明會同時出現 */
+  #start ul.touch-only { display:none; }
+  body.touch #start ul.kb-only { display:none; }
+  body.touch #start ul.touch-only { display:block; }
+  .a2hs { display:none; font-size:13px; color:#7b8398; margin:-8px 0 18px; }
+  body.touch .a2hs { display:block; }
   #start .back { display:inline-block; margin-top:10px; color:#888; font-size:13px; text-decoration:none; }
   #start .back:hover { color:#4c7dff; }
+
+  /* 橫向手機的高度很矮(iPhone 橫放只有 ~390px),開始畫面要整個縮小才塞得下。
+     這段一定要放在所有 #start 規則之後,否則會被同特異性的後面規則蓋掉。 */
+  @media (max-height:560px) {
+    #start { align-items:flex-start; overflow-y:auto; }
+    #start .card { padding:16px 26px; margin:8px; border-radius:16px; }
+    #start h1 { font-size:23px; margin-bottom:2px; }
+    #start .sub { font-size:12px; margin-bottom:10px; line-height:1.5; }
+    #start ul { line-height:1.7; font-size:13px; margin-bottom:12px; }
+    #start button { font-size:16px; padding:9px 30px; }
+    #who { margin-bottom:8px; padding:3px 12px 3px 6px; font-size:13px; }
+    #who .face { font-size:18px; }
+    .a2hs { margin:-6px 0 12px; font-size:12px; }
+  }
   #who {
     display:inline-flex; align-items:center; gap:8px; margin-bottom:14px;
     padding:6px 16px 6px 8px; border-radius:30px; background:#f1f4fa; font-size:15px;
@@ -137,6 +248,25 @@
     <div class="q-count"></div>
   </div>
 
+  <div id="touch">
+    <div id="stick"><i></i></div>
+    <div id="acts">
+      <button class="fly" id="flyBtn">飛</button>
+      <button class="jump" id="jumpBtn">跳</button>
+      <button id="digBtn">挖</button>
+      <button id="putBtn">放</button>
+    </div>
+  </div>
+  <button id="pauseBtn">⏸</button>
+
+  <div id="rotate">
+    <div>
+      <span class="icon">📱↻</span>
+      把手機轉成橫的<br>畫面比較大，比較好玩
+      <button id="keepPortrait">還是要直的玩</button>
+    </div>
+  </div>
+
   <div id="confetti"></div>
   <div id="celebrate">
     <div class="c-card">
@@ -150,7 +280,7 @@
       <div id="who"></div>
       <h1>方塊世界</h1>
       <p class="sub">蓋房子、挖地道、想做什麼都可以 —— 不會死掉，不用怕<br><b>照著右上角的任務做，就知道怎麼玩了</b></p>
-      <ul>
+      <ul class="kb-only">
         <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 走路 · <kbd>空白鍵</kbd> 跳</li>
         <li>移動滑鼠 = 看四周</li>
         <li><b>左鍵</b> 挖掉方塊 · <b>右鍵</b> 放方塊</li>
@@ -158,6 +288,14 @@
         <li><kbd>F</kbd> 飛行模式 · <kbd>R</kbd> 回到出生點</li>
         <li><kbd>Esc</kbd> 暫停（會自動存檔）</li>
       </ul>
+      <ul class="touch-only">
+        <li><b>左下圓盤</b> 推一下就會走路</li>
+        <li><b>在畫面上滑</b> = 看四周</li>
+        <li><b>挖</b> 按住不放會一直挖 · <b>放</b> 放方塊</li>
+        <li>點下面的方塊 = 換方塊</li>
+        <li><b>跳</b> 跳一下 · <b>飛</b> 可以飛起來</li>
+      </ul>
+      <p class="a2hs">把手機轉成<b>橫的</b>比較好玩</p>
       <button id="playBtn">開始玩</button>
       <button class="reset" id="resetBtn">重新產生一個新世界</button>
       <a class="back" href="../../">← 回遊戲間換人</a>

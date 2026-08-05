@@ -191,8 +191,9 @@ scene.background = new THREE.Color(0x9fd8f5);
 scene.fog = new THREE.Fog(0x9fd8f5, 95, 190);
 
 const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 260);
-const renderer = new THREE.WebGLRenderer({ antialias: false });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+// 手機的 devicePixelRatio 常常是 3,照著畫等於多算 9 倍的像素,是行動裝置最常見的掉幀原因
+renderer.setPixelRatio(Math.min(devicePixelRatio, matchMedia('(pointer: coarse)').matches ? 1.5 : 2));
 renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 addEventListener('resize', () => {
@@ -340,8 +341,15 @@ function lockPointer() { try { canvas.requestPointerLock(); } catch (e) { } }
 document.getElementById('playBtn').onclick = () => {
   startEl.style.display = 'none';
   playing = true;
-  lockPointer();
-  setTimeout(() => { if (!lockWorks) toast('提示:按住滑鼠拖曳可以轉視角'); }, 500);
+  if (IS_TOUCH) {
+    // 全螢幕能擋掉網址列與返回手勢。iPhone 的 Safari 不支援,
+    // 那邊真正的解法是「加到主畫面」,大廳有教。
+    document.documentElement.requestFullscreen?.().catch(() => { });
+    screen.orientation?.lock?.('landscape').catch(() => { });
+  } else {
+    lockPointer();
+    setTimeout(() => { if (!lockWorks) toast('提示:按住滑鼠拖曳可以轉視角'); }, 500);
+  }
 };
 document.getElementById('resetBtn').onclick = () => {
   clearSave();
@@ -358,9 +366,10 @@ document.addEventListener('pointerlockchange', () => {
 });
 
 // 轉視角:鎖定滑鼠時直接動;沒鎖定就用「按住拖曳」
+// (觸控裝置走另一套 pointer 事件,這裡直接讓開,免得相容性滑鼠事件把視角轉兩倍)
 let dragging = false, dragStart = null;
 document.addEventListener('mousemove', (e) => {
-  if (!playing) return;
+  if (!playing || IS_TOUCH) return;
   if (!isLocked() && !dragging) return;
   yaw -= e.movementX * 0.0022;
   pitch -= e.movementY * 0.0022;
@@ -382,6 +391,116 @@ addEventListener('wheel', (e) => {
   drawHotbar();
 }, { passive: true });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+/* ============================================================
+   觸控操作
+   手機沒有鍵盤、沒有右鍵、也沒有滑鼠鎖定,整套要另外做:
+   左下搖桿走路 / 空白處滑動看四周 / 挖·放·跳·飛 四顆按鈕。
+   ============================================================ */
+// 用 (pointer: coarse) 判斷「手指」而不是 maxTouchPoints —— 觸控筆電有滑鼠,不該被當成手機。
+// 加 ?touch=1 可以在電腦上強制打開觸控介面,方便驗證。
+const IS_TOUCH = matchMedia('(pointer: coarse)').matches
+  || new URLSearchParams(location.search).has('touch');
+const touchMove = { x: 0, y: 0 };     // y 為負 = 往前
+let touchJump = false;
+
+if (IS_TOUCH) {
+  document.body.classList.add('touch');
+
+  // --- 走路搖桿 ---
+  const stick = document.getElementById('stick');
+  const knob = stick.querySelector('i');
+  const R = 46;                        // 拉桿最大半徑
+  let stickId = null, cx = 0, cy = 0;
+
+  const capture = (el, id) => { try { el.setPointerCapture(id); } catch (err) { } };
+
+  stick.addEventListener('pointerdown', (e) => {
+    stickId = e.pointerId;
+    capture(stick, stickId);
+    const r = stick.getBoundingClientRect();
+    cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+    e.preventDefault();
+  });
+  stick.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== stickId) return;
+    let dx = e.clientX - cx, dy = e.clientY - cy;
+    const d = Math.hypot(dx, dy);
+    if (d > R) { dx = dx / d * R; dy = dy / d * R; }
+    knob.style.transform = `translate(${dx}px,${dy}px)`;
+    touchMove.x = dx / R; touchMove.y = dy / R;
+    e.preventDefault();
+  });
+  const dropStick = (e) => {
+    if (e.pointerId !== stickId) return;
+    stickId = null;
+    knob.style.transform = '';
+    touchMove.x = touchMove.y = 0;
+  };
+  stick.addEventListener('pointerup', dropStick);
+  stick.addEventListener('pointercancel', dropStick);
+
+  // --- 在空白處滑動 = 轉視角 ---
+  let lookId = null, lx = 0, ly = 0;
+  canvas.addEventListener('pointerdown', (e) => {
+    if (lookId !== null) return;
+    lookId = e.pointerId; lx = e.clientX; ly = e.clientY;
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== lookId) return;
+    yaw -= (e.clientX - lx) * 0.005;
+    pitch -= (e.clientY - ly) * 0.005;
+    pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, pitch));
+    lx = e.clientX; ly = e.clientY;
+    e.preventDefault();
+  });
+  const dropLook = (e) => { if (e.pointerId === lookId) lookId = null; };
+  canvas.addEventListener('pointerup', dropLook);
+  canvas.addEventListener('pointercancel', dropLook);
+
+  // --- 動作鍵 ---
+  const hold = (el, down, up) => {
+    el.addEventListener('pointerdown', (e) => { e.preventDefault(); capture(el, e.pointerId); down(); });
+    el.addEventListener('pointerup', (e) => { e.preventDefault(); up && up(); });
+    el.addEventListener('pointercancel', () => up && up());
+  };
+  // 挖:按住會連續挖,小孩才不用一直點
+  let digTimer = null;
+  hold(document.getElementById('digBtn'),
+    () => { useTool({ button: 0 }); digTimer = setInterval(() => useTool({ button: 0 }), 260); },
+    () => { clearInterval(digTimer); digTimer = null; });
+  hold(document.getElementById('putBtn'), () => useTool({ button: 2 }));
+  hold(document.getElementById('jumpBtn'), () => { touchJump = true; }, () => { touchJump = false; });
+  document.getElementById('flyBtn').addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    flying = !flying; vel.set(0, 0, 0);
+    toast(flying ? '飛行模式：開（用跳鍵上升）' : '飛行模式：關');
+  });
+
+  // 手機沒有 Esc,要有一顆暫停鍵
+  document.getElementById('pauseBtn').addEventListener('click', () => {
+    playing = false;
+    saveWorld();
+    startEl.style.display = '';
+  });
+
+  // 直向時擋住畫面請他轉橫。有些人的手機鎖了方向轉不過來,一定要留退路
+  const checkOrientation = () => {
+    document.body.classList.toggle('portrait', innerHeight > innerWidth);
+  };
+  document.getElementById('keepPortrait').addEventListener('click', () => {
+    document.body.classList.add('keep-portrait');
+  });
+  addEventListener('resize', checkOrientation);
+  addEventListener('orientationchange', () => setTimeout(checkOrientation, 200));
+  checkOrientation();
+
+  // 擋掉會離開遊戲的手勢:雙指縮放、長按選字、雙擊放大
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(t =>
+    document.addEventListener(t, (e) => e.preventDefault()));
+  document.addEventListener('contextmenu', (e) => e.preventDefault());
+  document.addEventListener('dblclick', (e) => e.preventDefault());
+}
 
 // ---------- 挖 / 放 ----------
 function raycastVoxel(maxDist = 6) {
@@ -449,14 +568,14 @@ function useTool(e) {
 }
 
 canvas.addEventListener('mousedown', (e) => {
-  if (!playing) return;
+  if (!playing || IS_TOUCH) return;
   if (isLocked()) { useTool(e); return; }
   if (lockWorks) { lockPointer(); return; }   // 暫停中 → 點一下繼續
   dragging = true;                            // 沒有滑鼠鎖定 → 拖曳模式
   dragStart = [e.clientX, e.clientY];
 });
 addEventListener('mouseup', (e) => {
-  if (!playing || !dragging) return;
+  if (!playing || IS_TOUCH || !dragging) return;
   dragging = false;
   if (Math.hypot(e.clientX - dragStart[0], e.clientY - dragStart[1]) < 5) useTool(e);
 });
@@ -465,11 +584,23 @@ addEventListener('mouseup', (e) => {
 const hotbarEl = document.getElementById('hotbar');
 function drawHotbar() {
   hotbarEl.innerHTML = HOTBAR.map((id, i) => `
-    <div class="slot ${i === sel ? 'on' : ''}">
+    <div class="slot ${i === sel ? 'on' : ''}" data-i="${i}">
       <span class="no">${i + 1}</span>
       <div class="sw" style="background:${BLOCKS[id].color}"></div>
       <div class="nm">${BLOCKS[id].name}</div>
     </div>`).join('');
+}
+// 手機沒有數字鍵,快捷列要能直接點。電腦版維持 pointer-events:none,
+// 否則沒有滑鼠鎖定時,對著快捷列那一帶按左鍵會被面板吃掉、挖不到方塊。
+if (IS_TOUCH) {
+  hotbarEl.style.pointerEvents = 'auto';
+  hotbarEl.addEventListener('pointerdown', (e) => {
+    const slot = e.target.closest('.slot');
+    if (!slot) return;
+    e.preventDefault();
+    sel = +slot.dataset.i;
+    drawHotbar();
+  });
 }
 const toastEl = document.getElementById('toast');
 let toastTimer;
@@ -654,6 +785,8 @@ if (import.meta.env.DEV) window.KC = {
   camera, scene, THREE, world, placed, idx, getBlock, setBlock, heightAt, respawn, useTool, step,
   placeBlock, digBlock,
   QUESTS, stats, flags, insideSealedRoom, hasRoofOverhead,
+  IS_TOUCH, touchMove, active, get touchJump() { return touchJump; },
+  get playing() { return playing; }, get lockWorks() { return lockWorks; }, get flying() { return flying; },
   get sel() { return sel; }, get quest() { return questIndex; }, set quest(v) { questIndex = v; drawQuest(); },
 };
 
@@ -674,17 +807,21 @@ function step(dt) {
     if (keys.has('KeyS')) dir.sub(fwd);
     if (keys.has('KeyD')) dir.add(right);
     if (keys.has('KeyA')) dir.sub(right);
+    if (touchMove.x || touchMove.y) {          // 手機搖桿
+      dir.addScaledVector(fwd, -touchMove.y);
+      dir.addScaledVector(right, touchMove.x);
+    }
     if (dir.lengthSq()) dir.normalize().multiplyScalar(speed);
 
     if (flying) {
       let vy = 0;
-      if (keys.has('Space')) vy += speed;
+      if (keys.has('Space') || touchJump) vy += speed;
       if (keys.has('ShiftLeft') || keys.has('ShiftRight')) vy -= speed;
       moveAxis('x', dir.x * dt); moveAxis('z', dir.z * dt); moveAxis('y', vy * dt);
     } else {
       vel.y -= 26 * dt;
       const grounded = onGround;
-      if (keys.has('Space') && grounded) vel.y = 8.4;
+      if ((keys.has('Space') || touchJump) && grounded) vel.y = 8.4;
       onGround = false;
       moveAxis('x', dir.x * dt, grounded);
       moveAxis('z', dir.z * dt, grounded);

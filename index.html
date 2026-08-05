@@ -2,7 +2,15 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#9fd8f5">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="遊戲間">
+<link rel="manifest" href="/han/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/han/icon-192.png">
+<link rel="icon" href="/han/icon-192.png">
 <title>遊戲間</title>
 <style>
   :root {
@@ -90,6 +98,13 @@
     display:inline-block; font-size:11px; padding:3px 9px; border-radius:20px;
     background:#eef2fb; color:var(--dim); margin-top:9px;
   }
+  .tip {
+    display:flex; gap:14px; align-items:flex-start; padding:16px 18px;
+    border-radius:18px; background:var(--card); box-shadow:0 3px 10px rgba(40,50,80,.07);
+  }
+  .tip-icon { font-size:30px; line-height:1.2; }
+  .tip b { display:block; margin-bottom:5px; }
+  .tip p { font-size:13px; color:var(--dim); line-height:1.85; }
   footer { text-align:center; color:var(--dim); font-size:12px; line-height:1.9; }
 </style>
 </head>
@@ -130,6 +145,17 @@
             <p>還沒做好。</p>
             <span class="tag">敬請期待</span>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="a2hs" style="display:none">
+      <h2>手 機 玩 法</h2>
+      <div class="tip">
+        <div class="tip-icon">📲</div>
+        <div>
+          <b id="a2hsTitle">把它加到主畫面</b>
+          <p id="a2hsSteps"></p>
         </div>
       </div>
     </section>

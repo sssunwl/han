@@ -70,3 +70,17 @@ nameInput.addEventListener('keydown', (e) => {
 
 drawPlayers();
 drawPicker();
+
+/* 手機提示:加到主畫面之後才是真正的全螢幕。
+   iPhone 的 Safari 不支援網頁全螢幕 API,這是唯一能藏掉網址列與返回手勢的方法。 */
+const isTouch = matchMedia('(pointer: coarse)').matches;
+const standalone = matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches
+  || navigator.standalone === true;
+if (isTouch && !standalone) {
+  const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  document.getElementById('a2hs').style.display = '';
+  document.getElementById('a2hsSteps').innerHTML = iOS
+    ? '用 <b>Safari</b> 開這一頁 → 按下面的<b>分享</b>鈕 <b>↑</b> → 往下捲找「<b>加入主畫面</b>」。<br>之後從主畫面的圖示打開，就不會有網址列，也不會不小心滑回上一頁。'
+    : '按右上角的<b>選單</b> ⋮ → 「<b>加到主畫面</b>」或「<b>安裝應用程式</b>」。<br>之後從圖示打開就是全螢幕，不會誤觸瀏覽器。';
+}
