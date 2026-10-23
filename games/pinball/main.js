@@ -1,3 +1,4 @@
+import '../../shared/offline.js';
 import { currentProfile, getProfiles, saveKey } from '../../shared/profile.js';
 import { TW, TH, BALL_R, buildShell, SLINGS, SLING_BACKS, FLIPPERS, PLUNGER, LANE, TABLES } from './tables.js';
 

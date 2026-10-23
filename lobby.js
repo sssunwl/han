@@ -1,3 +1,4 @@
+import './shared/offline.js';
 import { AVATARS, getProfiles, addProfile, removeProfile, getCurrentId, setCurrentId, currentProfile } from './shared/profile.js';
 
 const playersEl = document.getElementById('players');

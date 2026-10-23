@@ -1,3 +1,4 @@
+import '../../shared/offline.js';
 import * as THREE from 'three';
 import { currentProfile, saveKey } from '../../shared/profile.js';
 
