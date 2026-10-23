@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#fde3d0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="畫 Pizza">
+<link rel="manifest" href="/han/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/han/icon-192.png">
+<title>畫 Pizza</title>
+<link rel="stylesheet" href="../../shared/food.css">
+<style>
+  :root { --accent:#e2483d; --bg:#fde3d0; }
+  .tool { min-width:56px; }
+  .tool .ic { font-size:24px; }
+  .baking .tools { opacity:.4; pointer-events:none; }
+</style>
+</head>
+<body>
+
+  <div class="screen start on" id="startScreen">
+    <div class="card">
+      <div class="big">🍕</div>
+      <h1>畫 Pizza</h1>
+      <div class="who" id="who"></div>
+      <p class="how">
+        用手指<b>塗番茄醬</b>、<b>撒起司</b>,<br>
+        再放上喜歡的料,想放幾個都可以。<br>
+        做好了按 <b>🔥 烤</b>,看起司慢慢融化!
+      </p>
+      <button class="btn wide" id="startBtn">開始做!</button>
+      <h2 class="sub">我 做 過 的</h2>
+      <div class="gallery" id="gallery"></div>
+      <div class="empty" id="galleryEmpty">還沒有作品</div>
+      <a class="back-link" href="../../">← 回遊戲間換人</a>
+    </div>
+  </div>
+
+  <div class="screen game" id="gameScreen">
+    <div class="hud">
+      <button class="icon" id="backBtn" title="回開始畫面">✕</button>
+      <div class="mid">
+        <div class="title">畫 Pizza</div>
+        <div class="val" id="status">做一個你的 Pizza</div>
+      </div>
+      <button class="icon" id="undoBtn" title="復原">↩️</button>
+    </div>
+    <div class="stage">
+      <canvas id="cv"></canvas>
+      <div class="tip" id="tip"></div>
+    </div>
+    <div class="tools" id="tools">
+      <button class="tool on" data-tool="sauce"><span class="ic">🍅</span><span class="lb">番茄醬</span></button>
+      <button class="tool" data-tool="cheese"><span class="ic">🧀</span><span class="lb">起司</span></button>
+      <button class="tool" data-tool="pepperoni"><span class="ic">🔴</span><span class="lb">臘腸</span></button>
+      <button class="tool" data-tool="pepper"><span class="ic">🫑</span><span class="lb">青椒</span></button>
+      <button class="tool" data-tool="mushroom"><span class="ic">🍄</span><span class="lb">蘑菇</span></button>
+      <button class="tool" data-tool="pineapple"><span class="ic">🍍</span><span class="lb">鳳梨</span></button>
+      <button class="tool" data-tool="shrimp"><span class="ic">🦐</span><span class="lb">蝦子</span></button>
+      <button class="tool" data-tool="corn"><span class="ic">🌽</span><span class="lb">玉米</span></button>
+      <button class="tool go" id="bakeBtn"><span class="ic">🔥</span><span class="lb">烤</span></button>
+    </div>
+  </div>
+
+  <div class="screen over" id="overScreen">
+    <div class="card">
+      <h1 id="overTitle">叮!烤好了</h1>
+      <img class="shot" id="shot" alt="你做的 Pizza">
+      <p class="how" id="overText"></p>
+      <div class="btnrow">
+        <button class="btn ghost" id="homeBtn">回開始</button>
+        <button class="btn" id="againBtn">再做一個</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#d9f0ff">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="疊漢堡">
+<link rel="manifest" href="/han/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/han/icon-192.png">
+<title>疊漢堡</title>
+<link rel="stylesheet" href="../../shared/food.css">
+<style>
+  :root { --accent:#f0a023; --bg:#d9f0ff; }
+  #hearts { color:#ff5a6e; letter-spacing:2px; font-size:16px; }
+  #capBtn {
+    position:absolute; right:calc(12px + env(safe-area-inset-right)); bottom:calc(14px + env(safe-area-inset-bottom));
+    z-index:2; font-size:16px; padding:11px 16px; display:none;
+  }
+  #capBtn.on { display:block; }
+</style>
+</head>
+<body>
+
+  <div class="screen start on" id="startScreen">
+    <div class="card">
+      <div class="big">🍔</div>
+      <h1>疊漢堡</h1>
+      <div class="who" id="who"></div>
+      <p class="how">
+        食材會在上面<b>左右跑</b>,<br>
+        對準下面那一層,<b>點一下畫面</b>讓它掉下來。<br>
+        疊越高越厲害!掉 3 次就蓋上麵包。<br>
+        也可以隨時按 <b>🍞 蓋上</b> 完成。
+      </p>
+      <button class="btn wide" id="startBtn">開始疊!</button>
+      <h2 class="sub">最 高 紀 錄</h2>
+      <div class="board" id="board"></div>
+      <a class="back-link" href="../../">← 回遊戲間換人</a>
+    </div>
+  </div>
+
+  <div class="screen game" id="gameScreen">
+    <div class="hud">
+      <button class="icon" id="backBtn" title="回開始畫面">✕</button>
+      <div class="mid">
+        <div class="title">疊了幾層</div>
+        <div class="val" id="layers">0</div>
+      </div>
+      <div class="right"><span id="hearts">♥♥♥</span></div>
+    </div>
+    <div class="stage">
+      <canvas id="cv"></canvas>
+      <div class="tip" id="tip">點一下畫面,讓食材掉下來</div>
+      <button class="btn" id="capBtn">🍞 蓋上</button>
+    </div>
+  </div>
+
+  <div class="screen over" id="overScreen">
+    <div class="card">
+      <h1 id="overTitle">漢堡完成!</h1>
+      <img class="shot" id="shot" alt="你疊的漢堡">
+      <p class="how" id="overText"></p>
+      <h2 class="sub">最 高 紀 錄</h2>
+      <div class="board" id="overBoard"></div>
+      <div class="btnrow">
+        <button class="btn ghost" id="homeBtn">回開始</button>
+        <button class="btn" id="againBtn">再疊一次</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

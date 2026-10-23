@@ -2,7 +2,25 @@
 
 給小孩玩的網頁小遊戲集。線上版:https://sssunwl.github.io/han/
 
-第一款是**方塊世界**(Minecraft 風格沙盒,目標對象小學四年級)。
+第一款是**方塊世界**(Minecraft 風格沙盒,目標對象小學四年級)。目前有五款:方塊世界、彈珠台、章魚燒、畫 Pizza、疊漢堡,全部可以離線玩。
+
+## 做食物系列:章魚燒 / 畫 Pizza / 疊漢堡
+
+2026-10-23 加的三款,玩法參考 SS 收藏的日本網頁小遊戲合集,**圖、音效、程式全部自己做**(canvas 畫、WebAudio 合成),沒有任何外部素材,所以沒有版權問題、也能離線。共用 `shared/kit.js`(音效、canvas 尺寸、存檔、相簿)與 `shared/food.css`(開始畫面/HUD/工具列)。
+
+| 遊戲 | 玩法 | 存什麼 |
+|---|---|---|
+| `games/takoyaki/` 章魚燒 | 同一個洞一直點:倒麵糊 → 放章魚 → 翻面 → 夾起來。圈圈綠了動手最好吃。做滿 8 顆進入淋醬(醬汁/美乃滋/海苔/柴魚) | 各自的相簿 + 做過幾盤 |
+| `games/pizza/` 畫 Pizza | 塗醬、撒起司、放 6 種配料,按烤看起司融化,烤好自動切片並依配料取名字 | 各自的相簿 |
+| `games/burger/` 疊漢堡 | 食材左右擺動,點一下掉下去,偏太多會滑掉。掉 3 次或按「蓋上」就完成 | 共用排行榜 `burger:best` |
+
+設計上的取捨:
+- **沒有失敗到零**:章魚燒生的/焦的還是章魚燒,只是星星少;疊漢堡掉 3 次也會自動蓋麵包,一定拿到一個漢堡
+- **疊漢堡的容許偏移是實測調的**:原本 0.62 倍兩者平均寬,結果擺動範圍內永遠不會掉;現在是較窄那層的 0.4 倍,隨便亂點約一半會掉
+- **擺動幅度有上限**(1.3 個漢堡寬),不然手機橫放時食材會橫越整個寬螢幕
+- **相簿存 220px JPEG、每人最多 6 張**,localStorage 存不下就自動少存,不會讓遊戲壞掉
+- 手機橫放(高度 ≤ 540)時工具列移到右側直排
+- 開發時窗格在背景 `requestAnimationFrame` 不會跑,三款都有 dev 限定的 `advance(秒)` 掛勾(`window.TK / PZ / BG`)可以快轉測試
 
 ## 彈珠台
 
@@ -44,7 +62,15 @@
 index.html          大廳:選自己是誰 → 選遊戲
 lobby.js
 shared/profile.js   玩家檔案(不是登入,見下)
+shared/offline.js   註冊 Service Worker(離線玩)
+shared/kit.js       做食物系列共用:音效、canvas、存檔、相簿
+shared/food.css     做食物系列共用版面
+sw-template.js      Service Worker 範本(build 時填入檔案清單)
 games/kidcraft/     方塊世界
+games/pinball/      彈珠台
+games/takoyaki/     章魚燒
+games/pizza/        畫 Pizza
+games/burger/       疊漢堡
 ```
 
 ## 怎麼跑
@@ -198,6 +224,18 @@ npm run dev --prefix /Users/sws/Sun/Claude/han
 - Pages 的來源要設成 **GitHub Actions**(不是「從分支部署」),否則 workflow 不會生效
 
 大廳跟遊戲是分開的 entry,three.js 只在進遊戲時才載:大廳 gzip 約 3KB,遊戲約 136KB。
+
+## 離線玩(飛航模式)
+
+整站是 PWA:第一次連網打開後,所有遊戲都會被 Service Worker 存進手機,之後**加到主畫面**再開,飛航模式也能完整玩。
+
+- `sw-template.js` 是範本,`npm run build` 時 `vite.config.js` 裡的小 plugin 會掃 `dist/` 全部檔案填進清單,輸出 `dist/sw.js`。**加新遊戲不用改 SW**,只要在 `vite.config.js` 的 input 加一行
+- 快取版本號 = 所有檔案內容的雜湊,有任何改動就自動換新版、刪舊快取,不用手動改版本號
+- 快取優先:有網路也先讀手機裡的,所以更新會在「下一次打開」才生效
+- `shared/offline.js` 負責註冊,只在正式版註冊(dev server 不註冊,免得改程式看不到)
+- 本機測離線:`npm run build && npm run preview`,開一次後把 preview 關掉再重整,每頁都應該還開得起來
+
+新遊戲點子在 `IDEAS.md`。
 
 ## 技術筆記
 

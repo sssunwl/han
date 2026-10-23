@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#ffe2c2">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="章魚燒">
+<link rel="manifest" href="/han/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/han/icon-192.png">
+<title>章魚燒</title>
+<link rel="stylesheet" href="../../shared/food.css">
+<style>
+  :root { --accent:#ff7a3d; --bg:#ffe2c2; }
+</style>
+</head>
+<body>
+
+  <div class="screen start on" id="startScreen">
+    <div class="card">
+      <div class="big">🐙</div>
+      <h1>章魚燒</h1>
+      <div class="who" id="who"></div>
+      <p class="how">
+        <b>一直點同一個洞</b>就會:<br>
+        倒麵糊 → 放章魚 → 翻面 → 夾起來<br>
+        圈圈<b style="color:#2fae5b">變綠色</b>的時候動手最好吃!<br>
+        做滿 8 顆,就可以淋醬汁囉
+      </p>
+      <button class="btn wide" id="startBtn">開始做!</button>
+      <h2 class="sub">我 做 過 的</h2>
+      <div class="gallery" id="gallery"></div>
+      <div class="empty" id="galleryEmpty">還沒有作品</div>
+      <a class="back-link" href="../../">← 回遊戲間換人</a>
+    </div>
+  </div>
+
+  <div class="screen game" id="gameScreen">
+    <div class="hud">
+      <button class="icon" id="backBtn" title="回開始畫面">✕</button>
+      <div class="mid">
+        <div class="title" id="phaseTitle">做章魚燒</div>
+        <div class="val" id="count">0 / 8</div>
+      </div>
+      <div class="right" id="hudRight"></div>
+    </div>
+    <div class="stage">
+      <canvas id="cv"></canvas>
+      <div class="tip" id="tip"></div>
+    </div>
+    <div class="tools" id="tools" style="display:none">
+      <button class="tool on" data-tool="sauce"><span class="ic">🟤</span><span class="lb">醬汁</span></button>
+      <button class="tool" data-tool="mayo"><span class="ic">⚪</span><span class="lb">美乃滋</span></button>
+      <button class="tool" data-tool="nori"><span class="ic">🌿</span><span class="lb">海苔粉</span></button>
+      <button class="tool" data-tool="katsuo"><span class="ic">🍂</span><span class="lb">柴魚片</span></button>
+      <button class="tool go" id="doneBtn"><span class="ic">✅</span><span class="lb">完成</span></button>
+    </div>
+  </div>
+
+  <div class="screen over" id="overScreen">
+    <div class="card">
+      <h1 id="overTitle">好好吃!</h1>
+      <div class="stars" id="stars"></div>
+      <img class="shot" id="shot" alt="你做的章魚燒">
+      <p class="how" id="overText"></p>
+      <div class="btnrow">
+        <button class="btn ghost" id="homeBtn">回開始</button>
+        <button class="btn" id="againBtn">再做一盤</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
