@@ -53,6 +53,7 @@ export default {
         takoyaki: 'games/takoyaki/index.html',
         pizza: 'games/pizza/index.html',
         burger: 'games/burger/index.html',
+        onsen: 'games/onsen/index.html',
       },
     },
   },

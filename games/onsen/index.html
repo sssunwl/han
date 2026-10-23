@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#2b3a2a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="溫泉旅館">
+<link rel="manifest" href="/han/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/han/icon-192.png">
+<title>溫泉旅館</title>
+<link rel="stylesheet" href="../../shared/food.css">
+<style>
+  :root { --accent:#d9573b; --bg:#2b3a2a; --card:#fff8ee; }
+  .start { background:radial-gradient(120% 80% at 50% 0%, #4a6a48 0%, #22301f 75%); }
+  .credit { font-size:11px; color:var(--dim); margin-top:10px; line-height:1.6; }
+
+  /* ---------- 遊戲畫面 ---------- */
+  #gameScreen { flex-direction:column; background:#2b3a2a; color:#fff; }
+  .bar {
+    display:flex; align-items:center; gap:8px; flex:none; position:relative; z-index:3;
+    padding:calc(6px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) 6px calc(10px + env(safe-area-inset-left));
+    background:rgba(20,26,18,.85); font-size:14px;
+  }
+  .bar .icon { width:36px; height:36px; border-radius:10px; border:none; background:rgba(255,255,255,.12); color:#fff; font-size:15px; cursor:pointer; flex:none; }
+  #money { font-weight:bold; color:#ffd84a; font-variant-numeric:tabular-nums; font-size:16px; min-width:64px; }
+  .mid { flex:1; min-width:0; text-align:center; line-height:1.2; }
+  #day { font-size:12px; color:#cfe0c8; white-space:nowrap; }
+  #clock { font-size:13px; font-variant-numeric:tabular-nums; }
+  .rankbox { text-align:right; line-height:1.15; flex:none; }
+  #rank { color:#ffd84a; letter-spacing:1px; font-size:13px; }
+  #repTrack { width:70px; height:4px; background:rgba(255,255,255,.2); border-radius:2px; overflow:hidden; margin-left:auto; }
+  #repFill { height:100%; width:0; background:#ffd84a; }
+  .speeds { display:flex; gap:3px; flex:none; }
+  .speeds button { width:32px; height:30px; border:none; border-radius:8px; background:rgba(255,255,255,.12); color:#fff; font-size:11px; cursor:pointer; }
+  .speeds button.on { background:#d9573b; }
+
+  /* 直式手機:資訊列拆成兩列 */
+  @media (max-width:560px) {
+    .bar { flex-wrap:wrap; row-gap:4px; }
+    .rankbox { order:3; margin-left:auto; }
+    .mid { order:4; flex:1 0 40%; text-align:left; display:flex; gap:8px; align-items:baseline; }
+    .speeds { order:5; }
+  }
+  .stage { flex:1; position:relative; min-height:0; }
+  /* canvas 一定壓在最底層,不然會蓋住上面的按鈕 */
+  #cv { position:absolute; inset:0; width:100%; height:100%; display:block; z-index:0; touch-action:none; image-rendering:pixelated; }
+
+  #toast {
+    position:absolute; left:50%; top:10px; transform:translate(-50%,-8px); z-index:4; opacity:0;
+    background:rgba(255,248,238,.96); color:#3a2c22; padding:8px 14px; border-radius:14px; font-size:14px;
+    max-width:92%; text-align:center; pointer-events:none; transition:opacity .25s, transform .25s;
+    box-shadow:0 4px 14px rgba(0,0,0,.25);
+  }
+  #toast.on { opacity:1; transform:translate(-50%,0); }
+
+  /* 設施面板 */
+  #panel {
+    position:absolute; left:50%; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:4;
+    transform:translate(-50%, 140%); transition:transform .22s; width:min(440px, calc(100% - 20px));
+    background:#fff8ee; color:#3a2c22; border-radius:18px; padding:14px 16px 12px; box-shadow:0 8px 26px rgba(0,0,0,.35);
+  }
+  #panel.on { transform:translate(-50%, 0); }
+  /* 手機橫放:面板改成靠右的小卡,不要蓋住整張地圖 */
+  @media (orientation:landscape) and (max-height:540px) {
+    #panel { left:auto; right:calc(8px + env(safe-area-inset-right)); width:280px; padding:10px 12px;
+      transform:translateX(120%); bottom:8px; }
+    #panel.on { transform:none; }
+    #pIcon { font-size:22px; } #pName { font-size:15px; }
+    #pDesc { font-size:12px; line-height:1.45; margin:4px 0 2px; }
+    #pBtn { font-size:15px; padding:9px; }
+  }
+  #panel .top { display:flex; align-items:center; gap:10px; }
+  #pIcon { font-size:30px; }
+  #pName { font-weight:bold; font-size:17px; flex:1; }
+  #pClose { border:none; background:rgba(0,0,0,.07); width:32px; height:32px; border-radius:10px; font-size:15px; cursor:pointer; }
+  #pDesc { font-size:13px; color:#7b6a58; margin:6px 0 4px; line-height:1.6; }
+  #pStat { font-size:12px; color:#2f7d4f; margin-bottom:10px; min-height:1em; }
+  #pBtn { width:100%; }
+  #pBtn:disabled { background:#cbbfae; box-shadow:none; }
+
+  /* 一天結算 */
+  #summary { position:fixed; inset:0; z-index:6; display:none; align-items:center; justify-content:center; padding:16px;
+    background:rgba(10,14,30,.6); }
+  #summary.on { display:flex; }
+  #summary .card { max-height:100%; overflow-y:auto; touch-action:pan-y; }
+  .nums { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:12px 0 6px; }
+  .nums div { background:rgba(0,0,0,.04); border-radius:12px; padding:8px 4px; }
+  .nums b { display:block; font-size:19px; }
+  .nums span { font-size:11px; color:var(--dim); }
+  #sTurned { font-size:12px; color:#c0573a; min-height:1em; }
+  .review { text-align:left; background:rgba(0,0,0,.04); border-radius:12px; padding:8px 10px; margin-top:8px; font-size:13px; line-height:1.6; }
+  .rs { color:#e8a317; margin-right:4px; }
+  .rw { display:block; font-size:11px; color:var(--dim); }
+  #sRep { font-size:12px; color:var(--dim); margin:10px 0 4px; }
+</style>
+</head>
+<body>
+
+  <div class="screen start on" id="startScreen">
+    <div class="card">
+      <div class="big">♨️</div>
+      <h1>溫泉旅館</h1>
+      <div class="who" id="who"></div>
+      <p class="how">
+        你是旅館老闆!蓋<b>和室</b>給客人住、<b>大浴場</b>給客人泡,<br>
+        客人開心就會留好評,好評越多星星越多,<br>
+        就能蓋<b>露天風呂</b>、<b>庭園</b>…目標是<b>五星旅館</b>!<br>
+        <span style="font-size:13px">點設施可以建造、升級;點客人可以看他在想什麼。手指拖曳可以移動畫面。</span>
+      </p>
+      <button class="btn wide" id="startBtn">開一間溫泉旅館!</button>
+      <div class="btnrow"><button class="btn ghost" id="newBtn" style="display:none">重新開一間</button></div>
+      <a class="back-link" href="../../">← 回遊戲間換人</a>
+      <p class="credit">像素美術:LimeZu — Modern Interiors(limezu.itch.io)</p>
+    </div>
+  </div>
+
+  <div class="screen" id="gameScreen">
+    <div class="bar">
+      <button class="icon" id="backBtn" title="存檔並回開始畫面">✕</button>
+      <div id="money">¥0</div>
+      <div class="mid"><div id="day"></div><div id="clock"></div></div>
+      <div class="speeds">
+        <button data-speed="0" title="暫停">⏸</button>
+        <button data-speed="1" class="on" title="1 倍速">▶</button>
+        <button data-speed="2" title="2 倍速">▶▶</button>
+        <button data-speed="4" title="4 倍速">⏩</button>
+      </div>
+      <div class="rankbox"><div id="rank"></div><div id="repTrack"><div id="repFill"></div></div></div>
+    </div>
+    <div class="stage">
+      <canvas id="cv"></canvas>
+      <div id="toast"></div>
+      <div id="panel">
+        <div class="top"><span id="pIcon"></span><span id="pName"></span><button id="pClose">✕</button></div>
+        <div id="pDesc"></div>
+        <div id="pStat"></div>
+        <button class="btn" id="pBtn">建造</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="summary">
+    <div class="card">
+      <h1 id="sTitle" style="font-size:24px">第 1 天結束</h1>
+      <div class="nums">
+        <div><b id="sIncome">¥0</b><span>今日收入</span></div>
+        <div><b id="sServed">0</b><span>退房客人</span></div>
+        <div><b id="sAvg">—</b><span>平均評價</span></div>
+      </div>
+      <div id="sTurned"></div>
+      <div id="sReviews"></div>
+      <div id="sRep"></div>
+      <button class="btn wide" id="sNext">下一天 →</button>
+    </div>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
