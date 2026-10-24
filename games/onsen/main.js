@@ -1,5 +1,5 @@
 import '../../shared/offline.js';
-import { saveKey } from '../../shared/profile.js';
+import { saveKey, getProfiles, currentProfile } from '../../shared/profile.js';
 import { readJSON, writeJSON, tone, noise, fanfare, renderWho, lockGestures, escapeHTML, audioPrefs, saveAudioPrefs } from '../../shared/kit.js';
 import { TRACKS, playMusic, stopMusic, nowPlaying } from '../../shared/music.js';
 import { toCanvas } from '../../shared/pixelkit/core.js';
@@ -11,7 +11,9 @@ import {
   STAFF_ROLES, ROLE_ORDER, STAFF_NAMES, STAFF_MAX_LV, xpNeed, trainCost, salaryOf,
   ADS, AD_DAYS, STAR_REP, REVIEW_REP, starsOf, TYPES, TYPE_KEYS, seasonOf, EVENTS, REVIEWS,
   INNS, RIVAL_NEWS, ACHIEVEMENTS, CHOICES, PATHS, WISHES,
+  MILESTONES, LEGEND_GOALS, LEGEND_RIVAL, LEGEND_GROW, NG_MONEY, NG_RIVAL, NG_CARRY_MAX_LV,
 } from './data.js';
+import { loadBest, saveBoth, encodeSave, decodeSave } from './store.js';
 
 /* ============================================================
    溫泉旅館 v2 —— 自由建造版
@@ -93,6 +95,9 @@ function extraFields() {
   return {
     perm: [], mods: [], paths: { heart: 0, biz: 0, trad: 0 }, ach: [], hist: [], typeCount: {}, wishLog: {},
     seenChoices: [], inns: INNS.map(i => ({ name: i.name, rep: i.rep, grow: i.grow, boost: 0 })), prevRank: null, news: null,
+    // v2.3:里程碑、結局、傳說模式、第二間旅館
+    milestones: [], legendGoals: [], trophies: [], winStreak: 0, yearWins: 0, ng: 0, ended: false, legend: false,
+    bestReview: null, career: { days: 0, guests: 0, earned: 0 },
   };
 }
 /** 新員工:名字不重複,外觀照職業挑 */
@@ -132,11 +137,29 @@ function save() {
   // 搬移到一半:先把東西放回原位再存,不然存檔裡它會不見
   const moving = place && place.kind === 'move';
   if (moving) putBack(place);
-  writeJSON(SAVE_KEY, S);
+  S.savedAt = Date.now();
+  const r = saveBoth(SAVE_KEY, S);          // localStorage + IndexedDB 兩份(見 store.js)
   if (moving) takeOut(place);
+  savedBadge(r.ls ? 'ok' : 'backup');
+  if (!r.ls) r.idb.then(ok => { if (!ok) savedBadge('fail'); });
 }
+// iPhone 主畫面 App 直接滑掉時 pagehide / visibilitychange 不一定會觸發 → 另外每 15 秒自動存一次
 addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 addEventListener('pagehide', save);
+setInterval(() => { if (running && S) save(); }, 15000);
+let badgeTimer = 0, spaceWarned = false;
+/** 右上角的小字:💾 已存檔 / ⚠ 存檔失敗 */
+function savedBadge(kind) {
+  const el = $('saveDot'); if (!el) return;
+  el.textContent = kind === 'fail' ? '⚠ 存檔失敗' : '💾 已存檔';
+  el.classList.toggle('bad', kind === 'fail');
+  el.classList.add('on');
+  clearTimeout(badgeTimer); badgeTimer = setTimeout(() => el.classList.remove('on'), kind === 'fail' ? 5000 : 1400);
+  if (kind !== 'ok' && !spaceWarned) {
+    spaceWarned = true;
+    toast(kind === 'fail' ? '⚠ 存不了檔!請回開始畫面按「📦 備份存檔碼」把進度抄下來' : '⚠ 這台裝置的空間快滿了,存檔改放在備用位置。建議回開始畫面「📦 備份存檔碼」');
+  }
+}
 
 // ============================================================
 //  格子:佔用、可走、尋路、門
@@ -532,7 +555,9 @@ function checkOut(g) {
   const idea = (st >= 4 ? 2 : 1) * (g.vip ? 3 : 1);
   S.ideas += idea; today.ideas += idea;
   const lines = REVIEWS[st];
-  today.reviews.push({ st, text: lines[Math.floor(Math.random() * lines.length)].replace('{fav}', g.favHit ? FAC[g.favHit].name : '溫泉'), type: g.type, vip: g.vip });
+  const rv = { st, text: lines[Math.floor(Math.random() * lines.length)].replace('{fav}', g.favHit ? FAC[g.favHit].name : '溫泉'), type: g.type, vip: g.vip };
+  today.reviews.push(rv);
+  if (st === 5 && (!S.bestReview || g.vip || !S.bestReview.vip)) S.bestReview = { text: rv.text, type: g.type, vip: g.vip, day: S.day };   // 結局畫面用
   today.served++; S.stats.guests++;
   if (st === 5) S.stats.best5++;
   float(g.x, g.y - 50, '★'.repeat(st), st >= 4 ? '#ffd84a' : '#ddd');
@@ -754,12 +779,12 @@ function endDay() {
   S.mods = S.mods.filter(m => m.days > 0);
   // 經營紀錄(最近 28 天)
   const avg = today.reviews.length ? today.reviews.reduce((a, r) => a + r.st, 0) / today.reviews.length : null;
-  S.hist.push({ d: S.day, income: today.income, served: today.served, occ: today.occ ?? 0, avg });
+  S.hist.push({ d: S.day, income: today.income, served: today.served, occ: today.occ ?? 0, avg, rep: S.rep });
   if (S.hist.length > 28) S.hist.shift();
   // 對手每天成長;偶爾有新聞(成長變快,而且搶走你一點客人)
   S.prevRank = rankNow();
   for (const inn of S.inns) {
-    inn.rep += Math.round(inn.grow * (0.7 + Math.random() * 0.6) * (inn.boost > 0 ? 1.6 : 1));
+    inn.rep += Math.round(inn.grow * (0.7 + Math.random() * 0.6) * (inn.boost > 0 ? 1.6 : 1) * (S.legend ? LEGEND_GROW : 1));
     if (inn.boost > 0) inn.boost--;
   }
   if (Math.random() < 0.18) {
@@ -777,10 +802,58 @@ function endDay() {
     const reward = Math.max(0, 13 - rank) * 200;
     S.money += reward; S.ideas += 10;
     S.bestRank = Math.min(S.bestRank || 99, rank);
+    if (rank === 1) { S.winStreak++; S.yearWins++; } else S.winStreak = 0;
     today.year = { rank, reward };
   }
+  today.newMs = checkMilestones();
+  // 結局:五星 + 全國第一(只有一次;傳說模式不會再跳)
+  if (!S.ended && stars() === 5 && rankNow() === 1) S.endingPending = true;
+  S.dayDone = true;             // 結算畫面時關掉 App,下次打開直接從下一天開始(不會重玩一天)
   showSummary();
   save();
+}
+
+// ============================================================
+//  里程碑、傳說目標、獎盃牆
+// ============================================================
+const facTypes = () => new Set(S.facs.map(f => f.type)).size;
+const MS_CHECK = {
+  street: () => stars() >= 3 && facTypes() >= 8,
+  podium: () => rankNow() <= 3,
+  meisho: () => S.facs.filter(f => f.lv === 3).length >= 6,
+  threepeat: () => S.winStreak >= 3,
+  maxall: () => facTypes() >= FAC_ORDER.length && S.facs.every(f => f.lv === 3),
+  combos: () => S.combos.length >= COMBOS.length,
+};
+/** 進度文字(給「下一個目標」看) */
+const MS_PROGRESS = {
+  street: () => `${stars()}/3 星 · 設施 ${facTypes()}/8 種`,
+  podium: () => `現在第 ${rankNow()} 名`,
+  meisho: () => `Lv3 設施 ${S.facs.filter(f => f.lv === 3).length}/6 間`,
+  ending: () => `${stars()}/5 星 · 全國第 ${rankNow()} 名`,
+  threepeat: () => `連續第一 ${S.winStreak}/3 年`,
+  maxall: () => `設施 ${facTypes()}/${FAC_ORDER.length} 種 · Lv3 ${S.facs.filter(f => f.lv === 3).length}/${S.facs.length} 間`,
+  combos: () => `組合 ${S.combos.length}/${COMBOS.length}`,
+};
+function addTrophy(m) { S.trophies.push({ icon: m.icon, name: m.name, inn: S.ng + 1, day: S.day }); }
+function checkMilestones() {
+  const got = [];
+  const run = (list, key) => {
+    for (const m of list) {
+      if (m.final || S[key].includes(m.id) || !MS_CHECK[m.id]()) continue;
+      S[key].push(m.id); got.push(m); addTrophy(m);
+      if (m.reward.money) S.money += m.reward.money;
+      if (m.reward.ideas) S.ideas += m.reward.ideas;
+    }
+  };
+  run(MILESTONES, 'milestones');
+  if (S.legend) run(LEGEND_GOALS, 'legendGoals');
+  return got;
+}
+/** 下一個還沒達成的目標 */
+function nextGoal() {
+  const list = S.legend ? LEGEND_GOALS.filter(m => !S.legendGoals.includes(m.id)) : MILESTONES.filter(m => !S.milestones.includes(m.id));
+  return list[0] || null;
 }
 
 // ============================================================
@@ -1254,7 +1327,7 @@ function drawLying(look, x, y) {
   ctx.fillStyle = '#c8eee4'; ctx.fillRect(cx + 2, cy - 8, 2, 13);
 }
 /** 和室裡睡著的客人:頭靠在枕頭上,被子蓋到下巴 */
-const FUTON_COLOR = ['#5b7fd1', '#e2a93c', '#9a6ad0'];
+const FUTON_COLOR = ['#5b7fd1', '#e2a93c', '#9a6ad0'], FUTON_HI = ['#8ea8e6', '#f0c776', '#bc9ae2'];
 function drawSleepers(f) {
   const zs = guests.filter(g => g.room === f.id && g.state === 'sleep');
   if (!zs.length) return;
@@ -1263,8 +1336,9 @@ function drawSleepers(f) {
     const px = ox + (i >> 1) * 2 * T + (i % 2 ? 46 : 18), py = oy + T + 15;      // 枕頭中心(futon_top 裡的位置)
     const look = guestLook(g.char);
     ctx.drawImage(sheetOf(look), 0, 0, FW, 19, px - FW / 2, py - 15, FW, 19);
-    ctx.fillStyle = FUTON_COLOR[f.lv - 1]; ctx.fillRect(px - 12, py + 3, 24, 8);
-    ctx.fillStyle = '#f4f1fa'; ctx.fillRect(px - 12, py + 3, 24, 3);                 // 被子反摺的白邊
+    ctx.fillStyle = FUTON_COLOR[f.lv - 1]; ctx.fillRect(px - 12, py + 1, 24, 17);   // 一路接到下面的被子   // 被子蓋到下巴(頭的圖 16 列以下是脖子)
+    ctx.fillStyle = FUTON_HI[f.lv - 1]; ctx.fillRect(px - 12, py + 1, 24, 2);        // 被子反摺的亮邊
+    ctx.fillStyle = '#2b1f2e'; ctx.fillRect(px - 12, py, 24, 1);
   });
 }
 const visible = g => !g.gone && g.state !== 'sleep';
@@ -1517,13 +1591,19 @@ function openAds() {
   openSheet(`📣 宣傳(效果 ${AD_DAYS} 天)`, `<p class="note">${now}</p>` +
     ADS.map(a => itemHTML({ act: 'ad:' + a.id, icon: '📣', name: a.name, sub: a.text, cost: '¥' + adCost(a).toLocaleString(), lockText: S.ads[a.id] ? '進行中' : st < a.need ? `🔒 ${a.need}★` : '', disabled: !!S.ads[a.id] || st < a.need || S.money < adCost(a) })).join(''));
 }
-let statsTab = 'report';
+let statsTab = 'goal';
 function openStats(tab = statsTab) {
   statsTab = tab;
-  const tabs = [['report', '📊 報表'], ['rank', '🏆 排行'], ['ach', `🎖 成就 ${S.ach.length}/${ACHIEVEMENTS.length}`], ['combo', `🎉 組合 ${S.combos.length}/${COMBOS.length}`]];
+  const tabs = [['goal', '🎯 目標'], ['report', '📊 報表'], ['rank', '🏆 排行'], ['ach', `🎖 成就 ${S.ach.length}/${ACHIEVEMENTS.length}`], ['combo', `🎉 組合 ${S.combos.length}/${COMBOS.length}`]];
   const head = `<div class="tabs">${tabs.map(([id, n]) => `<button class="tab ${id === tab ? 'on' : ''}" data-tab="${id}">${n}</button>`).join('')}</div>`;
   let body = '';
-  if (tab === 'report') {
+  if (tab === 'goal') {
+    const row = (m, done) => `<div class="item ${done ? '' : 'dim'}"><span class="ic">${done ? m.icon : '🔒'}</span><span class="tx"><b>${m.name}</b><small>${m.desc}${done ? '' : `(${MS_PROGRESS[m.id]()})`}</small></span><span class="pr">${done ? '✅' : m.reward ? `¥${m.reward.money.toLocaleString()}` : '結局'}</span></div>`;
+    body = `<h4>🎯 里程碑(最後一個是結局)</h4>${MILESTONES.map(m => row(m, S.milestones.includes(m.id))).join('')}` +
+      (S.ended ? `<h4>👑 傳說目標${S.legend ? '' : '(選「繼續經營」才會開始)'}</h4>${LEGEND_GOALS.map(m => row(m, S.legendGoals.includes(m.id))).join('')}` : '') +
+      `<h4>🏆 獎盃牆</h4>${S.trophies.length ? `<div class="trophies">${S.trophies.map(x => `<div><b>${x.icon}</b>${escapeHTML(x.name)}<br><small>第 ${x.inn} 間 · 第 ${x.day} 天</small></div>`).join('')}</div>` : '<p class="note">達成里程碑就會掛上來。開第二間旅館時,獎盃牆會跟著你。</p>'}` +
+      (S.ng ? `<p class="note">這是你的第 ${S.ng + 1} 間旅館。以前累積:${S.career.days} 天、${S.career.guests.toLocaleString()} 位客人</p>` : '');
+  } else if (tab === 'report') {
     const h = S.hist.slice(-14);
     const rooms = S.facs.filter(isRoom).length;
     const last = h[h.length - 1];
@@ -1794,7 +1874,12 @@ function showSummary() {
   $('sOcc').textContent = today.rooms ? `${Math.round((today.occ || 0) * 100)}%` : '—';
   const dr = S.prevRank ? S.prevRank - rankNow() : 0;
   $('sAch').innerHTML = (today.newAch || []).map(a => `<div class="achline">🏆 成就解鎖:<b>${a.name}</b></div>`).join('') +
-    (dr ? `<div class="achline">${dr > 0 ? '⬆' : '⬇'} 全國排名${dr > 0 ? '上升' : '下降'} ${Math.abs(dr)} 名</div>` : '');
+    (dr ? `<div class="achline">${dr > 0 ? '⬆' : '⬇'} 全國排名${dr > 0 ? '上升' : '下降'} ${Math.abs(dr)} 名</div>` : '') +
+    (today.newMs || []).map(m => `<div class="msline">${m.icon} 里程碑達成:<b>${m.name}</b><br><small>獎勵 ¥${m.reward.money.toLocaleString()} + 💡${m.reward.ideas} · 已經掛上獎盃牆</small></div>`).join('');
+  const ng = nextGoal();
+  $('sGoal').innerHTML = S.endingPending ? '<div class="goal">🗾 你的旅館成為了全國第一!按下一步……</div>'
+    : ng ? `<div class="goal">🎯 下一個目標:<b>${ng.icon} ${ng.name}</b><br><small>${ng.desc}(${MS_PROGRESS[ng.id]()})</small></div>` : '';
+  if ((today.newMs || []).length) setTimeout(() => [523, 659, 784, 1047, 1319].forEach((f, k) => setTimeout(() => tone(f, 0.18, 'triangle', 0.14), k * 110)), 700);
   $('sYear').innerHTML = today.year ? `<div class="year">🏆 年度全國溫泉旅館排行:<b>第 ${today.year.rank} 名</b>${today.year.reward ? `<br>獎金 ¥${today.year.reward.toLocaleString()} + 💡10` : ''}</div>` : '';
   $('sReviews').innerHTML = r.length ? shuffle(r).slice(0, 3).map(x => `
     <div class="review"><span class="rs">${'★'.repeat(x.st)}</span><span class="rt">「${escapeHTML(x.text)}」</span>
@@ -1807,8 +1892,75 @@ function showSummary() {
 }
 $('sNext').addEventListener('click', () => {
   $('summary').classList.remove('on');
+  delete S.dayDone;
+  if (S.endingPending) { showEnding(); return; }
   inSummary = false; S.day++; startDay(); save();
 });
+
+// ============================================================
+//  結局:日本第一溫泉旅館 → 謝幕 → 繼續(傳說模式)或開第二間旅館
+// ============================================================
+function showEnding() {
+  inSummary = true;                       // 結局畫面期間時間停止
+  if (!S.ended) {
+    S.ended = true; S.awaitChoice = true; delete S.endingPending;
+    S.milestones.push('ending'); addTrophy(MILESTONES.find(m => m.final));
+    save();
+  }
+  const total5 = S.stats.best5, br = S.bestReview;
+  $('eSub').textContent = `${S.ng ? `第 ${S.ng + 1} 間旅館 · ` : ''}開業第 ${S.day} 天,全國溫泉旅館排行第 1 名`;
+  $('eNums').innerHTML = [
+    [S.day + ' 天', '經營天數'], [S.stats.guests.toLocaleString(), '招待客人'], [total5.toLocaleString(), '五星評價'],
+    ['¥' + S.stats.earned.toLocaleString(), '總收入'], [`${S.combos.length}/${COMBOS.length}`, '發現組合'], [`${S.ach.length}/${ACHIEVEMENTS.length}`, '成就'],
+  ].map(([b, t]) => `<div><b>${b}</b><span>${t}</span></div>`).join('');
+  $('eReview').innerHTML = br ? `<div class="review"><span class="rs">★★★★★</span><span class="rt">「${escapeHTML(br.text)}」</span><span class="rw">— ${TYPES[br.type].name}${br.vip ? '(雜誌記者)' : ''}・第 ${br.day} 天</span></div>` : '';
+  $('eCrew').textContent = S.crew.map(c => `${STAFF_ROLES[c.role].icon}${c.name} Lv${c.lv}`).join('、');
+  // 謝幕名單(慢慢往上捲)
+  const who = escapeHTML(currentName());
+  const lines = [
+    ['老闆', who], ['老闆娘', '櫃台的阿姨(一直站在那裡)'],
+    ...S.crew.map(c => [STAFF_ROLES[c.role].name, `${escapeHTML(c.name)}(Lv${c.lv})`]),
+    ['客人', `${S.stats.guests.toLocaleString()} 位客人,謝謝你們`],
+    ['對手', S.inns.slice().sort((a, b) => b.rep - a.rep).slice(0, 3).map(i => escapeHTML(i.name)).join('、')],
+    ['美術', 'Pixelkit(全部用程式畫)'], ['音樂', 'WebAudio 即時合成的 8-bit 和風曲'], ['製作', '遊戲間'],
+  ];
+  $('eRoll').innerHTML = `<div class="rollin">${lines.map(([k, v]) => `<p><small>${k}</small>${v}</p>`).join('')}<p class="fin">♨️ 完 ♨️</p></div>`;
+  $('eChoose').style.display = ''; $('eCarry').style.display = 'none';
+  $('ending').classList.add('on');
+  [392, 523, 659, 784, 659, 784, 1047].forEach((f, k) => setTimeout(() => tone(f, 0.28, 'triangle', 0.15), 300 + k * 220));
+}
+const currentName = () => currentProfile().name || '你';
+/** 傳說模式:對手變強,多一間「傳說之湯」緊追在後 */
+$('eLegend').addEventListener('click', () => {
+  S.legend = true; delete S.awaitChoice;
+  const h = S.hist.filter(x => x.rep != null), k = Math.min(7, h.length - 1);
+  const daily = k > 0 ? (h[h.length - 1].rep - h[h.length - 1 - k].rep) / k : S.rep / Math.max(1, S.day);
+  if (!S.inns.some(i => i.name === LEGEND_RIVAL)) S.inns.push({ name: LEGEND_RIVAL, rep: S.rep - 200, grow: Math.round(Math.min(2000, Math.max(300, daily * 1.1))), boost: 0 });
+  $('ending').classList.remove('on');
+  toast(`👑 傳說模式!對手變強了,「${LEGEND_RIVAL}」緊追在後。新目標在「📊 經營 → 🎯 目標」`);
+  inSummary = false; S.day++; startDay(); save();
+});
+$('eNew').addEventListener('click', () => {
+  // 選一位員工帶過去
+  $('eChoose').style.display = 'none'; $('eCarry').style.display = '';
+  $('eCarryList').innerHTML = S.crew.map(c => `<button class="copt" data-id="${c.id}"><b>${STAFF_ROLES[c.role].icon} ${escapeHTML(c.name)} · ${STAFF_ROLES[c.role].name} Lv${c.lv}</b><small>帶過去會保留到最多 Lv${NG_CARRY_MAX_LV}</small></button>`).join('');
+});
+$('eCarryList').addEventListener('click', e => { const b = e.target.closest('[data-id]'); if (b) newInn(b.dataset.id); });
+$('eBack').addEventListener('click', () => { $('eChoose').style.display = ''; $('eCarry').style.display = 'none'; });
+/** 開第二間旅館(NG+):帶走起始資金、一位員工、研究、成就、獎盃牆 */
+function newInn(carryId) {
+  const old = S, n = (old.ng || 0) + 1, s = freshSave();
+  s.ng = n; s.money = NG_MONEY(n);
+  s.research = [...old.research]; s.ach = [...old.ach]; s.trophies = [...old.trophies];
+  s.career = { days: (old.career?.days || 0) + old.day, guests: (old.career?.guests || 0) + old.stats.guests, earned: (old.career?.earned || 0) + old.stats.earned };
+  const c = old.crew.find(x => x.id === carryId);
+  if (c) { const keep = { ...c, lv: Math.min(c.lv, NG_CARRY_MAX_LV), xp: 0 }; s.crew = [keep, newCrew('clean', [keep])]; }
+  s.inns = INNS.map(i => ({ name: i.name, rep: Math.round(i.rep * NG_RIVAL(n)), grow: Math.round(i.grow * NG_RIVAL(n)), boost: 0 }));
+  $('ending').classList.remove('on');
+  boot(s);
+  save();
+  toast(`🏯 第 ${n + 1} 間旅館開幕!起始資金 ¥${s.money.toLocaleString()}${c ? `,${c.name}也跟過來了` : ''}。對手這次更強喔`);
+}
 
 // ---------- 速度、縮放、工具列 ----------
 document.querySelectorAll('[data-speed]').forEach(b => b.addEventListener('click', () => {
@@ -1937,13 +2089,19 @@ function loop(now) {
 // ---------- 開始 ----------
 function show(id) { for (const s of ['startScreen', 'gameScreen']) $(s).classList.toggle('on', s === id); }
 async function start(fresh) {
-  S = fresh ? freshSave() : (readJSON(SAVE_KEY, null) || freshSave());
+  boot(fresh ? freshSave() : ((await loadBest(SAVE_KEY)) || freshSave()));
+}
+/** 把一份存檔放進遊戲、從頭初始化畫面(開始、讀存檔碼、開第二間旅館都走這裡) */
+function boot(save0) {
+  S = save0;
   S.ads = S.ads || {}; S.research = S.research || []; S.combos = S.combos || [];
   for (const [k, v] of Object.entries(extraFields())) if (S[k] == null) S[k] = v;
   S.stats.wishes = S.stats.wishes || 0;
   if (!S.crew) { S.crew = []; for (let i = 0; i < (S.staff || 1); i++) S.crew.push(newCrew('clean', S.crew)); delete S.staff; }
   for (const d of S.decor) d.flip = !!d.flip;
+  if (S.dayDone) { delete S.dayDone; if (!S.endingPending) S.day++; }      // 上次停在結算畫面
   guests = []; staff = []; fx = []; parts = []; deskQueue = [];
+  inSummary = false; inChoice = false; $('summary').classList.remove('on'); $('choice').classList.remove('on'); $('ending').classList.remove('on');
   for (const f of S.facs) f.occ = [];
   show('gameScreen');
   resize();
@@ -1958,18 +2116,24 @@ async function start(fresh) {
   focusOwned();
   startDay();
   running = true;
+  if (S.endingPending || S.awaitChoice) showEnding();      // 結局看到一半關掉的話,再演一次
   if (innerHeight > innerWidth) setTimeout(() => toast('📱 手機橫放看得比較多;兩指可以縮放,一指拖曳移動'), 3200);
 }
 $('startBtn').addEventListener('click', () => start(false));
-$('newBtn').addEventListener('click', () => {
-  if (readJSON(SAVE_KEY, null) && !confirm('確定要重新開一間旅館嗎?現在的進度會不見。')) return;
+$('newBtn').addEventListener('click', async () => {
+  if ((await loadBest(SAVE_KEY)) && !confirm('確定要重新開一間旅館嗎?現在的進度會不見。(想留著的話先按「📦 備份存檔碼」)')) return;
   start(true);
 });
 $('backBtn').addEventListener('click', () => { save(); running = false; closePanel(); closeSheet(); endMode(); refreshStart(); show('startScreen'); });
-function refreshStart() {
-  const s = readJSON(SAVE_KEY, null);
+async function refreshStart() {
+  const s = await loadBest(SAVE_KEY);
+  $('backupBtn').style.display = s ? '' : 'none';
+  $('trophyNote').textContent = s && s.trophies && s.trophies.length ? `🏆 獎盃牆:${s.trophies.map(x => x.icon).join('')}` : '';
+  // 存檔是跟著大廳選的玩家走的:換了人,旅館就是另一間
+  const others = getProfiles().filter(p => p.id !== currentProfile().id).map(p => [p, readJSON(`onsen:${p.id}:save2`, null)]).filter(([, v]) => v);
+  $('otherSaves').innerHTML = !s && others.length ? `其他玩家有旅館:${others.map(([p, v]) => `${p.avatar}${escapeHTML(p.name)}(第 ${v.day} 天)`).join('、')}<br>是你的話,回大廳換成那個人就看得到。` : '';
   if (s) {
-    $('startBtn').textContent = `繼續經營(第 ${s.day} 天 · ${'★'.repeat(starsOf(s.rep))})`;
+    $('startBtn').textContent = `繼續經營(${s.ng ? `第 ${s.ng + 1} 間 · ` : ''}第 ${s.day} 天 · ${'★'.repeat(starsOf(s.rep))}${s.legend ? ' · 👑傳說' : ''})`;
     $('newBtn').style.display = '';
   } else {
     $('startBtn').textContent = '開一間溫泉旅館!';
@@ -1980,6 +2144,51 @@ function refreshStart() {
 }
 refreshStart();
 
+// ---------- 存檔碼:備份 / 換裝置 ----------
+let codeMode = 'backup';
+async function openCode(mode) {
+  codeMode = mode;
+  $('codeMsg').textContent = '';
+  if (mode === 'backup') {
+    const sv = await loadBest(SAVE_KEY);
+    if (!sv) return;
+    $('codeTitle').textContent = '📦 備份存檔碼';
+    $('codeHow').innerHTML = '把下面這一整串複製起來(傳給自己、存在備忘錄)。<br>換手機、或 iPhone 主畫面 App 跟 Safari 之間,用「📥 輸入存檔碼」貼上就能接著玩。';
+    $('codeText').value = await encodeSave(sv); $('codeText').readOnly = true;
+    $('codeGo').textContent = '複製';
+  } else {
+    $('codeTitle').textContent = '📥 輸入存檔碼';
+    $('codeHow').innerHTML = `把存檔碼整串貼在下面。<b>會蓋掉「${escapeHTML(currentProfile().name)}」現在的旅館。</b>`;
+    $('codeText').value = ''; $('codeText').readOnly = false;
+    $('codeGo').textContent = '讀取這個存檔';
+  }
+  $('codeBox').classList.add('on');
+}
+$('backupBtn').addEventListener('click', () => openCode('backup'));
+$('restoreBtn').addEventListener('click', () => openCode('restore'));
+$('codeClose').addEventListener('click', () => $('codeBox').classList.remove('on'));
+$('codeGo').addEventListener('click', async () => {
+  const ta = $('codeText');
+  if (codeMode === 'backup') {
+    ta.focus(); ta.select();
+    let ok = false;
+    try { await navigator.clipboard.writeText(ta.value); ok = true; } catch (e) { try { ok = document.execCommand('copy'); } catch (e2) { ok = false; } }
+    $('codeMsg').textContent = ok ? '✅ 複製好了!' : '請長按上面的文字 → 全選 → 拷貝';
+    return;
+  }
+  try {
+    const sv = await decodeSave(ta.value);
+    const cur = await loadBest(SAVE_KEY);
+    if (cur && !confirm(`要用存檔碼裡的旅館(第 ${sv.day} 天)蓋掉現在的旅館(第 ${cur.day} 天)嗎?`)) return;
+    sv.savedAt = Date.now();
+    const r = saveBoth(SAVE_KEY, sv);       // 直接寫兩份(不經過 save(),那個會帶上目前畫面上的客人)
+    if (!r.ls && !(await r.idb)) throw new Error('這台裝置存不下,空間滿了');
+    $('codeMsg').textContent = `✅ 讀到了!第 ${sv.day} 天的旅館`;
+    await refreshStart();
+    setTimeout(() => $('codeBox').classList.remove('on'), 900);
+  } catch (e) { $('codeMsg').textContent = '❌ ' + e.message; }
+});
+
 // 開發用:窗格在背景時 requestAnimationFrame 不跑,用 advance(秒) 快轉
 if (import.meta.env.DEV) window.ON = {
   get S() { return S; }, focus: () => { focusOwned(); }, spotsOf, cam: (x, y, s) => { Object.assign(cam, { x, y, s }); }, guests: () => guests, staff: () => staff, t: () => t, rebuild, canPlace, tapWorld, openPanel, facById,
@@ -1989,7 +2198,7 @@ if (import.meta.env.DEV) window.ON = {
   train: doTrain, move: sel => startMove(sel), confirm: confirmPlace, place_: () => place,
   toScreen(tx, ty) { const r = cv.getBoundingClientRect(); return [r.left + (tx * T - cam.x) * cam.s, r.top + (ty * T - cam.y) * cam.s]; },
   money(n) { S.money += n; hud(); }, rep(n) { S.rep += n; hud(); }, ideas(n) { S.ideas += n; hud(); }, research: doResearch, hire: doHire, ad: doAd,
-  upgrade(id) { selected = { fac: facById(id) }; $('pBtn').click(); closePanel(); },
+  upgrade(id) { openPanel({ fac: facById(id) }); $('pBtn').click(); closePanel(); }, showEnding, newInn, checkMilestones, encodeSave, decodeSave, refreshStart, save,
   inSummary: () => inSummary, inChoice: () => inChoice, next: () => $('sNext').click(), showChoice: id => showChoice(CHOICES.find(c => c.id === id)), checkAch,
   pick: i => document.querySelectorAll('.copt')[i].click(),
 };

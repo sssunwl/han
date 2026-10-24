@@ -212,6 +212,43 @@
   .rk .no { width:20px; text-align:center; font-weight:bold; color:var(--gold); }
   .rk .nm { flex:1; } .rk .st { color:var(--gold); font-size:10px; } .rk .rp { width:60px; text-align:right; color:#bcd3f5; font-variant-numeric:tabular-nums; }
   .item.sel { border-color:var(--gold); }
+
+  /* 存檔小字、目標 */
+  #saveDot { position:absolute; top:6px; right:calc(56px + env(safe-area-inset-right)); z-index:4; font-size:11px; padding:3px 8px; border-radius:10px;
+    background:rgba(20,30,60,.75); color:#cfe7ff; opacity:0; transition:opacity .3s; pointer-events:none; }
+  #saveDot.on { opacity:1; } #saveDot.bad { background:#b8342a; color:#fff; }
+  .goal { margin-top:8px; padding:8px 10px; border-radius:12px; background:#e8f4ff; color:#1d3a5f; font-size:13px; line-height:1.5; }
+  .goal small { color:#4a6a8f; }
+  .msline { margin-top:6px; padding:8px 10px; border-radius:12px; background:linear-gradient(135deg,#ffe0f0,#ffd2a8); color:#5a2a10; font-size:14px; }
+  .msline small { font-size:11px; color:#7a4a30; }
+  .trophies { display:grid; grid-template-columns:repeat(auto-fill,minmax(92px,1fr)); gap:6px; }
+  .trophies div { background:rgba(255,216,74,.12); border:1px solid rgba(255,216,74,.4); border-radius:8px; padding:6px 4px; text-align:center; font-size:11px; color:#fff3c4; }
+  .trophies b { display:block; font-size:24px; }
+  .trophies small { color:#bcd3f5; font-size:10px; }
+
+  /* 結局 */
+  #ending { position:fixed; inset:0; z-index:8; display:none; align-items:center; justify-content:center; padding:14px;
+    background:radial-gradient(circle at 50% 30%,#3a2a6a,#120c24 70%); }
+  #ending.on { display:flex; }
+  #ending .card { max-height:100%; overflow-y:auto; touch-action:pan-y; max-width:460px; }
+  #ending h1 { font-size:26px; margin:2px 0; background:linear-gradient(90deg,#d8452f,#e8a317); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  #ending .crown { font-size:44px; animation:bob 1.6s ease-in-out infinite; }
+  @keyframes bob { 50% { transform:translateY(-6px); } }
+  #eSub { font-size:13px; color:var(--dim); }
+  #eCrew { font-size:12px; color:var(--dim); margin:6px 0; line-height:1.6; }
+  #eRoll { height:150px; overflow:hidden; position:relative; margin:10px 0; border-radius:12px; background:#1a1430; color:#fff6e8;
+    -webkit-mask-image:linear-gradient(transparent,#000 20%,#000 80%,transparent); mask-image:linear-gradient(transparent,#000 20%,#000 80%,transparent); }
+  #eRoll .rollin { position:absolute; left:0; right:0; top:100%; animation:roll 22s linear forwards; }
+  #eRoll p { margin:0 0 12px; font-size:14px; } #eRoll small { display:block; font-size:10px; color:#bba8e8; letter-spacing:.1em; }
+  #eRoll .fin { font-size:18px; margin-top:20px; }
+  @keyframes roll { to { transform:translateY(calc(-100% - 150px)); } }
+
+  /* 存檔碼 */
+  #codeBox { position:fixed; inset:0; z-index:9; display:none; align-items:center; justify-content:center; padding:14px; background:rgba(5,10,30,.7); }
+  #codeBox.on { display:flex; }
+  #codeBox textarea { width:100%; height:120px; font:12px ui-monospace,monospace; border-radius:10px; border:2px solid #e3d3bd; padding:8px; word-break:break-all; }
+  #codeMsg { font-size:13px; min-height:1.2em; margin:6px 0; }
+  .startextra { font-size:12px; color:var(--dim); margin-top:8px; line-height:1.6; }
 </style>
 </head>
 <body>
@@ -230,6 +267,9 @@
       <button class="btn wide" id="startBtn">開一間溫泉旅館!</button>
       <div class="btnrow"><button class="btn ghost" id="newBtn" style="display:none">重新開一間</button></div>
       <div id="oldNote" style="display:none">新版改成自由建造,舊版的旅館沒辦法搬過來,要重新開一間。</div>
+      <div class="btnrow"><button class="btn ghost" id="backupBtn" style="display:none">📦 備份存檔碼</button><button class="btn ghost" id="restoreBtn">📥 輸入存檔碼</button></div>
+      <div class="startextra" id="trophyNote"></div>
+      <div class="startextra" id="otherSaves"></div>
       <a class="back-link" href="../../">← 回遊戲間換人</a>
       <p class="credit">像素美術:遊戲間自己畫的 Pixelkit(全部用程式畫,沒有外部素材)</p>
     </div>
@@ -253,6 +293,7 @@
       <canvas id="cv"></canvas>
       <div class="zoom"><button class="px" id="zIn" title="放大">＋</button><button class="px" id="zOut" title="縮小">－</button></div>
       <div id="toast" class="px"></div>
+      <div id="saveDot"></div>
 
       <div id="sheet" class="px">
         <div class="hd"><span id="sheetTitle"></span><button id="sheetClose">✕</button></div>
@@ -299,6 +340,7 @@
       <div id="sAch"></div>
       <div id="sYear"></div>
       <div id="sReviews"></div>
+      <div id="sGoal"></div>
       <div id="sRep"></div>
       <button class="btn wide" id="sNext">下一天 →</button>
     </div>
@@ -313,5 +355,38 @@
   </div>
 
   <script type="module" src="./main.js"></script>
+  <div id="ending">
+    <div class="card">
+      <div class="crown">🗾</div>
+      <h1>日本第一溫泉旅館</h1>
+      <div id="eSub"></div>
+      <div class="nums" id="eNums"></div>
+      <div id="eReview"></div>
+      <div id="eCrew"></div>
+      <div id="eRoll"></div>
+      <div id="eChoose">
+        <button class="btn wide" id="eLegend">👑 繼續經營(傳說模式)</button>
+        <p class="startextra">對手會變強,還有「三連霸」等傳說目標</p>
+        <button class="btn wide ghost" id="eNew">🏯 開第二間旅館</button>
+        <p class="startextra">從新土地重新開始:多一點起始資金、帶走一位員工、研究全部保留,獎盃牆也會跟著你</p>
+      </div>
+      <div id="eCarry" style="display:none">
+        <p class="how">要帶哪一位員工去新旅館?</p>
+        <div id="eCarryList"></div>
+        <button class="btn ghost" id="eBack" style="margin-top:8px">← 再想想</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="codeBox">
+    <div class="card">
+      <h1 id="codeTitle" style="font-size:20px">存檔碼</h1>
+      <p class="how" id="codeHow"></p>
+      <textarea id="codeText" spellcheck="false" autocomplete="off"></textarea>
+      <div id="codeMsg"></div>
+      <div class="btnrow"><button class="btn" id="codeGo">複製</button><button class="btn ghost" id="codeClose">關閉</button></div>
+    </div>
+  </div>
+
 </body>
 </html>

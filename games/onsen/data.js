@@ -218,9 +218,9 @@ export function starsOf(rep) {
 // ---------- 全國溫泉旅館排行(每年年底結算)----------
 // 每間有自己的起始口碑跟每天成長;第二年年底剛好跟玩家拚第一(自動玩家實測)
 export const INNS = [
-  { name: '箱根 滿月亭', rep: 3000, grow: 360 },
-  { name: '草津 鶴之湯', rep: 2400, grow: 290 },
-  { name: '別府 地獄屋', rep: 1900, grow: 230 },
+  { name: '箱根 滿月亭', rep: 3000, grow: 285 },
+  { name: '草津 鶴之湯', rep: 2400, grow: 235 },
+  { name: '別府 地獄屋', rep: 1900, grow: 190 },
   { name: '由布院 花水木', rep: 1500, grow: 180 },
   { name: '登別 熊之湯', rep: 1100, grow: 135 },
   { name: '道後 白鷺館', rep: 800, grow: 100 },
@@ -368,3 +368,24 @@ export const WISHES = {
   koi: '想看錦鯉', shrine: '想去參拜', karaoke: '想唱歌!', footbath: '想泡個腳', onsen: '想泡露天風呂',
   dining: '肚子好餓', shop: '想買伴手禮', lounge: '想找地方休息',
 };
+
+// ---------- 里程碑與結局(v2.3)----------
+// 里程碑:中途的大目標,達成會放煙火、給獎勵、掛上獎盃牆。最後一個就是結局
+export const MILESTONES = [
+  { id: 'street', icon: '🏮', name: '溫泉街誕生', desc: '升到 3 星,而且蓋了 8 種不同的設施', reward: { money: 2000, ideas: 10 } },
+  { id: 'podium', icon: '🥉', name: '名聲傳遍全國', desc: '全國排行進入前 3 名', reward: { money: 4000, ideas: 20 } },
+  { id: 'meisho', icon: '🌸', name: '名湯之宿', desc: '6 間設施升到最高級(Lv3)', reward: { money: 5000, ideas: 20 } },
+  { id: 'ending', icon: '🗾', name: '日本第一溫泉旅館', desc: '五星,而且全國排行第 1 名', final: true },
+];
+// 傳說模式(看完結局選「繼續經營」):對手變強,另外有三個傳說目標
+export const LEGEND_GOALS = [
+  { id: 'threepeat', icon: '👑', name: '三連霸', desc: '年度排行連續 3 年第 1 名', reward: { money: 10000, ideas: 50 } },
+  { id: 'maxall', icon: '💎', name: '滿級旅館', desc: '16 種設施都有,而且每一間都是 Lv3', reward: { money: 10000, ideas: 50 } },
+  { id: 'combos', icon: '🎊', name: '組合大師', desc: '發現全部組合', reward: { money: 5000, ideas: 30 } },
+];
+export const LEGEND_RIVAL = '傳說之湯 雲上閣';
+export const LEGEND_GROW = 1.5;        // 傳說模式:對手每天成長 ×1.5
+// 開第二間旅館(NG+):第 n 間的起始資金、對手變強多少
+export const NG_MONEY = n => 800 + 2200 * Math.min(n, 3);
+export const NG_RIVAL = n => 1 + 0.25 * n;
+export const NG_CARRY_MAX_LV = 3;      // 帶過去的員工最多保留到 Lv3
