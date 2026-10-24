@@ -1,0 +1,656 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#3b2a55">
+    <title>雪糕店 · 遊戲間</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html,body {
+        margin: 0;
+        height: 100%;
+        height: 100dvh;
+        overflow: hidden;
+        overscroll-behavior: none;
+        touch-action: none;
+      }
+      body {
+        font: 15px 'PingFang TC','Microsoft JhengHei',system-ui;
+        color: #fff0f7;
+        background: #2a1d40;
+        user-select: none;
+      }
+      button,a,textarea {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+        color: inherit;
+        background: #654268;
+        border: 2px solid #ffc6dd;
+        padding: 9px;
+        border-radius: 5px;
+        touch-action: manipulation;
+      }
+      button:active {
+        transform: translateY(1px);
+      }
+      button:disabled {
+        opacity: .45;
+        cursor: default;
+      }
+      button.primary {
+        background: #c64f81;
+      }
+      a {
+        color: #ffd6e9;
+      }
+      h1,h2,p {
+        margin: 8px 0;
+      }
+      small {
+        display: block;
+        color: #e3c5dc;
+      }
+      canvas,img {
+        image-rendering: pixelated;
+      }
+      .px,.card {
+        border: 3px solid #ffc6dd;
+        box-shadow: 0 4px #160d27;
+        background: linear-gradient(#3b2a55,#2a1d40);
+        border-radius: 7px;
+      }
+      .overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        background: #1d102cbb;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        overflow: auto;
+        touch-action: pan-y;
+      }
+      .overlay[hidden],[hidden] {
+        display: none!important;
+      }
+      .card {
+        max-width: 600px;
+        width: 100%;
+        padding: 20px;
+        max-height: 95dvh;
+        overflow: auto;
+        touch-action: pan-y;
+        text-align: center;
+      }
+      .card>button {
+        margin: 5px;
+      }
+      .wide {
+        width: 100%;
+      }
+      #start .card {
+        max-width: 460px;
+      }
+      #who {
+        padding: 8px;
+      }
+      #game {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+      .hud {
+        flex: none;
+        z-index: 3;
+        padding: calc(5px + env(safe-area-inset-top)) 7px 5px;
+        background: #3b2a55;
+        border-bottom: 2px solid #ffc6dd;
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .hud button {
+        padding: 5px 9px;
+      }
+      .hud .info {
+        flex: 1;
+        min-width: 130px;
+        text-align: center;
+        font-weight: bold;
+      }
+      #money {
+        color: #ffd84a;
+      }
+      #challenge {
+        width: 100%;
+        text-align: center;
+        font-size: 12px;
+      }
+      .rep {
+        display: inline-block;
+        background: #241831;
+        width: 65px;
+        height: 7px;
+      }
+      .rep i {
+        display: block;
+        height: 100%;
+        background: #ff7fa8;
+      }
+      #saveDot {
+        font-size: 10px;
+        opacity: 0;
+      }
+      #saveDot.on {
+        opacity: 1;
+      }
+      #saveDot.bad {
+        color: #ffd84a;
+      }
+      #stage {
+        position: relative;
+        flex: 1;
+        min-height: 105px;
+        overflow: hidden;
+      }
+      #world {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+        touch-action: none;
+      }
+      #zoom {
+        position: absolute;
+        right: 8px;
+        top: 8px;
+        z-index: 2;
+        display: grid;
+        gap: 5px;
+      }
+      #zoom button {
+        padding: 5px 12px;
+        background: #3b2a55bb;
+      }
+      #make {
+        position: relative;
+        z-index: 3;
+        flex: none;
+        background: linear-gradient(#49305f,#30203f);
+        border-top: 3px solid #ffc6dd;
+        padding: 5px 8px;
+        text-align: center;
+        max-height: 42dvh;
+        overflow: auto;
+        touch-action: pan-y;
+      }
+      #make.idle {
+        padding: 10px;
+        font-size: 13px;
+      }
+      .previews {
+        display: flex;
+        justify-content: center;
+        gap: 18px;
+        align-items: center;
+      }
+      .previews canvas {
+        width: 40px;
+        height: 72px;
+      }
+      .previews label {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 12px;
+      }
+      .previews .actions {
+        display: grid;
+        gap: 4px;
+      }
+      .previews button {
+        padding: 5px;
+        font-size: 12px;
+      }
+      .ingredients {
+        display: grid;
+        grid-template-columns: repeat(6,minmax(0,1fr));
+        gap: 4px;
+        margin-top: 4px;
+      }
+      .ingredients button {
+        padding: 3px 1px;
+        font-size: 11px;
+        min-width: 0;
+      }
+      .ingredients img {
+        display: block;
+        width: 36px;
+        height: 24px;
+        margin: auto;
+      }
+      .row {
+        display: flex;
+        gap: 5px;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin: 6px 0;
+      }
+      .row button {
+        padding: 6px 12px;
+      }
+      .tools {
+        position: relative;
+        z-index: 4;
+        display: flex;
+        flex: none;
+        gap: 3px;
+        padding: 5px 4px calc(5px + env(safe-area-inset-bottom));
+        background: #2a1d40;
+      }
+      .tools button {
+        flex: 1;
+        min-width: 0;
+        padding: 7px 1px;
+        font-size: 12px;
+      }
+      .tools span {
+        display: block;
+        font-size: 20px;
+      }
+      #sheet {
+        position: absolute;
+        z-index: 8;
+        bottom: 55px;
+        left: 8px;
+        right: 8px;
+        max-height: 60dvh;
+        overflow: auto;
+        touch-action: pan-y;
+        padding: 10px;
+      }
+      #sheet h2 {
+        font-size: 18px;
+        display: flex;
+        justify-content: space-between;
+      }
+      .item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        text-align: left;
+        margin: 5px 0;
+      }
+      .item .ic {
+        font-size: 24px;
+      }
+      .item .tx {
+        flex: 1;
+      }
+      .item small {
+        font-size: 12px;
+        margin-top: 3px;
+      }
+      .stock {
+        display: grid;
+        grid-template-columns: repeat(4,1fr);
+        gap: 5px;
+      }
+      .stock button {
+        min-height: 65px;
+      }
+      #placeBar {
+        position: absolute;
+        z-index: 9;
+        left: 10px;
+        right: 10px;
+        bottom: 65px;
+        padding: 10px;
+        text-align: center;
+      }
+      #toast {
+        position: fixed;
+        z-index: 40;
+        top: 100px;
+        left: 50%;
+        transform: translateX(-50%);
+        max-width: 92%;
+        width: max-content;
+        padding: 12px 16px;
+        background: #fff1d8;
+        color: #49305f;
+        border: 3px solid #ff7fa8;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .15s;
+      }
+      #toast.on {
+        opacity: 1;
+      }
+      .nums {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin: 14px 0;
+      }
+      .nums div {
+        padding: 10px;
+        background: #ffffff0b;
+      }
+      .nums b {
+        color: #ffd84a;
+        display: block;
+      }
+      #codeText {
+        width: 100%;
+        height: 160px;
+        user-select: text;
+        background: #251632;
+        color: white;
+        padding: 10px;
+      }
+      #ending .roll {
+        height: 110px;
+        overflow: hidden;
+        background: #20142f;
+        margin: 15px 0;
+      }
+      #ending .roll p {
+        animation: credits 16s linear infinite;
+        line-height: 2;
+      }
+      @keyframes credits {
+        from {
+          transform: translateY(100px);
+        }
+        to {
+          transform: translateY(-230px);
+        }
+      }
+      .hint {
+        color: #ffd84a;
+        animation: blink 1s steps(2) infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: .4;
+        }
+      }
+      .flavors {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        justify-content: center;
+      }
+      .flavors button {
+        width: 100px;
+        min-height: 60px;
+      }
+      .flavors button.on {
+        background: #a04d80;
+        outline: 2px solid #ffd84a;
+      }
+      #location .row {
+        align-items: stretch;
+      }
+      #location button {
+        flex: 1;
+        min-width: 150px;
+        padding: 16px;
+      }
+      .report {
+        text-align: left;
+        line-height: 1.8;
+      }
+      @media(max-width:420px) {
+        .hud {
+          font-size: 12px;
+        }
+        .hud .info {
+          min-width: 100px;
+        }
+        .ingredients {
+          grid-template-columns: repeat(6,minmax(0,1fr));
+        }
+        .tools button {
+          font-size: 11px;
+        }
+        .card {
+          padding: 14px;
+        }
+        .previews {
+          gap: 10px;
+        }
+        .tools span {
+          font-size: 18px;
+        }
+      }
+      @media(orientation:landscape) and (max-height:550px) {
+        #game {
+          display: grid;
+          grid-template-columns: 1fr 300px;
+          grid-template-rows: auto 1fr auto;
+        }
+        .hud {
+          grid-column: 1/3;
+        }
+        #stage {
+          grid-column: 1;
+          grid-row: 2;
+        }
+        #make {
+          grid-column: 2;
+          grid-row: 2;
+          max-height: none;
+          border-left: 2px solid #ffc6dd;
+        }
+        .tools {
+          grid-column: 1/3;
+        }
+        .ingredients {
+          grid-template-columns: repeat(4,1fr);
+        }
+        #sheet {
+          right: 310px;
+          max-height: 70dvh;
+        }
+        .previews canvas {
+          height: 54px;
+          width: 30px;
+        }
+        .previews {
+          gap: 8px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="start" class="overlay">
+      <div class="card">
+        <h1>🍦 雪糕店</h1>
+        <div id="who"></div>
+        <p>
+          看單子，點口味，一球一球疊！
+          <br>
+          找零錢、擦桌子，讓大家吃得開心。
+          <br>
+          研究口味、參加雪糕節，開第二間分店！
+        </p>
+        <button id="startBtn" class="wide primary">開店！</button>
+        <button id="restart" class="wide">重新開店</button>
+        <div class="row">
+          <button id="backup">📦 備份存檔碼</button>
+          <button id="import">📥 輸入存檔碼</button>
+        </div>
+        <div id="trophies"></div>
+        <p>
+          <a href="../../">← 回遊戲間</a>
+        </p>
+      </div>
+    </div>
+    <div id="game" hidden>
+      <header class="hud">
+        <button id="home">✕</button>
+        <button id="settingsBtn">⚙</button>
+        <div class="info">
+          <div id="date"></div>
+          <span id="clock"></span>
+        </div>
+        <div>
+          <b id="money"></b>
+          <div id="reputation"></div>
+        </div>
+        <button id="pause">⏸</button>
+        <button id="speed">⏩</button>
+        <span id="saveDot"></span>
+        <div id="challenge"></div>
+      </header>
+      <div id="stage">
+        <canvas id="world"></canvas>
+        <div id="zoom">
+          <button id="plus">＋</button>
+          <button id="minus">－</button>
+          <button id="focus">⌂</button>
+        </div>
+      </div>
+      <section id="make" class="idle">
+        等客人中… 點髒桌子可以清理
+      </section>
+      <nav class="tools">
+        <button data-tab="seats">
+          <span>🪑</span>
+          座位
+        </button>
+        <button data-tab="decor">
+          <span>🌷</span>
+          裝潢
+        </button>
+        <button data-tab="stock">
+          <span>🧊</span>
+          冰櫃
+        </button>
+        <button data-tab="research">
+          <span>💡</span>
+          研究
+        </button>
+        <button data-tab="crew">
+          <span>👥</span>
+          員工
+        </button>
+        <button data-tab="expand">
+          <span>🏗</span>
+          擴店
+        </button>
+        <button data-tab="stats">
+          <span>📊</span>
+          經營
+        </button>
+      </nav>
+    </div>
+    <div id="sheet" class="px" hidden></div>
+    <div id="placeBar" class="px" hidden></div>
+    <div id="toast"></div>
+    <div id="summary" class="overlay" hidden>
+      <div class="card">
+        <h1 id="sTitle">
+        </h1>
+        <div id="sBody"></div>
+        <button id="next" class="wide primary">下一天 →</button>
+      </div>
+    </div>
+    <div id="choice" class="overlay" hidden>
+      <div class="card">
+        <h2 id="cTitle">
+        </h2>
+        <p id="cText">
+        </p>
+        <div id="cOpts"></div>
+      </div>
+    </div>
+    <div id="contest" class="overlay" hidden>
+      <div class="card">
+        <h1>🏆 雪糕節</h1>
+        <p id="contestTheme">
+        </p>
+        <p>選三個不同口味，一起參賽！</p>
+        <div id="contestFlavors" class="flavors"></div>
+        <div id="contestResult"></div>
+        <button id="contestGo" class="wide primary">開始比賽</button>
+      </div>
+    </div>
+    <div id="location" class="overlay" hidden>
+      <div class="card">
+        <h1>🏪 在哪裡開店？</h1>
+        <p>每個地方都有不一樣的客人！</p>
+        <div id="locations" class="row"></div>
+        <button id="locationCancel">← 返回</button>
+      </div>
+    </div>
+    <div id="change" class="overlay" hidden>
+      <div class="card">
+        <h2>💰 收錢找零</h2>
+        <p id="changeQuestion">
+        </p>
+        <p id="changeHint">
+        </p>
+        <div id="changeOpts" class="row"></div>
+      </div>
+    </div>
+    <div id="settings" class="overlay" hidden>
+      <div class="card">
+        <h2>⚙ 設定</h2>
+        <div id="settingsBody"></div>
+        <button id="settingsClose">完成</button>
+      </div>
+    </div>
+    <div id="codeBox" class="overlay" hidden>
+      <div class="card">
+        <h2 id="codeTitle">
+        </h2>
+        <textarea id="codeText" spellcheck="false">
+        </textarea>
+        <p id="codeMsg">
+        </p>
+        <button id="codeGo">複製</button>
+        <button id="codeClose">關閉</button>
+      </div>
+    </div>
+    <div id="ending" class="overlay" hidden>
+      <div class="card">
+        <h1>🏆 全城最好吃的雪糕店</h1>
+        <div id="eNums"></div>
+        <p id="eReview">
+        </p>
+        <div class="roll">
+          <p>
+            謝謝每位來吃雪糕的客人
+            <br>
+            店長與努力的店員們
+            <br>
+            Pixelkit 原創像素美術
+            <br>
+            遊戲間 · 程式與合成音樂
+            <br>
+            還有最棒的你！
+            <br>
+            每一球，都是幸福。
+          </p>
+        </div>
+        <button id="legend" class="wide primary">👑 繼續經營（傳說模式）</button>
+        <button id="branch" class="wide">🏪 開第二間分店</button>
+        <div id="carry"></div>
+      </div>
+    </div>
+    <script type="module" src="./main.js">
+    </script>
+  </body>
+</html>
