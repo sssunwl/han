@@ -31,31 +31,34 @@ function pose(col) {
   }
 }
 
-// 頭:佔了快一半身高
-const HEAD = { cx: 12, cy: 9, rx: 8.6, ry: 7.6 };     // 頭抬高一格,下面露出脖子,才不會像在低頭
+// 頭:佔了一半以上身高。用「超橢圓」畫成圓角方形的臉(SQ 越大越方,2 = 正圓)
+// 頭、頭髮、臉都在原本的位置畫好,最後整組往下移 HEAD_DROP 格(身體和腳變短,頭就往下)
+const HEAD = { cx: 12, cy: 9, rx: 8.6, ry: 7.6 };     // 頭與身體之間留脖子,才不會像在低頭
+const SQ = 3;
+const HEAD_DROP = 3;
 const inHead = (x, y, bob, dx = 0, grow = 0) => {
-  const a = (x + 0.5 - HEAD.cx - dx) / (HEAD.rx + grow), b = (y + 0.5 - HEAD.cy - bob) / (HEAD.ry + grow);
-  return a * a + b * b <= 1;
+  const a = Math.abs((x + 0.5 - HEAD.cx - dx) / (HEAD.rx + grow)), b = Math.abs((y + 0.5 - HEAD.cy - bob) / (HEAD.ry + grow));
+  return a ** SQ + b ** SQ <= 1;
 };
 
 function drawLegs(b, dir, p) {
   const leg = (x, lift) => {
     const bot = 30 - lift;
-    b.rect(x, 25, 3, bot - 26, PANTS.mid); b.vline(x, 25, bot - 26, PANTS.hi);
+    b.rect(x, 26, 3, bot - 27, PANTS.mid); b.vline(x, 26, bot - 27, PANTS.hi);      // 短腿:3 格 + 鞋
     b.rect(x, bot - 1, 3, 1, SHOE.mid);
   };
   if (dir === 'down' || dir === 'up') { leg(8, p.lA); leg(13, p.lB); }
   else { leg(10 - p.step, p.step > 0 ? 1 : 0); leg(11 + p.step, p.step < 0 ? 1 : 0); }
 }
 function drawBody(b, dir, p, o) {
-  const c = tone(o.cloth), y0 = 18 + p.bob, side = dir !== 'down' && dir !== 'up';
-  const x0 = side ? 8 : 7, w = side ? 8 : 10, h = 7 - p.bob;
+  const c = tone(o.cloth), y0 = 21 + p.bob, side = dir !== 'down' && dir !== 'up';
+  const x0 = side ? 8 : 7, w = side ? 8 : 10, h = 5 - p.bob;                          // 短身:5 格
   b.rect(x0, y0, w, h, c.mid); b.vline(x0, y0, h, c.hi); b.vline(x0 + w - 1, y0, h, c.lo); b.hline(x0, y0 + h - 1, w, c.lo);
   if (dir === 'down') { b.px(11, y0, tone(o.skin).mid); b.px(12, y0, tone(o.skin).mid); }       // 領口
 }
 function drawArms(b, dir, p, o, layer) {
-  const c = tone(o.cloth), s = tone(o.skin), y = 19 + p.bob;
-  const arm = (x, yy, far) => { b.rect(x, yy, 2, 3, far ? c.lo : c.mid); b.rect(x, yy + 3, 2, 2, far ? s.lo : s.mid); };
+  const c = tone(o.cloth), s = tone(o.skin), y = 22 + p.bob;
+  const arm = (x, yy, far) => { b.rect(x, yy, 2, 2, far ? c.lo : c.mid); b.rect(x, yy + 2, 2, 2, far ? s.lo : s.mid); };
   if (dir === 'down' || dir === 'up') { if (layer === 'front') { arm(5, y + Math.max(0, p.sw), false); arm(17, y + Math.max(0, -p.sw), false); } }
   else if (layer === 'back') arm(13 + p.sw, y, true);
   else arm(9 - p.sw * 2, y + Math.abs(p.sw), false);
@@ -63,7 +66,7 @@ function drawArms(b, dir, p, o, layer) {
 function drawHead(b, dir, p, o) {
   const s = tone(o.skin), dx = 0;                    // 側面頭不要往前偏(偏了會像往前探)
   b.rect(10, 16 + p.bob, 4, 2, s.lo);                 // 脖子
-  b.oval(HEAD.cx + dx, HEAD.cy + p.bob, HEAD.rx, HEAD.ry, s.mid);
+  for (let y = 0; y < FH; y++) for (let x = 0; x < FW; x++) if (inHead(x, y, p.bob, dx)) b.px(x, y, s.mid);
   // 下巴右下緣一圈淡陰影(光從左上來)
   for (let y = 0; y < FH; y++) for (let x = 0; x < FW; x++) {
     if (!inHead(x, y, p.bob, dx) || (inHead(x, y + 1, p.bob, dx) && inHead(x + 1, y, p.bob, dx))) continue;
@@ -169,14 +172,17 @@ function drawHair(b, dir, p, o, layer) {
 function frame(dir, col, o) {
   const b = new Bmp(FW, FH), p = pose(col);
   const d = dir === 'right' ? 'left' : dir;             // 右邊 = 左邊鏡像
-  drawHair(b, d, p, o, 'back');
+  const back = new Bmp(FW, FH), head = new Bmp(FW, FH);
+  drawHair(back, d, p, o, 'back');
+  b.blit(back, 0, HEAD_DROP);
   drawArms(b, d, p, o, 'back');
   drawLegs(b, d, p);
   drawBody(b, d, p, o);
   drawArms(b, d, p, o, 'front');
-  drawHead(b, d, p, o);
-  drawFace(b, d, p, o);
-  drawHair(b, d, p, o, 'front');
+  drawHead(head, d, p, o);
+  drawFace(head, d, p, o);
+  drawHair(head, d, p, o, 'front');
+  b.blit(head, 0, HEAD_DROP);
   outline(b, LINE);
   let out = b;
   if (dir === 'right') { out = new Bmp(FW, FH); out.blit(b, 0, 0, true); }
