@@ -115,6 +115,7 @@
   #placeBar button { font:inherit; font-weight:bold; font-size:14px; padding:9px 12px; border-radius:6px; cursor:pointer; border:2px solid var(--edge); color:#fff; white-space:nowrap; }
   #pbOk { background:#2f9e5b; } #pbOk:disabled { background:#55607a; opacity:.7; cursor:default; }
   #pbCancel { background:transparent; }
+  #pbFlip { background:#3b6fb6; }
 
   /* 設施面板 */
   #panel {
@@ -132,6 +133,20 @@
   .pbtns button { flex:1; font:inherit; font-weight:bold; font-size:14px; padding:9px; border-radius:6px; border:2px solid var(--edge); color:#fff; cursor:pointer; }
   #pBtn { background:var(--accent); } #pBtn:disabled { background:#55607a; opacity:.7; cursor:default; }
   #pSell { background:transparent; flex:0 0 auto; font-size:12px; }
+  #pMove, #pFlip { background:#3b6fb6; flex:0 0 auto; font-size:13px; }
+
+  /* 員工卡 */
+  .crew { display:flex; align-items:center; gap:10px; padding:8px; margin:0 0 6px; border:2px solid var(--edge); border-radius:6px; background:rgba(255,255,255,.04); }
+  .crew .face { width:32px; height:44px; background-repeat:no-repeat; image-rendering:pixelated; flex:0 0 auto; }
+  .crew .tx { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+  .crew b { font-size:14px; } .crew small { font-size:11px; color:#bcd3f5; line-height:1.4; }
+  .crew .xp { height:6px; background:#1d2a44; border-radius:3px; overflow:hidden; }
+  .crew .xp i { display:block; height:100%; background:#9dffbf; }
+  .crew .btns { display:flex; flex-direction:column; gap:4px; }
+  .crew button { font:inherit; font-size:12px; font-weight:bold; padding:6px 8px; border-radius:6px; border:2px solid var(--edge); color:#fff; background:var(--accent); cursor:pointer; white-space:nowrap; }
+  .crew button.ghost { background:transparent; font-weight:normal; font-size:11px; padding:3px 6px; }
+  .crew button:disabled { background:#55607a; opacity:.7; cursor:default; }
+  h4.sec { margin:10px 4px 6px; font-size:13px; color:var(--gold); }
 
   /* 手機橫放(矮螢幕):面板、選單靠右,不擋地圖 */
   @media (orientation:landscape) and (max-height:540px) {
@@ -246,6 +261,7 @@
 
       <div id="placeBar" class="px">
         <span id="pbText"></span>
+        <button id="pbFlip" title="轉向">⇋</button>
         <button id="pbCancel">取消</button>
         <button id="pbOk">✔ 蓋在這裡</button>
       </div>
@@ -254,7 +270,7 @@
         <div class="top"><span id="pIcon"></span><span id="pName"></span><button id="pClose">✕</button></div>
         <div id="pDesc"></div>
         <div id="pStat"></div>
-        <div class="pbtns"><button id="pBtn">升級</button><button id="pSell">拆除</button></div>
+        <div class="pbtns"><button id="pBtn">升級</button><button id="pMove">✋ 搬移</button><button id="pFlip">⇋ 轉向</button><button id="pSell">拆除</button></div>
       </div>
     </div>
     <div class="tools2">

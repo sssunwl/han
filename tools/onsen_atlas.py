@@ -93,7 +93,7 @@ SPRITES = {
 }
 
 # 人物:只取「待機」與「走路」兩列(各 4 方向 × 6 格,每格 32×64)
-CHARS = list(range(1, 17))          # 1~12 當客人,13 櫃台,14~16 打掃員工
+CHARS = list(range(1, 21))          # 1~12 當客人,13 櫃台,14~20 員工(各職業用哪幾個見 data.js STAFF_ROLES)
 CHAR_SHEET = '2_Characters/Character_Generator/0_Premade_Characters/32x32/Premade_Character_32x32_{:02d}.png'
 
 

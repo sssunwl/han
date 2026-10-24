@@ -5,7 +5,8 @@ import { TRACKS, playMusic, stopMusic, nowPlaying } from '../../shared/music.js'
 import { buildProcSprites } from './proc.js';
 import {
   T, COLS, ROWS, CHUNK, DAY_SECONDS, YEAR_DAYS, START_CHUNKS, ENTRANCE, SPAWN, DESK, QUEUE, isReserved, isDeskArea,
-  landCost, landNeed, FAC, FAC_ORDER, DECOR, DECOR_ORDER, COMBOS, RESEARCH, STAFF_HIRE, STAFF_SALARY, staffMax,
+  landCost, landNeed, FAC, FAC_ORDER, DECOR, DECOR_ORDER, COMBOS, RESEARCH, STAFF_HIRE, staffMax,
+  STAFF_ROLES, ROLE_ORDER, STAFF_NAMES, STAFF_MAX_LV, xpNeed, trainCost, salaryOf,
   ADS, AD_DAYS, STAR_REP, REVIEW_REP, starsOf, TYPES, TYPE_KEYS, seasonOf, EVENTS, REVIEWS,
   INNS, RIVAL_NEWS, ACHIEVEMENTS, CHOICES, PATHS, WISHES,
 } from './data.js';
@@ -62,7 +63,7 @@ function freshSave() {
       { id: 'f2', type: 'bath', x: 19, y: 16, lv: 1 },
     ],
     decor: [{ id: 'd1', type: 'bonsai_s', x: 12, y: 21 }, { id: 'd2', type: 'bush', x: 17, y: 21 }],
-    research: [], staff: 1, combos: [], ads: {}, sleepers: [], bestRank: null,
+    research: [], crew: [newCrew('clean', [])], combos: [], ads: {}, sleepers: [], bestRank: null,
     stats: { guests: 0, earned: 0, best5: 0, wishes: 0 },
     ...extraFields(),
   };
@@ -74,6 +75,14 @@ function extraFields() {
     seenChoices: [], inns: INNS.map(i => ({ name: i.name, rep: i.rep, grow: i.grow, boost: 0 })), prevRank: null, news: null,
   };
 }
+/** 新員工:名字不重複,外觀照職業挑 */
+function newCrew(role, crew) {
+  const usedN = new Set(crew.map(c => c.name)), usedC = new Set(crew.map(c => c.char));
+  const name = STAFF_NAMES.find(n => !usedN.has(n)) || '新人';
+  const chars = STAFF_ROLES[role].chars;
+  const char = chars.find(c => !usedC.has(c)) || chars[crew.length % chars.length];
+  return { id: 'c' + Date.now().toString(36) + Math.floor(Math.random() * 1e4), name, role, lv: 1, xp: 0, char };
+}
 const stars = () => starsOf(S.rep);
 const facById = id => S.facs.find(f => f.id === id);
 const F = f => FAC[f.type];
@@ -83,6 +92,16 @@ const has = id => S.research.includes(id);           // 被動研究
 const perm = id => (S.perm || []).includes(id);      // 人生選擇留下的永久效果
 const rankNow = () => 1 + S.inns.filter(i => i.rep > S.rep).length;
 const modSum = k => (S.mods || []).reduce((a, m) => a + (m[k] || 0), 0);
+// 員工效果:同職業的等級加起來(有上限),接待只看站在櫃台最厲害的那位
+const crewSum = (role, cap = 8) => Math.min(cap, S.crew.filter(c => c.role === role).reduce((a, c) => a + c.lv, 0));
+const deskLv = () => Math.max(0, ...staff.filter(a => a.state === 'desk').map(a => a.c.lv));
+const cookLvAt = id => Math.min(8, staff.filter(a => a.state === 'post' && a.post === id).reduce((s, a) => s + a.c.lv, 0));
+function gainXp(c, n) {
+  if (!c || c.lv >= STAFF_MAX_LV) return;
+  const before = c.xp >= xpNeed(c.lv);
+  c.xp = Math.min(xpNeed(c.lv), c.xp + n);
+  if (!before && c.xp >= xpNeed(c.lv)) toast(`📘 ${c.name}(${STAFF_ROLES[c.role].name})經驗滿了,可以去「員工」幫他受訓升級!`);
+}
 
 // ---------- 存檔 ----------
 function save() {
@@ -90,7 +109,11 @@ function save() {
   S.sleepers = guests.filter(g => g.state === 'sleep').map(g => ({
     char: g.char, type: g.type, room: g.room, sat: g.sat, vip: g.vip, group: g.group,
   }));
+  // 搬移到一半:先把東西放回原位再存,不然存檔裡它會不見
+  const moving = place && place.kind === 'move';
+  if (moving) putBack(place);
   writeJSON(SAVE_KEY, S);
+  if (moving) takeOut(place);
 }
 addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 addEventListener('pagehide', save);
@@ -164,7 +187,7 @@ function canPlace(w, h, x, y) {
   const d = bfs(g.w, ENTRANCE);
   if (d[QUEUE.y][QUEUE.x] < 0) return '會擋住大門到櫃台的路';
   for (const f of S.facs) if (!findDoor(facRect(f), d)) return `會擋住${F(f).name}的門`;
-  if (place && place.kind === 'fac' && !findDoor({ x, y, w, h }, d)) return '這裡沒有路可以進去';
+  if (place && (place.kind === 'fac' || place.isFac) && !findDoor({ x, y, w, h }, d)) return '這裡沒有路可以進去';
   return null;
 }
 
@@ -323,7 +346,7 @@ function updateDesk(dt) {
   const first = guestById(deskQueue[0]);
   if (!first || (first.state !== 'queue' && first.state !== 'queueOut')) { deskTimer = 0; return; }
   deskTimer += dt;
-  if (deskTimer < (has('service') ? 0.6 : 1.0)) return;
+  if (deskTimer < (has('service') ? 0.6 : 1.0) * (1 - deskLv() * 0.08)) return;
   deskTimer = 0;
   deskQueue.shift();
   if (first.state === 'queue') checkIn(first); else checkOut(first);
@@ -357,6 +380,8 @@ function checkIn(g) {
   if (comboOn('aquarium')) g.sat += 4;
   if (has('service')) g.sat += 4;
   if (has('futon')) g.sat += 5;
+  const dl = deskLv();
+  if (dl) { g.sat += dl * 2; const a = staff.filter(x => x.state === 'desk').sort((p, q) => q.c.lv - p.c.lv)[0]; gainXp(a.c, 0.5); }
   if (perm('cat')) g.sat += 3;
   g.sat += modSum('sat');
   S.typeCount[g.type] = (S.typeCount[g.type] || 0) + 1;
@@ -442,6 +467,10 @@ function finishActivity(g) {
   f.uses = (f.uses || 0) + 1;
   if (g.wish === f.type) { gain += 8; g.wish = null; S.stats.wishes++; float(g.x, g.y - 76, '願望實現!', '#9dffbf'); }
   if (has('cuisine') && f.type === 'dining') gain += 4;
+  const cl = f.type === 'dining' ? cookLvAt(f.id) : 0;
+  if (cl) { gain += cl * 2; for (const a of staff) if (a.state === 'post' && a.post === f.id) gainXp(a.c, 0.5); }
+  const yl = d.pool && f.type !== 'koi' ? crewSum('yumori') : 0;
+  if (yl) gain += yl * 2;
   // 玩越多項,後面的開心程度遞減(不然每個人都 5 星,設施等級就沒差了)
   gain *= Math.pow(0.75, g.done || 0);
   g.done = (g.done || 0) + 1;
@@ -450,6 +479,7 @@ function finishActivity(g) {
     let fee = d.fee[L - 1];
     if (f.type === 'shop') fee = Math.round(fee * (0.6 + Math.random() * 0.9) * (g.type === 'family' || g.type === 'tourist' ? 1.4 : 1) * (f.street ? 1.3 : 1) * (has('souvenir') ? 1.3 : 1));
     if (f.type === 'dining' && has('cuisine')) fee = Math.round(fee * 1.25);
+    if (cl) fee = Math.round(fee * (1 + cl * 0.08));
     pay(g, fee);
   }
   float(g.x, g.y - 60, '♥', '#ff7a9a');
@@ -532,40 +562,88 @@ function updateGuest(g, dt) {
 }
 
 // ============================================================
-//  員工:找髒房間 → 走過去 → 打掃 → 回大廳
+//  員工:每個人照自己的職業做事
+//    打掃  找髒房間 → 走過去 → 打掃 → 回大廳
+//    接待  站到櫃台旁邊(畫在櫃台後面),幫客人辦入住
+//    廚師  走去食堂待著煮飯(人少的那間優先)
+//    湯守  在各個浴池之間巡,調水溫
 // ============================================================
+const DESK_SPOTS = [DESK.x + 0.55, DESK.x + DESK.w - 0.55];
+const LOBBY = i => [11 + i % 4, 21];
 function syncStaff() {
-  while (staff.length < S.staff) {
+  staff = staff.filter(a => S.crew.includes(a.c));
+  for (const c of S.crew) {
+    if (staff.some(a => a.c === c)) continue;
     const i = staff.length;
-    staff.push({ id: 's' + i, char: 14 + (i % 3), x: (11 + i % 4) * T + 16, y: 21.8 * T, dir: 3, frame: 0, moving: false, path: [], state: 'idle', target: null, timer: 0, at: null });
+    staff.push({ id: c.id, c, char: c.char, x: (LOBBY(i)[0]) * T + 16, y: 21.8 * T, dir: 3, frame: 0, moving: false, path: [], state: 'idle', target: null, post: null, timer: 0, at: null });
   }
 }
+/** 讓員工離開現在的崗位(設施要拆、要搬的時候) */
+function releaseStaff(fid) {
+  for (const a of staff) if (a.post === fid || a.target === fid || a.at === fid) {
+    exitFac(a); a.moving = false; a.path = []; a.post = null; a.target = null; a.state = 'idle'; a.timer = 1;
+  }
+}
+const nearest = (a, list) => { const [sx, sy] = tileOf(a); return list.sort((p, q) => (Math.abs(p.door[0] - sx) + Math.abs(p.door[1] - sy)) - (Math.abs(q.door[0] - sx) + Math.abs(q.door[1] - sy)))[0]; };
 function updateStaff(a, dt) {
   if (a.bubble) { a.bubble.until -= dt; if (a.bubble.until <= 0) a.bubble = null; }
   if (a.moving) { moveAgent(a, dt); return; }
   a.frame += dt * 3;
-  if (a.state === 'idle') {
-    const claimed = new Set(staff.map(s => s.target).filter(Boolean));
-    const dirty = S.facs.filter(f => f.dirty && f.door && !claimed.has(f.id) && !guests.some(g => g.room === f.id));
-    if (!dirty.length) return;
-    // 去最近的那間(本來挑清單第一間,常常要橫越整張地圖)
-    const [sx, sy] = tileOf(a);
-    const f = dirty.sort((p, q) => (Math.abs(p.door[0] - sx) + Math.abs(p.door[1] - sy)) - (Math.abs(q.door[0] - sx) + Math.abs(q.door[1] - sy)))[0];
-    a.target = f.id; a.state = 'going';
-    goTo(a, f.door[0], f.door[1], () => {
-      const ff = facById(a.target);
-      if (!ff) { a.state = 'idle'; a.target = null; return; }
-      a.at = ff.id; a.x = (ff.x + F(ff).w / 2) * T; a.y = (ff.y + F(ff).h - 0.3) * T;
-      a.state = 'cleaning'; a.timer = (has('cleaning') ? 2 : 4) * (perm('raise') ? 0.7 : 1); bubble(a, '🧹', a.timer);
-    });
-  } else if (a.state === 'cleaning') {
-    a.timer -= dt;
-    if (a.timer <= 0) {
-      const f = facById(a.target);
-      if (f) { f.dirty = false; float(a.x, a.y - 60, '✨', '#fff'); }
-      exitFac(a); a.target = null; a.state = 'back';
-      goTo(a, 11 + staff.indexOf(a) % 4, 21, () => { a.state = 'idle'; a.dir = 3; });
+  if (a.timer > 0 && (a.state === 'idle' || a.state === 'check')) { a.timer -= dt; return; }
+  const role = a.c.role, lv = a.c.lv, home = () => { a.state = 'back'; goTo(a, ...LOBBY(staff.indexOf(a)), () => { a.state = 'idle'; a.dir = 3; a.timer = 1.5; }); };
+  if (role === 'clean') {
+    if (a.state === 'idle') {
+      const claimed = new Set(staff.map(s => s.target).filter(Boolean));
+      const dirty = S.facs.filter(f => f.dirty && f.door && !claimed.has(f.id) && !guests.some(g => g.room === f.id));
+      if (!dirty.length) return;
+      const f = nearest(a, dirty);       // 去最近的那間(本來挑清單第一間,常常要橫越整張地圖)
+      a.target = f.id; a.state = 'going';
+      goTo(a, f.door[0], f.door[1], () => {
+        const ff = facById(a.target);
+        if (!ff) { a.state = 'idle'; a.target = null; return; }
+        a.at = ff.id; a.x = (ff.x + F(ff).w / 2) * T; a.y = (ff.y + F(ff).h - 0.3) * T;
+        a.state = 'cleaning'; a.timer = (has('cleaning') ? 2 : 4) * (perm('raise') ? 0.7 : 1) * (1 - (lv - 1) * 0.12); bubble(a, '🧹', a.timer);
+      });
+    } else if (a.state === 'cleaning') {
+      a.timer -= dt;
+      if (a.timer <= 0) {
+        const f = facById(a.target);
+        if (f) { f.dirty = false; float(a.x, a.y - 60, '✨', '#fff'); gainXp(a.c, 1); }
+        exitFac(a); a.target = null; home();
+      }
     }
+  } else if (role === 'desk') {
+    if (a.state !== 'idle') return;
+    const used = staff.filter(o => o.state === 'desk' || o.state === 'toDesk').map(o => o.spot);
+    const spot = [0, 1].find(i => !used.includes(i));
+    if (spot == null) { a.timer = 5; return; }     // 櫃台站滿了,在大廳待命
+    a.state = 'toDesk'; a.spot = spot;
+    goTo(a, DESK.x - 1, DESK.y + 1, () => { a.state = 'desk'; a.x = DESK_SPOTS[spot] * T; a.y = (DESK.y + 0.2) * T; a.dir = 3; });
+  } else if (role === 'cook') {
+    if (a.state === 'post') { if (!facById(a.post)) { a.post = null; a.state = 'idle'; } return; }
+    if (a.state !== 'idle') return;
+    const kitchens = S.facs.filter(f => f.type === 'dining' && f.door);
+    if (!kitchens.length) { a.timer = 8; if (!a.bubble) bubble(a, '沒有食堂可以煮飯…', 2.5); return; }
+    const cnt = id => staff.filter(o => o.post === id).length;
+    const f = kitchens.sort((p, q) => cnt(p.id) - cnt(q.id))[0];
+    a.post = f.id; a.state = 'toPost';
+    goTo(a, f.door[0], f.door[1], () => {
+      const ff = facById(a.post);
+      if (!ff) { a.post = null; a.state = 'idle'; return; }
+      const n = staff.filter(o => o.post === ff.id && o.state === 'post').length;
+      a.at = ff.id; a.x = (ff.x + 2 + (n % 2) * 0.6) * T; a.y = (ff.y + 2.15) * T; a.dir = 3; a.state = 'post'; bubble(a, '🍳', 1.5);
+    });
+  } else if (role === 'yumori') {
+    if (a.state === 'check') { exitFac(a); home(); return; }
+    if (a.state !== 'idle') return;
+    const pools = S.facs.filter(f => F(f).pool && f.type !== 'koi' && f.door);
+    if (!pools.length) { a.timer = 8; if (!a.bubble) bubble(a, '沒有浴池可以顧…', 2.5); return; }
+    const f = pools[Math.floor(Math.random() * pools.length)];
+    a.state = 'patrol';
+    goTo(a, f.door[0], f.door[1], () => {
+      if (!facById(f.id)) { a.state = 'idle'; return; }
+      a.state = 'check'; a.timer = 3; bubble(a, '♨️ 調水溫', 2.5); gainXp(a.c, 0.4);
+    });
   }
 }
 
@@ -648,8 +726,9 @@ function endDay() {
   for (const g of guests) if (g.state === 'toCheckout' || g.state === 'queueOut') { checkOut(g); g.gone = true; }
   guests = guests.filter(g => !g.gone);
   // 薪水(沒有破產:錢最少扣到 0)
-  today.salary = Math.min(S.money, S.staff * (STAFF_SALARY + (perm('raise') ? 10 : 0)));
+  today.salary = Math.min(S.money, S.crew.reduce((a, c) => a + salaryOf(c.lv) + (perm('raise') ? 10 : 0), 0));
   S.money -= today.salary;
+  for (const c of S.crew) gainXp(c, 1);          // 上了一天班,大家都多一點經驗
   for (const k of Object.keys(S.ads)) if (--S.ads[k] <= 0) delete S.ads[k];
   for (const m of S.mods) m.days--;
   S.mods = S.mods.filter(m => m.days > 0);
@@ -692,7 +771,7 @@ function choiceOk(c) {
   const n = c.need || {};
   if (c.once && S.seenChoices.includes(c.id)) return false;
   if (n.stars && stars() < n.stars) return false;
-  if (n.staff && S.staff < n.staff) return false;
+  if (n.staff && S.crew.length < n.staff) return false;
   if (n.fac && !S.facs.some(f => f.type === n.fac)) return false;
   return true;
 }
@@ -737,7 +816,11 @@ function applyEffect(e, depth = 0) {
   if (e.money) { S.money = Math.max(0, S.money + e.money); out.push(`${e.money > 0 ? '+' : ''}¥${e.money}`); }
   if (e.rep) { S.rep = Math.max(0, S.rep + e.rep); out.push(`口碑 ${e.rep > 0 ? '+' : ''}${e.rep}`); }
   if (e.ideas) { S.ideas += e.ideas; out.push(`💡+${e.ideas}`); }
-  if (e.staff) { S.staff = Math.max(1, S.staff + e.staff); if (staff.length > S.staff) staff.length = S.staff; out.push('少了一位員工'); }
+  if (e.staff && e.staff < 0 && S.crew.length > 1) {
+    const c = S.crew[S.crew.length - 1];
+    S.crew = S.crew.filter(x => x !== c); syncStaff();
+    out.push(`${c.name}(${STAFF_ROLES[c.role].name})離職了`);
+  }
   if (e.closed) { arrivals = []; out.push('今天休息'); }
   if (e.arrive) {
     if (e.arrive < 0 && e.arrive > -1) arrivals = arrivals.filter(() => Math.random() > -e.arrive);
@@ -769,7 +852,7 @@ function achValue(a) {
     case 'land': return S.owned.length;
     case 'types': return new Set(S.facs.map(f => f.type)).size;
     case 'combos': return S.combos.length;
-    case 'staff': return S.staff;
+    case 'staff': return S.crew.length;
     case 'heart': return S.paths.heart;
     case 'wishes': return S.stats.wishes;
   }
@@ -873,6 +956,11 @@ function spr(name, x, y, c = ctx) {
   const r = R[name];
   if (!r) { if (PROC[name]) c.drawImage(PROC[name], Math.round(x), Math.round(y)); return; }
   c.drawImage(atlas, r[0], r[1], r[2], r[3], Math.round(x), Math.round(y), r[2], r[3]);
+}
+/** 擺設用:flip 就左右鏡像 */
+function sprF(name, x, y, flip) {
+  if (!flip) { spr(name, x, y); return; }
+  ctx.save(); ctx.translate(Math.round(x) + sprW(name), Math.round(y)); ctx.scale(-1, 1); spr(name, 0, 0); ctx.restore();
 }
 function tile(c, name, x, y, w, h) {
   const r = R[name];
@@ -1139,13 +1227,14 @@ function draw(now) {
     drawFac(f, now);
   }
   drawChar(13, DESK.staff[0] * T, DESK.staff[1] * T, 3, now / 250, false, false);
+  for (const a of staff) if (a.state === 'desk') drawChar(a.char, a.x, a.y, a.dir, now / 250 + 2, false, false);
   spr('counter', DESK.x * T, DESK.y * T);
 
   // 擺設、客人、員工一起按照 y 排序,才有前後遮擋
   const items = [];
-  for (const d of S.decor) items.push({ y: (d.y + 1) * T, draw: () => spr(d.type, d.x * T, (d.y + 1) * T - sprH(d.type)) });
+  for (const d of S.decor) items.push({ y: (d.y + 1) * T, draw: () => sprF(d.type, d.x * T, (d.y + 1) * T - sprH(d.type), d.flip) });
   for (const g of vis) if (!g.under) items.push({ y: g.y, draw: () => drawChar(g.char, g.x, g.y, g.dir, g.frame, g.moving, g.soak) });
-  for (const a of staff) items.push({ y: a.y, draw: () => drawChar(a.char, a.x, a.y, a.dir, a.frame, a.moving, false) });
+  for (const a of staff) if (a.state !== 'desk') items.push({ y: a.y, draw: () => drawChar(a.char, a.x, a.y, a.dir, a.frame, a.moving, false) });
   items.sort((a, b) => a.y - b.y).forEach(i => i.draw());
 
   for (const f of S.facs) {
@@ -1184,6 +1273,11 @@ function draw(now) {
   }
   for (const a of [...vis, ...staff]) if (a.bubble) bubbleAt(a.x, a.y - (a.soak ? 50 : 66), a.bubble.text);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const a of staff) if (!a.bubble) {
+    ctx.font = `${Math.round(10 * kz())}px sans-serif`; ctx.fillStyle = '#fff';
+    ctx.fillText(STAFF_ROLES[a.c.role].icon + (a.c.lv > 1 ? a.c.lv : ''), a.x, a.y - 64);
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const f of fx) {
     ctx.globalAlpha = 1 - f.t;
     ctx.font = `bold ${Math.round(13 * kz())}px "PingFang TC",sans-serif`;
@@ -1196,8 +1290,8 @@ function draw(now) {
 function drawGhost(now) {
   const p = place, x = p.x * T, y = p.y * T, w = p.w * T, h = p.h * T;
   ctx.globalAlpha = 0.75;
-  if (p.kind === 'decor') spr(p.type, x, y + T - sprH(p.type));
-  else { tile(ctx, FLOOR[p.type], x, y, w, h); drawFac({ type: p.type, x: p.x, y: p.y, lv: 1 }, now); }
+  if (!isFacPlace(p)) sprF(p.type, x, y + T - sprH(p.type), p.flip);
+  else { tile(ctx, FLOOR[p.type], x, y, w, h); drawFac({ type: p.type, x: p.x, y: p.y, lv: p.obj ? p.obj.lv : 1 }, now); }
   ctx.globalAlpha = 1;
   ctx.fillStyle = p.reason ? 'rgba(230,60,60,.35)' : 'rgba(80,220,120,.3)';
   ctx.fillRect(x, y, w, h);
@@ -1295,7 +1389,7 @@ $('sheetBody').addEventListener('click', e => {
   const b = e.target.closest('[data-act]');
   if (!b || b.disabled) return;
   const [act, id] = b.dataset.act.split(':');
-  ({ build: startPlaceFac, decor: startPlaceDecor, research: doResearch, hire: doHire, ad: doAd })[act](id);
+  ({ build: startPlaceFac, decor: startPlaceDecor, research: doResearch, hire: doHire, train: doTrain, fire: doFire, ad: doAd })[act](id);
 });
 
 function itemHTML({ act, icon, name, sub, cost, lockText, disabled }) {
@@ -1331,11 +1425,24 @@ function openResearch() {
   }).join(''));
 }
 function openStaff() {
-  const max = staffMax(stars()), cost = STAFF_HIRE(S.staff);
+  const max = staffMax(stars()), cost = STAFF_HIRE(S.crew.length), full = S.crew.length >= max;
   const dirty = S.facs.filter(f => f.dirty).length;
-  openSheet('👥 員工', `<p class="note">員工會打掃退房後的房間。房間沒打掃好,新客人就不能住。<br>
-    現在 <b>${S.staff}</b> 位(最多 ${max} 位,星星越多可以請越多)· 每人每天薪水 ¥${STAFF_SALARY} · 待打掃 ${dirty} 間</p>` +
-    itemHTML({ act: 'hire:x', icon: '🧹', name: '再請一位員工', sub: `每天薪水 ¥${STAFF_SALARY}`, cost: '¥' + cost, lockText: S.staff >= max ? `🔒 已滿 ${max} 位` : '', disabled: S.staff >= max || S.money < cost }));
+  const face = c => { const r = R['char' + c.char]; return `<span class="face" style="background-image:url(${BASE}onsen/atlas.png);background-position:-${r[0] + 18 * 32}px -${r[1] + 6}px"></span>`; };
+  const cards = S.crew.map(c => {
+    const ro = STAFF_ROLES[c.role], need = xpNeed(c.lv), maxed = c.lv >= STAFF_MAX_LV, ready = !maxed && c.xp >= need;
+    const tc = trainCost(c.lv);
+    const btn = maxed ? '<button disabled>最高級</button>'
+      : `<button data-act="train:${c.id}" ${ready && S.money >= tc ? '' : 'disabled'}>${ready ? `受訓 ¥${tc}` : '經驗不夠'}</button>`;
+    return `<div class="crew">${face(c)}<span class="tx"><b>${escapeHTML(c.name)} · ${ro.icon}${ro.name} Lv${c.lv}</b>
+      <small>${ro.pow(c.lv)} · 薪水 ¥${salaryOf(c.lv)}/天</small>
+      <span class="xp"><i style="width:${maxed ? 100 : c.xp / need * 100}%"></i></span>
+      <small>${maxed ? '已經是大師了!' : `經驗 ${Math.floor(c.xp)}/${need}(做事就會累積)`}</small></span>
+      <span class="btns">${btn}${S.crew.length > 1 ? `<button class="ghost" data-act="fire:${c.id}">請他走</button>` : ''}</span></div>`;
+  }).join('');
+  openSheet('👥 員工', `<p class="note">每位員工有自己的職業。做事會累積經驗,經驗滿了花錢受訓就升一級(最高 Lv${STAFF_MAX_LV}),等級越高越厲害,薪水也高一點。<br>
+    現在 <b>${S.crew.length}</b> 位(最多 ${max} 位,星星越多可以請越多)· 待打掃 ${dirty} 間</p>${cards}
+    <h4 class="sec">再請一位(¥${cost.toLocaleString()})</h4>` +
+    ROLE_ORDER.map(k => { const ro = STAFF_ROLES[k]; return itemHTML({ act: 'hire:' + k, icon: ro.icon, name: ro.name, sub: ro.desc, cost: '¥' + cost.toLocaleString(), lockText: full ? `🔒 已滿 ${max} 位` : '', disabled: full || S.money < cost }); }).join(''));
 }
 function openAds() {
   const st = stars();
@@ -1397,11 +1504,27 @@ function doResearch(id) {
   fanfare(); toast(`💡 研究完成:${r.name}!`);
   hud(); openResearch(); save();
 }
-function doHire() {
-  const cost = STAFF_HIRE(S.staff);
-  if (S.money < cost || S.staff >= staffMax(stars())) return;
-  S.money -= cost; S.staff++; syncStaff(); checkAch();
-  tone(880, 0.1, 'triangle', 0.15); toast('🧹 新員工來上班了!');
+function doHire(role) {
+  const cost = STAFF_HIRE(S.crew.length);
+  if (!STAFF_ROLES[role] || S.money < cost || S.crew.length >= staffMax(stars())) return;
+  const c = newCrew(role, S.crew);
+  S.money -= cost; S.crew.push(c); syncStaff(); checkAch();
+  tone(880, 0.1, 'triangle', 0.15); toast(`${STAFF_ROLES[role].icon} ${c.name}來當${STAFF_ROLES[role].name}了!`);
+  hud(); openStaff(); save();
+}
+function doTrain(id) {
+  const c = S.crew.find(x => x.id === id);
+  if (!c || c.lv >= STAFF_MAX_LV || c.xp < xpNeed(c.lv) || S.money < trainCost(c.lv)) return;
+  S.money -= trainCost(c.lv); c.lv++; c.xp = 0;
+  fanfare(); toast(`🎓 ${c.name}升到 Lv${c.lv}!${STAFF_ROLES[c.role].pow(c.lv)}`);
+  const a = staff.find(x => x.c === c); if (a) float(a.x, a.y - 70, 'Lv UP!', '#ffd84a');
+  hud(); openStaff(); save();
+}
+function doFire(id) {
+  const c = S.crew.find(x => x.id === id);
+  if (!c || S.crew.length <= 1 || !confirm(`確定要請${c.name}離開嗎?`)) return;
+  const a = staff.find(x => x.c === c); if (a) exitFac(a);
+  S.crew = S.crew.filter(x => x !== c); syncStaff();
   hud(); openStaff(); save();
 }
 const adCost = a => Math.round(a.cost * (has('pr') ? 0.6 : 1));
@@ -1427,21 +1550,48 @@ function startPlaceDecor(type) {
   place = { kind: 'decor', type, w: decorW(type), h: 1, x: cx, y: cy, cost: DECOR[type].cost, name: DECOR[type].name };
   mode = 'place'; updatePlace();
 }
+const isFacPlace = p => p.kind === 'fac' || (p.kind === 'move' && p.isFac);
 function updatePlace() {
   place.reason = canPlace(place.w, place.h, place.x, place.y);
   if (!place.reason && S.money < place.cost) place.reason = '錢不夠';
-  $('pbText').textContent = place.reason ? `${place.name}:${place.reason}` : `${place.name} ¥${place.cost.toLocaleString()} · 點畫面換位置`;
+  const tip = '用手指拖著它移動';
+  $('pbText').textContent = place.reason ? `${place.name}:${place.reason}`
+    : place.kind === 'move' ? `${place.name}:搬到這裡(免費)· ${tip}` : `${place.name} ¥${place.cost.toLocaleString()} · ${tip}`;
   $('pbOk').disabled = !!place.reason;
-  $('pbOk').textContent = '✔ 蓋在這裡';
+  $('pbOk').textContent = place.kind === 'move' ? '✔ 放這裡' : '✔ 蓋在這裡';
+  $('pbFlip').style.display = isFacPlace(place) ? 'none' : '';
   $('placeBar').classList.add('on');
+}
+// 搬移:先把東西從地圖拿起來(這樣格子算得出能不能放),確定才放回去
+function takeOut(p) { if (p.isFac) S.facs = S.facs.filter(x => x !== p.obj); else S.decor = S.decor.filter(x => x !== p.obj); }
+function putBack(p) { (p.isFac ? S.facs : S.decor).push(p.obj); }
+function startMove(sel) {
+  const isFac = !!sel.fac, obj = sel.fac || sel.decor;
+  if (isFac && (guests.some(g => g.room === obj.id || g.at === obj.id || g.target === obj.id) || staff.some(a => a.target === obj.id))) { toast('有人在用,等他們離開再搬'); return false; }
+  closePanel(); closeSheet();
+  if (isFac) releaseStaff(obj.id);
+  const d = isFac ? F(obj) : DECOR[obj.type];
+  place = { kind: 'move', isFac, obj, type: obj.type, w: isFac ? d.w : decorW(obj.type), h: isFac ? d.h : 1, x: obj.x, y: obj.y, cost: 0, name: d.name, flip: !!obj.flip };
+  takeOut(place); rebuild();
+  mode = 'place'; updatePlace();
+  return true;
 }
 function confirmPlace() {
   if (mode === 'land') { buyLand(); return; }
   if (!place || place.reason) return;
+  if (place.kind === 'move') {
+    const p = place; place = null;
+    p.obj.x = p.x; p.obj.y = p.y;
+    if (p.isFac) p.obj.occ = []; else p.obj.flip = p.flip;
+    putBack(p); rebuild();
+    tone(660, 0.08, 'triangle', 0.14); float((p.x + p.w / 2) * T, p.y * T, '搬好了!', '#9dffbf');
+    hud(); save(); endMode();
+    return;
+  }
   S.money -= place.cost;
   const id = (place.kind === 'fac' ? 'f' : 'd') + (S.nextId++);
   if (place.kind === 'fac') S.facs.push({ id, type: place.type, x: place.x, y: place.y, lv: 1 });
-  else S.decor.push({ id, type: place.type, x: place.x, y: place.y });
+  else S.decor.push({ id, type: place.type, x: place.x, y: place.y, flip: !!place.flip });
   rebuild();
   noise(0.3, 0.06, 600); [523, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.15, 'triangle', 0.16), i * 90));
   float((place.x + place.w / 2) * T, place.y * T, '完成!', '#ffd84a');
@@ -1449,7 +1599,11 @@ function confirmPlace() {
   if (place.kind === 'decor' && S.money >= place.cost) updatePlace();      // 擺設可以連續擺
   else endMode();
 }
-function endMode() { mode = 'normal'; place = null; landPick = null; $('placeBar').classList.remove('on'); }
+function endMode() {
+  if (place && place.kind === 'move') { putBack(place); place = null; rebuild(); }   // 取消搬移 → 放回原位
+  mode = 'normal'; place = null; landPick = null; $('placeBar').classList.remove('on');
+}
+$('pbFlip').addEventListener('click', () => { if (!place) return; place.flip = !place.flip; tone(520, 0.04, 'square', 0.05); });
 $('pbOk').addEventListener('click', confirmPlace);
 $('pbCancel').addEventListener('click', endMode);
 
@@ -1459,7 +1613,7 @@ function openLand() {
   mode = 'land'; landPick = null;
   const n = S.owned.length;
   $('pbText').textContent = buyableChunks().length ? `點一塊相鄰的地(下一塊 ¥${landCost(n).toLocaleString()},需要 ${landNeed(n)}★)` : '已經買下所有土地了!';
-  $('pbOk').disabled = true; $('pbOk').textContent = '🗺 買下';
+  $('pbOk').disabled = true; $('pbOk').textContent = '🗺 買下'; $('pbFlip').style.display = 'none';
   $('placeBar').classList.add('on');
   cam.s = Math.max(minScale(), Math.min(cam.s, 0.8)); clampCam();
 }
@@ -1491,7 +1645,7 @@ function openPanel(sel) {
     $('pIcon').textContent = '🌿'; $('pName').textContent = d.name;
     $('pDesc').textContent = `風雅 +${d.val}。讓附近 2 格內的設施客人更滿意。`;
     $('pStat').textContent = '';
-    $('pBtn').style.display = 'none';
+    $('pBtn').style.display = 'none'; $('pFlip').style.display = '';
     $('pSell').textContent = `收起(退 ¥${Math.floor(d.cost / 2)})`;
   } else {
     const f = sel.fac, d = F(f), L = f.lv, st = stars();
@@ -1508,7 +1662,7 @@ function openPanel(sel) {
     $('pName').textContent = `${d.name} · ${'●'.repeat(L)}${'○'.repeat(3 - L)}`;
     $('pDesc').textContent = d.desc;
     $('pStat').textContent = stat.join(' · ');
-    const btn = $('pBtn'); btn.style.display = '';
+    const btn = $('pBtn'); btn.style.display = ''; $('pFlip').style.display = 'none';
     if (L >= 3) { btn.textContent = '已經是最高級'; btn.disabled = true; }
     else if (st < d.need[L]) { btn.textContent = `🔒 升級需要 ${d.need[L]}★`; btn.disabled = true; }
     else { btn.textContent = `升級 ¥${d.cost[L].toLocaleString()}`; btn.disabled = S.money < d.cost[L]; }
@@ -1518,6 +1672,8 @@ function openPanel(sel) {
   $('panel').classList.add('on');
 }
 function closePanel() { selected = null; $('panel').classList.remove('on'); }
+$('pMove').addEventListener('click', () => { if (selected) startMove(selected); });
+$('pFlip').addEventListener('click', () => { const d = selected && selected.decor; if (!d) return; d.flip = !d.flip; tone(520, 0.04, 'square', 0.05); save(); });
 $('pClose').addEventListener('click', closePanel);
 $('pBtn').addEventListener('click', () => {
   const f = selected && selected.fac; if (!f) return;
@@ -1539,6 +1695,7 @@ $('pSell').addEventListener('click', () => {
     const f = selected.fac;
     if (guests.some(g => g.room === f.id || g.at === f.id || g.target === f.id) || staff.some(a => a.target === f.id)) { toast('有人在用,等他們離開再拆'); return; }
     if (!confirm(`確定要拆掉${F(f).name}嗎?`)) return;
+    releaseStaff(f.id);
     S.facs = S.facs.filter(x => x !== f);
     S.money += Math.floor(F(f).cost.slice(0, f.lv).reduce((a, b) => a + b, 0) / 2);
   }
@@ -1608,8 +1765,25 @@ cv.addEventListener('pointerdown', e => {
   if (ptrs.size === 2) {
     const [a, b] = [...ptrs.values()];
     pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), s: cam.s }; drag = null;
-  } else drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y, moved: false };
+    clearTimeout(holdTimer);
+  } else {
+    drag = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y, moved: false };
+    const [wx, wy] = worldAt(e);
+    if (mode === 'place' && place && onGhost(wx, wy)) grabGhost(wx, wy);
+    else if (mode === 'normal' && !inSummary) {
+      // 長按 0.45 秒:直接拿起來搬
+      const o = occ[Math.floor(wy / T)] && occ[Math.floor(wy / T)][Math.floor(wx / T)];
+      clearTimeout(holdTimer);
+      if (o && (o.fac || o.decor)) holdTimer = setTimeout(() => {
+        if (!drag || drag.moved || ptrs.size !== 1) return;
+        if (startMove(o.fac ? { fac: o.fac } : { decor: o.decor })) { grabGhost(wx, wy); drag.moved = true; tone(440, 0.06, 'triangle', 0.12); navigator.vibrate && navigator.vibrate(20); }
+      }, 450);
+    }
+  }
 });
+let holdTimer = 0;
+const onGhost = (wx, wy) => wx >= (place.x - 0.5) * T && wx <= (place.x + place.w + 0.5) * T && wy >= (place.y - 0.5) * T && wy <= (place.y + place.h + 0.5) * T;
+function grabGhost(wx, wy) { drag.ghost = true; drag.gx = wx / T - place.x; drag.gy = wy / T - place.y; }
 cv.addEventListener('pointermove', e => {
   if (!ptrs.has(e.pointerId)) {
     // 電腦滑鼠:擺放時跟著游標
@@ -1626,14 +1800,22 @@ cv.addEventListener('pointermove', e => {
   }
   if (!drag) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-  if (Math.hypot(dx, dy) > 8) drag.moved = true;
+  if (Math.hypot(dx, dy) > 8) { drag.moved = true; clearTimeout(holdTimer); }
+  if (drag.ghost) {
+    if (!place) { drag.ghost = false; return; }
+    const [wx, wy] = worldAt(e);
+    const nx = Math.round(wx / T - drag.gx), ny = Math.round(wy / T - drag.gy);
+    if (nx !== place.x || ny !== place.y) { place.x = nx; place.y = ny; updatePlace(); tone(500, 0.02, 'square', 0.03); }
+    return;
+  }
   if (drag.moved) { cam.x = drag.cx - dx / cam.s; cam.y = drag.cy - dy / cam.s; clampCam(); }
 });
 const endPtr = e => {
   ptrs.delete(e.pointerId);
   if (pinch) { if (ptrs.size < 2) pinch = null; drag = null; return; }
+  clearTimeout(holdTimer);
   if (!drag) return;
-  const tap = !drag.moved; drag = null;
+  const tap = !drag.moved && !drag.ghost; drag = null;
   if (tap && !inSummary && e.type === 'pointerup') { const [wx, wy] = worldAt(e); tapWorld(wx, wy); }
 };
 cv.addEventListener('pointerup', endPtr);
@@ -1650,7 +1832,7 @@ function tapWorld(wx, wy) {
   if (mode === 'land') { pickLand(wx, wy); return; }
   const all = [...guests.filter(visible), ...staff].sort((a, b) => b.y - a.y);
   const g = all.find(g => Math.abs(wx - g.x) < 13 && wy < g.y + 2 && wy > g.y - 46);
-  if (g) { if (g.type) showGuest(g); else bubble(g, g.state === 'cleaning' ? '打掃中 🧹' : '待命中', 2); tone(700, 0.05, 'sine', 0.1); return; }
+  if (g) { if (g.type) showGuest(g); else bubble(g, `${g.c.name} ${STAFF_ROLES[g.c.role].icon}Lv${g.c.lv}`, 2); tone(700, 0.05, 'sine', 0.1); return; }
   const tx = Math.floor(wx / T), ty = Math.floor(wy / T);
   const o = occ[ty] && occ[ty][tx];
   if (o && o.fac) { openPanel({ fac: o.fac }); tone(600, 0.05, 'sine', 0.1); return; }
@@ -1693,6 +1875,8 @@ async function start(fresh) {
   S.ads = S.ads || {}; S.research = S.research || []; S.combos = S.combos || [];
   for (const [k, v] of Object.entries(extraFields())) if (S[k] == null) S[k] = v;
   S.stats.wishes = S.stats.wishes || 0;
+  if (!S.crew) { S.crew = []; for (let i = 0; i < (S.staff || 1); i++) S.crew.push(newCrew('clean', S.crew)); delete S.staff; }
+  for (const d of S.decor) d.flip = !!d.flip;
   guests = []; staff = []; fx = []; parts = []; deskQueue = [];
   for (const f of S.facs) f.occ = [];
   show('gameScreen');
@@ -1736,6 +1920,8 @@ if (import.meta.env.DEV) window.ON = {
   advance(sec, st = 0.05) { for (let s = 0; s < sec && !inSummary && !inChoice; s += st) step(st * speed); $('clock').textContent = clockText(); draw(performance.now()); },
   place(kind, type, x, y) { if (kind === 'fac') startPlaceFac(type); else startPlaceDecor(type); place.x = x; place.y = y; updatePlace(); const r = place.reason; if (!r) confirmPlace(); else endMode(); return r; },
   buy(cx, cy) { mode = 'land'; landPick = { cx, cy, k: `${cx},${cy}` }; buyLand(); },
+  train: doTrain, move: sel => startMove(sel), confirm: confirmPlace, place_: () => place,
+  toScreen(tx, ty) { const r = cv.getBoundingClientRect(); return [r.left + (tx * T - cam.x) * cam.s, r.top + (ty * T - cam.y) * cam.s]; },
   money(n) { S.money += n; hud(); }, rep(n) { S.rep += n; hud(); }, ideas(n) { S.ideas += n; hud(); }, research: doResearch, hire: doHire, ad: doAd,
   upgrade(id) { selected = { fac: facById(id) }; $('pBtn').click(); closePanel(); },
   inSummary: () => inSummary, inChoice: () => inChoice, next: () => $('sNext').click(), showChoice: id => showChoice(CHOICES.find(c => c.id === id)), checkAch,
