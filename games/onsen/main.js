@@ -102,7 +102,7 @@ function guestWho(n) { const k = 'g' + n; if (!whoCache.has(k)) whoCache.set(k, 
 function staffWho(c) { const k = 's' + c.id + c.role; if (!whoCache.has(k)) whoCache.set(k, { look: staffLook(c), lz: c.char || 14 }); return whoCache.get(k); }
 const OKAMI_WHO = { look: OKAMI, lz: 13 };
 /** 跟人物身高有關的數字(對話泡泡、頭上的職業圖示、點人的範圍) */
-const charH = () => isLZ() ? { bub: 66, soak: 50, lie: 30, icon: 64, hit: 46, deskDy: -0.35 * T } : { bub: 34, soak: 24, lie: 22, icon: 38, hit: 32, deskDy: 0 };
+const charH = () => isLZ() ? { bub: 66, soak: 50, lie: 30, icon: 64, hit: 46, deskDy: -0.35 * T } : { bub: 31, soak: 24, lie: 22, icon: 35, hit: 30, deskDy: 0 };
 const sheetOf = look => toCanvas(makeCharacter(look));
 
 // ---------- 狀態 ----------
@@ -1423,9 +1423,9 @@ function drawChar(who, x, y, dir, frame, moving, soak) {
   const dx = Math.round(x - FW / 2), dy = Math.round(y - 30);
   if (soak) {
     // 泡在水裡:只露出頭跟肩膀,整個人往下沉
-    const h = 20;
-    ctx.drawImage(sh, sx, sy, FW, h, dx, dy + 9, FW, h);
-    ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.fillRect(dx + 3, dy + 8 + h, FW - 6, 1);
+    const h = 23;                                     // 頭在 y 4~20、肩膀 21(character.js HEAD_DROP = 3)
+    ctx.drawImage(sh, sx, sy, FW, h, dx, dy + 6, FW, h);
+    ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.fillRect(dx + 3, dy + 5 + h, FW - 6, 1);
     return;
   }
   ctx.drawImage(sh, sx, sy, FW, FH, dx, dy, FW, FH);     // 影子已經畫在 sheet 裡
@@ -1460,7 +1460,7 @@ function drawLying(who, x, y) {
     ctx.fillStyle = '#c8eee4'; ctx.fillRect(cx, cy - 10, 2, 17);
     return;
   }
-  ctx.drawImage(sheetOf(who.look), 0, 0, FW, 28, -FW / 2, -14, FW, 28);      // 轉 -90°:頭(圖的上方)朝左
+  ctx.drawImage(sheetOf(who.look), 0, 3, FW, 28, -FW / 2, -14, FW, 28);      // 轉 -90°:頭(圖的上方)朝左;頭從第 3 列開始
   ctx.restore();
   ctx.fillStyle = '#2b1f2e'; ctx.fillRect(cx + 1, cy - 9, 15, 18);
   ctx.fillStyle = '#7fbfb0'; ctx.fillRect(cx + 2, cy - 8, 13, 16);
@@ -1480,7 +1480,7 @@ function drawSleepers(f) {
       // LimeZu:頭在那格的第 18~44 列
       const r = LZ.R['char' + who.lz];
       ctx.drawImage(LZ.atlas, r[0] + 18 * 32, r[1] + 18, 32, 24, px - 16, py - 20, 32, 24);
-    } else ctx.drawImage(sheetOf(who.look), 0, 0, FW, 19, px - FW / 2, py - 15, FW, 19);
+    } else ctx.drawImage(sheetOf(who.look), 0, 3, FW, 19, px - FW / 2, py - 15, FW, 19);    // 頭在第 3~22 列
     ctx.fillStyle = FUTON_COLOR[f.lv - 1]; ctx.fillRect(px - 12, py + 1, 24, 17);   // 一路接到下面的被子   // 被子蓋到下巴(頭的圖 16 列以下是脖子)
     ctx.fillStyle = FUTON_HI[f.lv - 1]; ctx.fillRect(px - 12, py + 1, 24, 2);        // 被子反摺的亮邊
     ctx.fillStyle = '#2b1f2e'; ctx.fillRect(px - 12, py, 24, 1);
