@@ -590,6 +590,6 @@ if (import.meta.env.DEV) window.PB = {
   get state() { return { score, balls, launching, multiplier, ball, running, table: table.id }; },
   TABLES, flip, startTable, releasePlunger, loadTable,
   set ball(b) { ball = b; },
-  step, physics, endGame, allBest, isUnlocked,
+  step, physics, endGame, allBest, isUnlocked, draw,
   hold: (side, on) => { flip[side].pressed = on; },
 };

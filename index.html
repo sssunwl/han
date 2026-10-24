@@ -154,8 +154,10 @@
     display:grid; place-items:center; font-size:58px;
     border:4px solid #0b0618; box-shadow:inset 0 0 26px rgba(0,0,0,.7), 0 0 0 2px #3b2a66;
   }
-  .cab .screen span { animation:attract 2.4s ease-in-out infinite; filter:drop-shadow(0 3px 0 rgba(0,0,0,.35)); }
-  @keyframes attract { 0%,100% { transform:translateY(0) scale(1); } 50% { transform:translateY(-6px) scale(1.06); } }
+  /* 螢幕裡是遊戲的真實畫面(tools 拍的小圖),慢慢推近像待機畫面 */
+  .cab .screen { background:#000; }
+  .cab .screen img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; animation:attract 9s ease-in-out infinite alternate; }
+  @keyframes attract { from { transform:scale(1); } to { transform:scale(1.12) translate(-3%, 2%); } }
   .cab .screen::after {
     content:""; position:absolute; inset:0; pointer-events:none;
     background:repeating-linear-gradient(0deg, rgba(0,0,0,.2) 0 2px, transparent 2px 4px),
@@ -240,37 +242,37 @@
         <a class="cab" href="games/onsen/" style="--c:#ff7a3d">
           <div class="top">溫泉旅館</div>
           <span class="tag">NEW</span>
-          <div class="screen" style="background:linear-gradient(160deg,#3d6b4f,#7fd1c2)"><span class="hs">TYCOON</span><span>♨️</span></div>
+          <div class="screen"><span class="hs">TYCOON</span><img src="lobby/onsen.png" alt="" loading="lazy"></div>
           <div class="panel"><div class="stick"></div><div class="desc">當旅館老闆,擴建、擺設、研究,目標全國第一!</div><div class="btns"><i></i><i></i><i></i></div></div>
           <div class="coin"><span>INSERT COIN</span></div>
         </a>
         <a class="cab" href="games/kidcraft/" style="--c:#4fd16b">
           <div class="top">方塊世界</div>
-          <div class="screen" style="background:linear-gradient(160deg,#9fd8f5,#c8e6a0)"><span class="hs">BUILD</span><span>🧱</span></div>
+          <div class="screen"><span class="hs">BUILD</span><img src="lobby/kidcraft.png" alt="" loading="lazy"></div>
           <div class="panel"><div class="stick"></div><div class="desc">挖方塊、蓋房子,跟著任務走就會玩了。</div><div class="btns"><i></i><i></i><i></i></div></div>
           <div class="coin"><span>INSERT COIN</span></div>
         </a>
         <a class="cab" href="games/pinball/" style="--c:#3ff0ff">
           <div class="top">彈珠台</div>
-          <div class="screen" style="background:linear-gradient(160deg,#1b2350,#5de3ff)"><span class="hs">HI-SCORE</span><span>🎱</span></div>
+          <div class="screen"><span class="hs">HI-SCORE</span><img src="lobby/pinball.png" alt="" loading="lazy"></div>
           <div class="panel"><div class="stick"></div><div class="desc">三台機台,打到過關分數就解鎖下一台。</div><div class="btns"><i></i><i></i><i></i></div></div>
           <div class="coin"><span>INSERT COIN</span></div>
         </a>
         <a class="cab" href="games/burger/" style="--c:#ffc43d">
           <div class="top">疊漢堡</div>
-          <div class="screen" style="background:linear-gradient(160deg,#d9f0ff,#ffc95c)"><span class="hs">HI-SCORE</span><span>🍔</span></div>
+          <div class="screen"><span class="hs">HI-SCORE</span><img src="lobby/burger.png" alt="" loading="lazy"></div>
           <div class="panel"><div class="stick"></div><div class="desc">食材左右跑,看準了點一下,看誰疊最高!</div><div class="btns"><i></i><i></i><i></i></div></div>
           <div class="coin"><span>INSERT COIN</span></div>
         </a>
         <a class="cab" href="games/takoyaki/" style="--c:#ff7aa8">
           <div class="top">章魚燒</div>
-          <div class="screen" style="background:linear-gradient(160deg,#ffd9a8,#ff9a5c)"><span class="hs">COOK</span><span>🐙</span></div>
+          <div class="screen"><span class="hs">COOK</span><img src="lobby/takoyaki.png" alt="" loading="lazy"></div>
           <div class="panel"><div class="stick"></div><div class="desc">看準時機翻面,做滿一盤再淋醬汁。</div><div class="btns"><i></i><i></i><i></i></div></div>
           <div class="coin"><span>INSERT COIN</span></div>
         </a>
         <a class="cab" href="games/pizza/" style="--c:#ff4f4f">
           <div class="top">畫 Pizza</div>
-          <div class="screen" style="background:linear-gradient(160deg,#ffe6c4,#f26a4f)"><span class="hs">CREATE</span><span>🍕</span></div>
+          <div class="screen"><span class="hs">CREATE</span><img src="lobby/pizza.png" alt="" loading="lazy"></div>
           <div class="panel"><div class="stick"></div><div class="desc">塗醬、撒起司、放配料,送進烤箱。</div><div class="btns"><i></i><i></i><i></i></div></div>
           <div class="coin"><span>INSERT COIN</span></div>
         </a>

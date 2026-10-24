@@ -822,7 +822,7 @@ const savedPos = localStorage.getItem(SAVE_KEY + '-pos');
 if (savedPos) { try { camera.position.fromArray(JSON.parse(savedPos)); } catch (e) { } }
 
 if (import.meta.env.DEV) window.KC = {
-  camera, scene, THREE, world, placed, idx, getBlock, setBlock, heightAt, respawn, useTool, step,
+  camera, scene, THREE, renderer, world, placed, idx, getBlock, setBlock, heightAt, respawn, useTool, step,
   placeBlock, digBlock,
   QUESTS, stats, flags, insideSealedRoom, hasRoofOverhead,
   IS_TOUCH, touchMove, active, get touchJump() { return touchJump; },
