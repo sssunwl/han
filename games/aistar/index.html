@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#1b1640">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AI 明星">
+<link rel="manifest" href="/han/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/han/icon-192.png">
+<title>AI 明星養成</title>
+<link rel="stylesheet" href="../../shared/food.css">
+<style>
+  /* AI 媒體公司:深紫夜空 + 霓虹粉/青,卡片像手機 App */
+  :root { --accent:#ff5ec4; --accent-ink:#fff; --bg:#1b1640; --card:#fffaf7;
+          --pn:#2a2260; --pn2:#211a4e; --edge:#6fe0ff; --gold:#ffd25a; --pink:#ff5ec4; --cyan:#6fe0ff; --ink2:#efeaff; --dim2:#b7acd9; }
+  .start { background:radial-gradient(120% 80% at 50% 0%, #4a2f8a 0%, #1b1640 70%); }
+  .start .card { background:#fffaf7; }
+  .start h1 { background:linear-gradient(90deg,#ff5ec4,#7a5cff,#2fb8e6); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .startextra { font-size:13px; color:var(--dim); margin-top:10px; line-height:1.7; }
+  #nameRow { display:flex; gap:8px; margin:0 0 10px; align-items:center; justify-content:center; font-size:14px; color:var(--dim); }
+  #nameRow input { font:inherit; font-size:15px; padding:7px 10px; border-radius:10px; border:2px solid #eadcf5; width:160px; text-align:center; }
+
+  #gameScreen { flex-direction:column; background:#120e2c; color:var(--ink2); }
+  .bar {
+    display:flex; align-items:center; gap:6px; flex:none; flex-wrap:wrap; position:relative; z-index:3;
+    padding:calc(5px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right)) 5px calc(8px + env(safe-area-inset-left));
+    background:linear-gradient(180deg,#2a2260,#1d1748); border-bottom:2px solid #3b3180;
+  }
+  .bar .icon { width:36px; height:36px; border-radius:10px; border:2px solid #4b3fa0; background:#2f2770; color:#fff; font-size:15px; cursor:pointer; flex:none; }
+  .chip { background:#241d58; border:1px solid #4b3fa0; border-radius:10px; padding:3px 8px; font-size:12px; line-height:1.25; white-space:nowrap; }
+  .chip b { font-size:14px; color:#fff; font-variant-numeric:tabular-nums; }
+  #coName { flex:1; min-width:0; font-size:12px; color:var(--dim2); line-height:1.25; overflow:hidden; }
+  #coName b { display:block; font-size:15px; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #saveDot { position:absolute; right:10px; bottom:-20px; font-size:11px; color:#9df0c8; opacity:0; transition:opacity .3s; pointer-events:none; }
+  #saveDot.on { opacity:1; } #saveDot.bad { color:#ff8f8f; }
+
+  .main { flex:1; min-height:0; display:flex; flex-direction:column; }
+  .left { flex:none; display:flex; flex-direction:column; }
+  .stage { position:relative; height:min(36vh, 300px); min-height:170px; overflow:hidden; background:#0d0a22; }
+  @supports (height:1dvh) { .stage { height:min(36dvh, 300px); } }
+  #cv { position:absolute; inset:0; width:100%; height:100%; display:block; z-index:0; touch-action:manipulation; image-rendering:pixelated; }
+  #bubbles { position:absolute; inset:0; pointer-events:none; z-index:1; overflow:hidden; }
+  .bub { position:absolute; transform:translate(-50%,-100%); width:max-content; max-width:150px; padding:4px 8px; border-radius:10px; font-size:11px; line-height:1.3;
+         background:#fff; color:#2b1f3e; border:2px solid var(--c,#ff5ec4); box-shadow:0 2px 0 rgba(0,0,0,.25); animation:pop .25s ease-out; text-align:left; }
+  .bub::after { content:''; position:absolute; left:50%; bottom:-7px; margin-left:-5px; border:5px solid transparent; border-top-color:var(--c,#ff5ec4); }
+  .bub b { color:var(--c,#ff5ec4); }
+  @keyframes pop { from { transform:translate(-50%,-80%) scale(.6); opacity:0; } to { transform:translate(-50%,-100%) scale(1); opacity:1; } }
+  .trend { flex:none; display:flex; gap:6px; align-items:center; padding:5px 10px; font-size:12px; background:#1d1748; border-top:1px solid #3b3180; overflow-x:auto; white-space:nowrap; }
+  .trend .hot { color:#ffb36b; } .trend .nx { color:var(--dim2); margin-left:auto; padding-left:8px; }
+  .goal { flex:none; padding:6px 10px; font-size:12px; background:#17123a; color:var(--dim2); display:flex; gap:8px; align-items:center; }
+  .goal b { color:var(--gold); }
+  .goal .gbar { flex:1; height:6px; border-radius:3px; background:#2f2770; overflow:hidden; min-width:50px; }
+  .goal .gbar i { display:block; height:100%; background:linear-gradient(90deg,var(--pink),var(--gold)); }
+
+  .right { flex:1; min-height:0; display:flex; flex-direction:column; }
+  .tabs { flex:none; display:flex; background:#1d1748; border-bottom:2px solid #3b3180; }
+  .tabs button { flex:1; font:inherit; font-size:13px; padding:8px 2px 7px; background:none; border:none; color:var(--dim2); cursor:pointer; position:relative; border-bottom:3px solid transparent; }
+  .tabs button.on { color:#fff; border-bottom-color:var(--pink); font-weight:bold; }
+  .tabs .badge { position:absolute; top:2px; right:calc(50% - 30px); background:var(--pink); color:#fff; border-radius:9px; font-size:10px; padding:0 5px; line-height:16px; }
+  .panel { flex:1; min-height:0; overflow-y:auto; touch-action:pan-y; padding:10px 10px 14px; -webkit-overflow-scrolling:touch; }
+  .next { flex:none; padding:8px calc(10px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left)); background:#1d1748; border-top:2px solid #3b3180; }
+  .next .btn { width:100%; font-size:18px; padding:12px; background:linear-gradient(90deg,#ff5ec4,#7a5cff); }
+  .next .btn.wait { background:#4b3fa0; }
+
+  /* 卡片 */
+  .card2 { background:#fffaf7; color:#2b1f3e; border-radius:16px; padding:10px 12px; margin-bottom:10px; box-shadow:0 3px 0 rgba(0,0,0,.25); }
+  .card2.run { background:#ece8ff; }
+  .card2 h3 { font-size:16px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .card2 .meta { font-size:12px; color:#7a6d92; margin:3px 0 6px; line-height:1.6; }
+  .tag { display:inline-block; font-size:11px; padding:1px 6px; border-radius:8px; background:#f1ecff; color:#5b4a8a; font-weight:normal; }
+  .tag.hot { background:#ffe7d1; color:#c25a00; } .tag.topic { background:#e2f7ff; color:#1678a8; } .tag.big { background:#fff3c4; color:#9a6a00; }
+  .tag.self { background:#e5ffe9; color:#2a8a3c; } .tag.final { background:linear-gradient(90deg,#ffd25a,#ff8fb1); color:#5a2a00; }
+  .rew { font-size:13px; font-weight:bold; color:#2b1f3e; } .rew span { margin-right:10px; }
+  .h4 { font-size:12px; color:#9a8bb5; margin:8px 0 4px; }
+  .bid { display:flex; gap:8px; align-items:flex-start; padding:6px 0; border-top:1px dashed #e6def5; }
+  .bid:first-of-type { border-top:none; }
+  .pt { width:36px; height:48px; flex:none; image-rendering:pixelated; border-radius:8px; background:var(--g,#f1ecff); object-fit:contain; object-position:bottom; }
+  .bid .say { flex:1; min-width:0; font-size:13px; line-height:1.45; }
+  .bid .say b { color:var(--c); }
+  .bid .say .why { font-size:11px; color:#9a8bb5; }
+  .bid .act { display:flex; flex-direction:column; align-items:flex-end; gap:3px; flex:none; }
+  .gr { display:inline-block; min-width:22px; text-align:center; font-weight:bold; border-radius:6px; padding:0 4px; font-size:12px; color:#2b1f3e; }
+  .sbtn { font:inherit; font-size:13px; font-weight:bold; border:none; border-radius:10px; padding:6px 10px; background:var(--pink); color:#fff; cursor:pointer; touch-action:manipulation; white-space:nowrap; }
+  .sbtn.ghost { background:#efe9ff; color:#4b3fa0; }
+  .sbtn:disabled { opacity:.45; }
+  .sbtn:active { transform:translateY(1px); }
+  .slots { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+  .slot { display:flex; align-items:center; gap:4px; background:#f5f1ff; border-radius:10px; padding:3px 8px 3px 4px; font-size:12px; }
+  .slot .pt { width:24px; height:32px; }
+  .yield { font-size:12px; color:#7a6d92; margin-top:4px; }
+  .muted { color:#9a8bb5; font-size:12px; }
+  .sec { font-size:12px; letter-spacing:2px; color:var(--dim2); margin:4px 2px 8px; }
+
+  .star { display:flex; gap:10px; }
+  .star .big { width:54px; height:72px; }
+  .star .body { flex:1; min-width:0; }
+  .star .nm { font-size:16px; font-weight:bold; }
+  .sk { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; margin:4px 0; font-size:12px; }
+  .sk div { background:#f5f1ff; border-radius:6px; padding:2px 4px; text-align:center; }
+  .sk div.sp { background:#ffe3f5; font-weight:bold; }
+  .bars { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; font-size:11px; color:#7a6d92; }
+  .bars .b { height:6px; border-radius:3px; background:#eee8fa; overflow:hidden; margin-top:2px; }
+  .bars .b i { display:block; height:100%; }
+  .wish { font-size:12px; margin-top:5px; color:#5b4a8a; }
+  .rels { font-size:12px; margin-top:3px; color:#5b4a8a; }
+  .plans { display:flex; gap:4px; flex-wrap:wrap; margin-top:6px; }
+  .plans button { font:inherit; font-size:12px; border:2px solid #e6def5; background:#fff; border-radius:9px; padding:4px 6px; cursor:pointer; touch-action:manipulation; }
+  .plans button.on { border-color:var(--pink); background:#ffe9f7; font-weight:bold; }
+  .acts { display:flex; gap:5px; flex-wrap:wrap; margin-top:6px; }
+
+  .feed { list-style:none; }
+  .feed li { display:flex; gap:8px; align-items:flex-start; padding:6px 0; border-bottom:1px solid #2c245f; font-size:13px; line-height:1.45; }
+  .feed .pt { width:24px; height:32px; background:#2a2260; }
+  .feed .wk { font-size:11px; color:var(--dim2); }
+  .feed .nm { font-weight:bold; }
+  .feed li.sys, .feed li.event, .feed li.goal { color:#ffd25a; }
+  .feed li.good .tx { color:#9df0c8; } .feed li.sad .tx, .feed li.lose .tx { color:#ffb3c6; }
+
+  .rank { list-style:none; } .rank li { display:flex; gap:8px; padding:5px 4px; font-size:14px; border-radius:8px; } .rank li.me { background:#ffe9f7; font-weight:bold; }
+  .rank .f { margin-left:auto; font-variant-numeric:tabular-nums; }
+  .lvbox { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .facs { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:6px; }
+  .facs > div { background:#f5f1ff; border-radius:10px; padding:6px; text-align:center; font-size:12px; }
+  .facs .ic { font-size:22px; }
+  .trophies { font-size:22px; letter-spacing:2px; }
+
+  /* 彈出視窗 */
+  .modal { position:fixed; inset:0; z-index:10; display:none; align-items:center; justify-content:center; padding:14px; background:rgba(8,5,25,.72); }
+  .modal.on { display:flex; }
+  .modal .card { max-height:100%; overflow-y:auto; touch-action:pan-y; text-align:left; padding:20px 18px 16px; }
+  .modal h2 { font-size:20px; margin-bottom:6px; text-align:center; }
+  .modal .txt { font-size:15px; line-height:1.7; color:#3a2c4e; margin:6px 0 12px; }
+  .choice { display:block; width:100%; text-align:left; font:inherit; font-size:15px; margin-top:8px; padding:11px 14px; border-radius:14px; border:2px solid #eadcf5; background:#fff; cursor:pointer; color:#2b1f3e; }
+  .choice:active { background:#ffe9f7; }
+  .choice small { color:#9a8bb5; }
+  .rep { list-style:none; margin:6px 0 10px; } .rep li { font-size:14px; padding:5px 0; border-bottom:1px dashed #eadcf5; line-height:1.5; }
+  .rep li.big { font-weight:bold; }
+  .rep .gr { margin-right:4px; }
+  .sum { display:flex; gap:10px; justify-content:center; font-size:15px; font-weight:bold; margin:6px 0 4px; }
+  .sum span { background:#f5f1ff; border-radius:10px; padding:5px 10px; }
+  #endCv { width:100%; image-rendering:pixelated; border-radius:14px; background:#120e2c; display:block; margin:6px 0; }
+  .eline { display:flex; gap:8px; align-items:center; font-size:13px; padding:3px 0; }
+  .eline .pt { width:24px; height:32px; }
+  #codeBox textarea { width:100%; height:120px; font:12px ui-monospace,monospace; border-radius:10px; border:2px solid #e3d3bd; padding:8px; word-break:break-all; }
+  #codeMsg { font-size:13px; min-height:18px; margin-top:6px; }
+  .how2 { font-size:14px; line-height:1.8; color:#3a2c4e; padding-left:20px; }
+  #toast { position:fixed; left:50%; top:calc(60px + env(safe-area-inset-top)); transform:translate(-50%,-8px); z-index:20; opacity:0; pointer-events:none;
+           background:#2b1f3e; color:#fff; border:2px solid var(--pink); border-radius:12px; padding:7px 14px; font-size:13px; max-width:88%; text-align:center; transition:opacity .25s, transform .25s; }
+  #toast.on { opacity:1; transform:translate(-50%,0); }
+
+  /* 電腦:左邊攝影棚、右邊分頁 */
+  @media (min-width:860px) {
+    .main { flex-direction:row; }
+    .left { flex:1.15; min-width:0; }
+    .stage { flex:1; height:auto; }
+    .right { flex:1; max-width:520px; border-left:2px solid #3b3180; }
+  }
+  /* 手機橫放(矮):攝影棚放左邊 */
+  @media (orientation:landscape) and (max-height:540px) {
+    .main { flex-direction:row; }
+    .left { flex:1; min-width:0; }
+    .stage { flex:1; height:auto; min-height:0; }
+    .right { flex:1; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="screen start on" id="startScreen">
+    <div class="card">
+      <div class="big">🌟</div>
+      <h1>AI 明星養成</h1>
+      <div class="who" id="who"></div>
+      <p class="how">
+        你開了一間 <b>AI 時代的媒體公司</b>,旗下是一群 AI 明星。<br>
+        每個人都有<b>自己的個性</b>,會<b>搶角色、搶活動、搶劇本</b>!<br>
+        你決定給誰 —— 沒選上的人會吃醋、不服輸、更努力,甚至想跳槽。<br>
+        <span style="font-size:13px">短影音、AI 短劇、直播、虛擬演唱會……目標是<b>星光巨蛋</b>!</span>
+      </p>
+      <div id="nameRow">公司名稱 <input id="coInput" maxlength="12" value="星光 AI 娛樂"></div>
+      <button class="btn wide" id="startBtn">開一間公司!</button>
+      <div class="btnrow"><button class="btn ghost" id="newBtn" style="display:none">重新開一間</button></div>
+      <div class="btnrow"><button class="btn ghost" id="backupBtn" style="display:none">📦 備份存檔碼</button><button class="btn ghost" id="restoreBtn">📥 輸入存檔碼</button></div>
+      <div class="startextra" id="trophyNote"></div>
+      <a class="back-link" href="../../">← 回遊戲間換人</a>
+      <p class="startextra" style="font-size:11px">全部在這台裝置上算,不會連到任何 AI 服務。明星是用性格系統+對話模板「演」出來的。</p>
+    </div>
+  </div>
+
+  <div class="screen" id="gameScreen">
+    <div class="bar">
+      <button class="icon" id="backBtn" title="存檔並回開始畫面">✕</button>
+      <div id="coName"></div>
+      <div class="chip">💰 <b id="money">0</b></div>
+      <div class="chip">👥 <b id="fans">0</b></div>
+      <div class="chip">🏆 <b id="rankNo">-</b></div>
+      <button class="icon" id="soundBtn" title="聲音">🔊</button>
+      <button class="icon" id="helpBtn" title="怎麼玩">❓</button>
+      <span id="saveDot">💾 已存檔</span>
+    </div>
+    <div class="main">
+      <div class="left">
+        <div class="stage"><canvas id="cv"></canvas><div id="bubbles"></div></div>
+        <div class="trend" id="trend"></div>
+        <div class="goal" id="goal"></div>
+      </div>
+      <div class="right">
+        <div class="tabs" id="tabs">
+          <button data-tab="ops" class="on">📋 機會<span class="badge" id="bOps"></span></button>
+          <button data-tab="stars">⭐ 明星</button>
+          <button data-tab="feed">💬 訊息<span class="badge" id="bFeed"></span></button>
+          <button data-tab="co">🏢 公司<span class="badge" id="bCo"></span></button>
+        </div>
+        <div class="panel" id="panel"></div>
+        <div class="next"><button class="btn" id="nextBtn">▶ 下一週</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="evBox"><div class="card"><h2 id="evTitle"></h2><div id="evWho"></div><p class="txt" id="evText"></p><div id="evChoices"></div><p class="muted" id="evMsg"></p></div></div>
+  <div class="modal" id="repBox"><div class="card"><h2 id="repTitle"></h2><div class="sum" id="repSum"></div><ul class="rep" id="repList"></ul><button class="btn wide" id="repGo">下一週 ▶</button></div></div>
+  <div class="modal" id="pickBox"><div class="card"><h2 id="pickTitle"></h2><p class="muted" id="pickHow"></p><div id="pickList"></div><button class="btn ghost wide" id="pickClose" style="margin-top:10px">取消</button></div></div>
+  <div class="modal" id="starBox"><div class="card"><div id="starBody"></div><button class="btn ghost wide" id="starClose" style="margin-top:10px">關閉</button></div></div>
+  <div class="modal" id="endBox"><div class="card"><h2 id="endTitle"></h2><canvas id="endCv" width="320" height="150"></canvas><p class="txt" id="endText"></p><div id="endLines"></div><p class="muted" id="endStats"></p>
+    <div class="btnrow"><button class="btn" id="endGo">繼續經營</button><button class="btn ghost" id="endNg">🌱 第二季</button></div></div></div>
+  <div class="modal" id="ngBox"><div class="card"><h2>🌱 開始第二季</h2><p class="txt">新的明星、新的性格、新的趨勢,別家公司也會變強。<br>選一位明星留下來當<b>前輩</b>:他不搶工作,但會教後輩,大家練習效果 +15%。獎盃牆會跟著你。</p><div id="ngList"></div><button class="btn ghost wide" id="ngClose" style="margin-top:10px">還不要</button></div></div>
+  <div class="modal" id="helpBox"><div class="card"><h2>❓ 怎麼玩</h2>
+    <ol class="how2">
+      <li>每一回合是<b>一週</b>。📋 <b>機會</b>裡有新的角色、活動、劇本。</li>
+      <li>想要的明星會<b>自己跑來搶</b>,說出理由。看「預估評價」選一位(按「選他」)。</li>
+      <li>沒選上的人會照個性反應:有人不服輸去練習,有人吃醋、鬧彆扭,太常被冷落還會<b>想跳槽</b>。</li>
+      <li>⭐ <b>明星</b>:沒工作的人可以排<b>練習 / 休息 / 自己直播</b>。累了一定要休息!</li>
+      <li>📈 上面的<b>趨勢</b>每週會變,接到 🔥 熱門的媒體或 # 話題,效果更好。</li>
+      <li>🏢 <b>公司</b>:升級、蓋設施、辦試鏡找新人。跟著 🎯 目標走,最後挑戰<b>星光巨蛋</b>!</li>
+      <li>都排好了就按 <b>▶ 下一週</b>。</li>
+    </ol>
+    <button class="btn wide" id="helpClose" style="margin-top:12px">知道了!</button></div></div>
+  <div class="modal" id="codeBox"><div class="card">
+      <h2 id="codeTitle">存檔碼</h2>
+      <p class="txt" id="codeHow" style="font-size:13px"></p>
+      <textarea id="codeText" spellcheck="false" autocomplete="off"></textarea>
+      <div id="codeMsg"></div>
+      <div class="btnrow"><button class="btn" id="codeGo">複製</button><button class="btn ghost" id="codeClose">關閉</button></div>
+  </div></div>
+  <div id="toast"></div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
