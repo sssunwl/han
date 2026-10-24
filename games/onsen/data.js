@@ -3,7 +3,7 @@
    數值都集中在這裡,要調平衡只改這個檔。
    ============================================================ */
 
-export const T = 32;                  // 一格 32px(LimeZu 32×32 素材)
+export const T = 32;                  // 一格 32px(pixelkit 32px 格)
 export const COLS = 32, ROWS = 24;    // 整片土地(格)
 export const CHUNK = 8;               // 一塊地 8×8 格,買地以塊為單位 → 4×3 塊
 export const DAY_SECONDS = 140;       // 1 倍速下一天幾秒(地圖大,要給客人時間走路)
@@ -13,7 +13,7 @@ export const YEAR_DAYS = 28;          // 一年 = 四季 × 7 天
 export const START_CHUNKS = ['1,2', '2,2'];       // 下方中間兩塊(x8~23, y16~23)
 export const ENTRANCE = [16, 23];                 // 大門那一格
 export const SPAWN = [16.5, 24.7];                // 客人從畫面外走進來
-export const DESK = { x: 13, y: 20, w: 3, h: 2, staff: [14.5, 20.2] };
+export const DESK = { x: 13, y: 20, w: 3, h: 2, staff: [14.5, 20.55] };
 export const QUEUE = { x: 14, y: 22, max: 8 };    // 排隊:從 (14,22) 往右排
 /** 不能蓋東西、但可以走的格子(排隊區、大門) */
 export function isReserved(x, y) {
@@ -181,11 +181,12 @@ export const staffMax = stars => 1 + stars;
 
 // 員工職業:每個人有自己的名字、職業、等級(1~5)。做事會累積經驗,經驗滿了花錢受訓就升一級
 // pow 是給畫面看的說明;實際效果寫在 main.js 的 crewLv() 那幾個地方
+// look = 制服:同一種職業固定髮色 + 衣服色(髮型每人不同),一眼看出誰是做什麼的;chars 只是舊存檔的編號
 export const STAFF_ROLES = {
-  clean: { name: '打掃', icon: '🧹', chars: [14, 15, 16], desc: '打掃退房後的房間。等級越高掃越快', pow: lv => lv > 1 ? `打掃時間 -${(lv - 1) * 12}%` : '打掃速度普通' },
-  desk: { name: '接待', icon: '🛎', chars: [17, 20], desc: '站櫃台幫客人辦入住。辦得快,客人一進門就開心', pow: lv => `辦手續變快 · 入住滿意 +${lv * 2}` },
-  cook: { name: '廚師', icon: '🍳', chars: [18], desc: '在食堂煮飯。沒有食堂的話就沒事做', pow: lv => `餐費 +${lv * 8}% · 吃飯滿意 +${lv * 2}` },
-  yumori: { name: '湯守', icon: '♨️', chars: [19, 15], desc: '照顧浴池、調水溫。所有浴池的客人更舒服', pow: lv => `泡湯滿意 +${lv * 2}` },
+  clean: { name: '打掃', icon: '🧹', look: { hairColor: '#6b4430', cloth: '#7fdc8a' }, chars: [14, 15, 16], desc: '打掃退房後的房間。等級越高掃越快', pow: lv => lv > 1 ? `打掃時間 -${(lv - 1) * 12}%` : '打掃速度普通' },
+  desk: { name: '接待', icon: '🛎', look: { hairColor: '#3a2a2a', cloth: '#ff8fb1' }, chars: [17, 20], desc: '站櫃台幫客人辦入住。辦得快,客人一進門就開心', pow: lv => `辦手續變快 · 入住滿意 +${lv * 2}` },
+  cook: { name: '廚師', icon: '🍳', look: { hairColor: '#d8573f', cloth: '#f4f1fa' }, chars: [18], desc: '在食堂煮飯。沒有食堂的話就沒事做', pow: lv => `餐費 +${lv * 8}% · 吃飯滿意 +${lv * 2}` },
+  yumori: { name: '湯守', icon: '♨️', look: { hairColor: '#e8bf5a', cloth: '#6fc3ff' }, chars: [19, 15], desc: '照顧浴池、調水溫。所有浴池的客人更舒服', pow: lv => `泡湯滿意 +${lv * 2}` },
 };
 export const ROLE_ORDER = ['clean', 'desk', 'cook', 'yumori'];
 export const STAFF_NAMES = ['小春', '阿健', '美雪', '大翔', '花子', '拓海', '優子', '阿蓮', '千夏', '小太郎', '櫻', '阿寬', '桃子', '翔太', '小雪', '阿德'];

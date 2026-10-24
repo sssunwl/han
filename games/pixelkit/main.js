@@ -1,5 +1,6 @@
 import { toCanvas } from '../../shared/pixelkit/core.js';
 import { KIT } from '../../shared/pixelkit/furniture.js';
+import { JP_KIT } from '../../shared/pixelkit/japanese.js';
 
 const $ = id => document.getElementById(id);
 const Z = 3;
@@ -14,6 +15,16 @@ for (const [name, k] of Object.entries(KIT)) {
   const wrap = document.createElement('div'); wrap.className = 'checker'; wrap.appendChild(c);
   card.append(wrap, Object.assign(document.createElement('span'), { textContent: `${name} ${b.w}×${b.h}` }));
   $('kit').appendChild(card);
+}
+// 和風組(溫泉旅館用)
+for (const [name, k] of Object.entries(JP_KIT)) {
+  const b = k.make();
+  const c = document.createElement('canvas'); c.width = b.w * Z; c.height = b.h * Z;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(toCanvas(b), 0, 0, c.width, c.height);
+  const card = document.createElement('div'); card.className = 'card';
+  const wrap = document.createElement('div'); wrap.className = 'checker'; wrap.appendChild(c);
+  card.append(wrap, Object.assign(document.createElement('span'), { textContent: `${name} ${b.w}×${b.h}` }));
+  $('kitJP').appendChild(card);
 }
 
 // ---------- 場景 ----------

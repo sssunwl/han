@@ -2,7 +2,9 @@ import '../../shared/offline.js';
 import { saveKey } from '../../shared/profile.js';
 import { readJSON, writeJSON, tone, noise, fanfare, renderWho, lockGestures, escapeHTML, audioPrefs, saveAudioPrefs } from '../../shared/kit.js';
 import { TRACKS, playMusic, stopMusic, nowPlaying } from '../../shared/music.js';
-import { buildProcSprites } from './proc.js';
+import { toCanvas } from '../../shared/pixelkit/core.js';
+import { JP_KIT } from '../../shared/pixelkit/japanese.js';
+import { makeCharacter, randomLook, FW, FH, HAIRS, SKINS } from '../../shared/pixelkit/character.js';
 import {
   T, COLS, ROWS, CHUNK, DAY_SECONDS, YEAR_DAYS, START_CHUNKS, ENTRANCE, SPAWN, DESK, QUEUE, isReserved, isDeskArea,
   landCost, landNeed, FAC, FAC_ORDER, DECOR, DECOR_ORDER, COMBOS, RESEARCH, STAFF_HIRE, staffMax,
@@ -13,7 +15,7 @@ import {
 
 /* ============================================================
    溫泉旅館 v2 —— 自由建造版
-   像素美術:LimeZu Modern Interiors(limezu.itch.io),只打包用到的格子(tools/onsen_atlas.py)
+   像素美術:全部是自己的 pixelkit(shared/pixelkit/)用程式畫的,家具在 japanese.js、人物在 character.js
 
    跟 v1 最大的不同:設施不再是固定格子,而是在自己的土地上「想蓋哪就蓋哪」;
    土地可以一塊一塊買;家具擺在走道上會讓附近設施變好,特定擺法會觸發「組合」。
@@ -33,14 +35,32 @@ lockGestures();
 renderWho($('who'), '是老闆');
 
 // ---------- 素材 ----------
-let atlas = null, R = null;
-const atlasReady = Promise.all([
-  fetch(BASE + 'onsen/atlas.json').then(r => r.json()).then(j => { R = j; }),
-  new Promise((ok, fail) => { const im = new Image(); im.onload = () => { atlas = im; ok(); }; im.onerror = fail; im.src = BASE + 'onsen/atlas.png'; }),
-]);
-const PROC = buildProcSprites();           // LimeZu 沒有的東西,程式畫(見 proc.js)
-const sprW = n => R[n] ? R[n][2] : PROC[n] ? PROC[n].width : 32;
-const sprH = n => R[n] ? R[n][3] : PROC[n] ? PROC[n].height : 32;
+// 家具、地板:pixelkit 和風組(名字跟舊版 atlas 一樣,存檔裡的擺設直接對得上)
+const SPR = {};
+for (const [n, k] of Object.entries(JP_KIT)) SPR[n] = toCanvas(k.make());
+const sprW = n => SPR[n] ? SPR[n].width : 32;
+const sprH = n => SPR[n] ? SPR[n].height : 32;
+const picCache = {};
+const sprURL = n => picCache[n] || (picCache[n] = SPR[n].toDataURL());
+
+// 人物:pixelkit 的 Q 版小人(24×32,腳踩 y=30)。只換髮型/顏色,不換衣服
+// 客人:char 是一個數字,同一個數字永遠長一樣(睡覺存檔只存數字)
+// 員工:每種職業固定髮色 + 衣服色(data.js STAFF_ROLES.look),髮型每個人不一樣,小朋友一眼分得出誰是做什麼的
+const GUEST_CLOTH = ['#ffd25a', '#b98cff', '#ff9a52', '#4a5a8a', '#e86a6a', '#5ec2b5', '#c98a55', '#ffb3c9'];   // 不跟員工制服撞色
+const looks = new Map();
+function guestLook(n) {
+  const k = 'g' + n;
+  if (!looks.has(k)) { const l = randomLook(n * 7919 + 13); l.cloth = GUEST_CLOTH[(n * 37) % GUEST_CLOTH.length]; looks.set(k, l); }
+  return looks.get(k);
+}
+const hashStr = str => [...String(str)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7);
+function staffLook(c) {
+  const k = 's' + c.id + c.role;
+  if (!looks.has(k)) { const h = hashStr(c.id); looks.set(k, { ...STAFF_ROLES[c.role].look, hair: HAIRS[h % HAIRS.length], skin: SKINS[(h >>> 4) % 4] }); }
+  return looks.get(k);
+}
+const OKAMI = { skin: SKINS[0], hair: 'bun', hairColor: '#3a2a2a', cloth: '#8a4a7a' };      // 櫃台的老闆娘
+const sheetOf = look => toCanvas(makeCharacter(look));
 
 // ---------- 狀態 ----------
 let S = null;                       // 會存檔的部分
@@ -281,7 +301,7 @@ function spotsOf(f) {
     case 'egg': return [{ x: 0.6, y: 1.95, dir: 1 }, { x: 1.4, y: 1.95, dir: 1 }, { x: 1.0, y: 1.6, dir: 1 }].slice(0, cap);
     case 'arcade': return [{ x: 0.5, y: 2.85, dir: 1 }, { x: 1.5, y: 2.85, dir: 1 }, { x: 2.5, y: 2.85, dir: 1 }, { x: 1.5, y: 2.25, dir: 1 }].slice(0, cap);
     case 'tea': return [{ x: 0.7, y: 2.3, dir: 0 }, { x: 2.3, y: 2.3, dir: 2 }, { x: 1.5, y: 2.85, dir: 1 }].slice(0, cap);
-    case 'massage': return [{ x: 1.5, y: 1.15, dir: 3, under: true }, { x: 1.5, y: 2.45, dir: 3, under: true }].slice(0, cap);
+    case 'massage': return [{ x: 1.5, y: 1.15, dir: 3, lie: true }, { x: 1.5, y: 2.45, dir: 3, lie: true }].slice(0, cap);
     case 'shrine': return [{ x: 0.6, y: 1.95, dir: 1 }, { x: 1.4, y: 1.95, dir: 1 }, { x: 1.0, y: 1.7, dir: 1 }].slice(0, cap);
     case 'dining': {
       const out = [{ x: 1, y: 1.05, dir: 3, under: true }, { x: 1, y: 3.0, dir: 1 }];
@@ -314,7 +334,7 @@ function spawnGroup(type, size, opts = {}) {
   const used = new Set(guests.map(g => g.char));
   for (let i = 0; i < size; i++) {
     let char;
-    do { char = 1 + Math.floor(Math.random() * 12); } while (used.has(char) && used.size < 12);
+    do { char = 1 + Math.floor(Math.random() * 500); } while (used.has(char));     // 數字決定長相(guestLook)
     used.add(char);
     const g = {
       id: nextGuestId++, char, type, group, size, room: null, at: null, spot: -1,
@@ -435,12 +455,12 @@ function tryEnter(g, f, then) {
   if (!isRoom(f)) f.occ[i] = g.id;
   g.at = f.id; g.spot = i;
   g.path = [[(f.x + sp.x) * T, (f.y + sp.y) * T]]; g.moving = true;
-  g.then = () => { g.dir = sp.dir; g.soak = !!sp.soak; g.under = !!sp.under; then(); };
+  g.then = () => { g.dir = sp.dir; g.soak = !!sp.soak; g.under = !!sp.under; g.lie = !!sp.lie; then(); };
 }
 function exitFac(a) {
   const f = a.at && facById(a.at);
   if (f && f.occ && f.occ[a.spot] === a.id) f.occ[a.spot] = null;
-  a.soak = false; a.under = false;
+  a.soak = false; a.under = false; a.lie = false;
   if (f && f.door) { a.x = (f.door[0] + 0.5) * T; a.y = (f.door[1] + 0.8) * T; }
   a.at = null; a.spot = -1;
 }
@@ -465,7 +485,7 @@ function finishActivity(g) {
   if (has('water') && d.pool) gain += 5;
   if (perm('source') && d.pool && f.type !== 'koi') gain += 8;
   f.uses = (f.uses || 0) + 1;
-  if (g.wish === f.type) { gain += 8; g.wish = null; S.stats.wishes++; float(g.x, g.y - 76, '願望實現!', '#9dffbf'); }
+  if (g.wish === f.type) { gain += 8; g.wish = null; S.stats.wishes++; float(g.x, g.y - 46, '願望實現!', '#9dffbf'); }
   if (has('cuisine') && f.type === 'dining') gain += 4;
   const cl = f.type === 'dining' ? cookLvAt(f.id) : 0;
   if (cl) { gain += cl * 2; for (const a of staff) if (a.state === 'post' && a.post === f.id) gainXp(a.c, 0.5); }
@@ -482,7 +502,7 @@ function finishActivity(g) {
     if (cl) fee = Math.round(fee * (1 + cl * 0.08));
     pay(g, fee);
   }
-  float(g.x, g.y - 60, '♥', '#ff7a9a');
+  float(g.x, g.y - 36, '♥', '#ff7a9a');
   exitFac(g);
   nextActivity(g);
 }
@@ -493,7 +513,7 @@ function goSleep(g) {
 function pay(g, amount) {
   if (amount <= 0) return;
   S.money += amount; today.income += amount; S.stats.earned += amount;
-  float(g.x, g.y - 64, '+¥' + amount, '#ffd84a');
+  float(g.x, g.y - 40, '+¥' + amount, '#ffd84a');
   tone(1320, 0.06, 'square', 0.05); setTimeout(() => tone(1760, 0.08, 'square', 0.05), 60);
   hud();
 }
@@ -515,8 +535,8 @@ function checkOut(g) {
   today.reviews.push({ st, text: lines[Math.floor(Math.random() * lines.length)].replace('{fav}', g.favHit ? FAC[g.favHit].name : '溫泉'), type: g.type, vip: g.vip });
   today.served++; S.stats.guests++;
   if (st === 5) S.stats.best5++;
-  float(g.x, g.y - 80, '★'.repeat(st), st >= 4 ? '#ffd84a' : '#ddd');
-  float(g.x + 20, g.y - 60, '💡+' + idea, '#bfe8ff');
+  float(g.x, g.y - 50, '★'.repeat(st), st >= 4 ? '#ffd84a' : '#ddd');
+  float(g.x + 20, g.y - 36, '💡+' + idea, '#bfe8ff');
   bubble(g, st >= 4 ? '😊' : st === 3 ? '🙂' : '😞', 2);
   // 同組最後一位退房,房間就變髒
   if (r && !guests.some(o => o !== g && o.room === r.id)) r.dirty = true;
@@ -608,7 +628,7 @@ function updateStaff(a, dt) {
       a.timer -= dt;
       if (a.timer <= 0) {
         const f = facById(a.target);
-        if (f) { f.dirty = false; float(a.x, a.y - 60, '✨', '#fff'); gainXp(a.c, 1); }
+        if (f) { f.dirty = false; float(a.x, a.y - 36, '✨', '#fff'); gainXp(a.c, 1); }
         exitFac(a); a.target = null; home();
       }
     }
@@ -618,7 +638,7 @@ function updateStaff(a, dt) {
     const spot = [0, 1].find(i => !used.includes(i));
     if (spot == null) { a.timer = 5; return; }     // 櫃台站滿了,在大廳待命
     a.state = 'toDesk'; a.spot = spot;
-    goTo(a, DESK.x - 1, DESK.y + 1, () => { a.state = 'desk'; a.x = DESK_SPOTS[spot] * T; a.y = (DESK.y + 0.2) * T; a.dir = 3; });
+    goTo(a, DESK.x - 1, DESK.y + 1, () => { a.state = 'desk'; a.x = DESK_SPOTS[spot] * T; a.y = (DESK.y + 0.55) * T; a.dir = 3; });
   } else if (role === 'cook') {
     if (a.state === 'post') { if (!facById(a.post)) { a.post = null; a.state = 'idle'; } return; }
     if (a.state !== 'idle') return;
@@ -953,9 +973,12 @@ function zoomAt(k, sx, sy) {
 new ResizeObserver(() => { if (running) resize(); }).observe(cv);
 
 function spr(name, x, y, c = ctx) {
-  const r = R[name];
-  if (!r) { if (PROC[name]) c.drawImage(PROC[name], Math.round(x), Math.round(y)); return; }
-  c.drawImage(atlas, r[0], r[1], r[2], r[3], Math.round(x), Math.round(y), r[2], r[3]);
+  if (SPR[name]) c.drawImage(SPR[name], Math.round(x), Math.round(y));
+}
+/** 只畫一張圖的其中幾列(sy 起、sh 高):食堂桌子要把後排坐墊跟桌面分開畫,客人才夾得在中間 */
+function sprRows(name, x, y, sy, sh) {
+  const im = SPR[name];
+  ctx.drawImage(im, 0, sy, im.width, sh, Math.round(x), Math.round(y) + sy, im.width, sh);
 }
 /** 擺設用:flip 就左右鏡像 */
 function sprF(name, x, y, flip) {
@@ -963,10 +986,10 @@ function sprF(name, x, y, flip) {
   ctx.save(); ctx.translate(Math.round(x) + sprW(name), Math.round(y)); ctx.scale(-1, 1); spr(name, 0, 0); ctx.restore();
 }
 function tile(c, name, x, y, w, h) {
-  const r = R[name];
+  const im = SPR[name];
   for (let yy = y; yy < y + h; yy += 64) for (let xx = x; xx < x + w; xx += 64) {
     const cw = Math.min(64, x + w - xx), ch = Math.min(64, y + h - yy);
-    c.drawImage(atlas, r[0], r[1], cw, ch, xx, yy, cw, ch);
+    c.drawImage(im, 0, 0, cw, ch, xx, yy, cw, ch);
   }
 }
 
@@ -1053,8 +1076,7 @@ function drawPool(p, ox, oy, style, now) {
     ctx.fillStyle = '#c18d58'; ctx.fillRect(x - 5, y - 5, w + 10, 4);
   } else {
     ctx.save(); roundRect(x - 9, y - 9, w + 18, h + 18, Math.min(22, h / 2)); ctx.clip();
-    const r = R.rock;
-    for (let yy = y - 9; yy < y + h + 9; yy += 64) for (let xx = x - 9; xx < x + w + 9; xx += 64) ctx.drawImage(atlas, r[0], r[1], 64, 64, xx, yy, 64, 64);
+    for (let yy = y - 9; yy < y + h + 9; yy += 64) for (let xx = x - 9; xx < x + w + 9; xx += 64) ctx.drawImage(SPR.rock, xx, yy);
     ctx.restore();
   }
   ctx.save();
@@ -1069,8 +1091,10 @@ function drawPool(p, ox, oy, style, now) {
   ctx.restore();
 }
 
-function drawFac(f, now) {
+/** layer:'back' 只畫在「桌子後面的客人」更後面的東西(食堂後排坐墊);'front' 畫其餘;不給就全畫 */
+function drawFac(f, now, layer) {
   const L = f.lv, ox = f.x * T, oy = f.y * T;
+  if (layer === 'back' && f.type !== 'dining') return;
   switch (f.type) {
     case 'room': {
       spr('futon_top', ox, oy + T); spr(['futon_blue', 'futon_gold', 'futon_purple'][L - 1], ox, oy + 2 * T);
@@ -1112,8 +1136,11 @@ function drawFac(f, now) {
       break;
     }
     case 'dining': {
-      spr(L >= 3 ? 'dining_g' : 'dining', ox, oy);
-      if (L >= 2) spr(L >= 3 ? 'dining_g' : 'dining', ox + 2 * T, oy);
+      // 桌子圖的前 22 列是後排坐墊:坐在後排的客人要夾在坐墊跟桌面之間
+      const n = L >= 3 ? 'dining_g' : 'dining';
+      const part = x => layer === 'back' ? sprRows(n, x, oy, 0, 22) : layer === 'front' ? sprRows(n, x, oy, 22, sprH(n) - 22) : spr(n, x, oy);
+      part(ox); if (L >= 2) part(ox + 2 * T);
+      if (layer === 'back') return;
       break;
     }
     case 'shop': {
@@ -1198,19 +1225,47 @@ function bubbleAt(x, y, text) {
   ctx.fillText(text, x, y - hh / 2);
 }
 
-function drawChar(char, x, y, dir, frame, moving, soak) {
-  const r = R['char' + char];
-  const f = dir * 6 + (Math.floor(frame) % 6);
-  const sx = r[0] + f * 32, sy = r[1] + (moving ? 64 : 0);
-  const dx = Math.round(x - 16), dy = Math.round(y - 60);
+// 遊戲裡的方向編號(0 右、1 上、2 左、3 下)→ character.js sheet 的列(下、左、右、上)
+const DIR_ROW = [2, 3, 1, 0];
+/** 畫一個人,(x, y) 是腳底。sheet 一列 6 格:待機 0~1、走路 2~5 */
+function drawChar(look, x, y, dir, frame, moving, soak) {
+  const sh = sheetOf(look);
+  const col = moving ? 2 + (Math.floor(frame) % 4) : Math.floor(frame / 3) % 2;
+  const sx = col * FW, sy = DIR_ROW[dir] * FH;
+  const dx = Math.round(x - FW / 2), dy = Math.round(y - 30);
   if (soak) {
-    ctx.drawImage(atlas, sx, sy, 32, 44, dx, dy + 8, 32, 44);
-    ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.fillRect(dx + 6, dy + 50, 20, 2);
+    // 泡在水裡:只露出頭跟肩膀,整個人往下沉
+    const h = 20;
+    ctx.drawImage(sh, sx, sy, FW, h, dx, dy + 9, FW, h);
+    ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.fillRect(dx + 3, dy + 8 + h, FW - 6, 1);
     return;
   }
-  ctx.fillStyle = 'rgba(0,0,0,.18)';
-  ctx.beginPath(); ctx.ellipse(x, y - 2, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.drawImage(atlas, sx, sy, 32, 64, dx, dy, 32, 64);
+  ctx.drawImage(sh, sx, sy, FW, FH, dx, dy, FW, FH);     // 影子已經畫在 sheet 裡
+}
+/** 按摩床上躺著(頭朝左),身上蓋一條毛巾 */
+function drawLying(look, x, y) {
+  const cx = Math.round(x), cy = Math.round(y - 13);
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(-Math.PI / 2);
+  ctx.drawImage(sheetOf(look), 0, 0, FW, 28, -FW / 2, -14, FW, 28);      // 轉 -90°:頭(圖的上方)朝左
+  ctx.restore();
+  ctx.fillStyle = '#2b1f2e'; ctx.fillRect(cx + 1, cy - 9, 15, 18);
+  ctx.fillStyle = '#7fbfb0'; ctx.fillRect(cx + 2, cy - 8, 13, 16);
+  ctx.fillStyle = '#9fd6c8'; ctx.fillRect(cx + 2, cy - 8, 13, 13);
+  ctx.fillStyle = '#c8eee4'; ctx.fillRect(cx + 2, cy - 8, 2, 13);
+}
+/** 和室裡睡著的客人:頭靠在枕頭上,被子蓋到下巴 */
+const FUTON_COLOR = ['#5b7fd1', '#e2a93c', '#9a6ad0'];
+function drawSleepers(f) {
+  const zs = guests.filter(g => g.room === f.id && g.state === 'sleep');
+  if (!zs.length) return;
+  const ox = f.x * T, oy = f.y * T, n = f.type === 'bigroom' ? 4 : 2;
+  zs.slice(0, n).forEach((g, i) => {
+    const px = ox + (i >> 1) * 2 * T + (i % 2 ? 46 : 18), py = oy + T + 15;      // 枕頭中心(futon_top 裡的位置)
+    const look = guestLook(g.char);
+    ctx.drawImage(sheetOf(look), 0, 0, FW, 19, px - FW / 2, py - 15, FW, 19);
+    ctx.fillStyle = FUTON_COLOR[f.lv - 1]; ctx.fillRect(px - 12, py + 3, 24, 8);
+    ctx.fillStyle = '#f4f1fa'; ctx.fillRect(px - 12, py + 3, 24, 3);                 // 被子反摺的白邊
+  });
 }
 const visible = g => !g.gone && g.state !== 'sleep';
 
@@ -1223,18 +1278,21 @@ function draw(now) {
 
   const vis = guests.filter(visible);
   for (const f of [...S.facs].sort((a, b) => a.y - b.y)) {
-    for (const g of vis) if (g.at === f.id && g.under) drawChar(g.char, g.x, g.y, g.dir, g.frame, false, false);
-    drawFac(f, now);
+    drawFac(f, now, 'back');
+    for (const g of vis) if (g.at === f.id && g.under) drawChar(guestLook(g.char), g.x, g.y, g.dir, g.frame, false, false);
+    drawFac(f, now, 'front');
+    for (const g of vis) if (g.at === f.id && g.lie) drawLying(guestLook(g.char), g.x, g.y);
+    if (isRoom(f)) drawSleepers(f);
   }
-  drawChar(13, DESK.staff[0] * T, DESK.staff[1] * T, 3, now / 250, false, false);
-  for (const a of staff) if (a.state === 'desk') drawChar(a.char, a.x, a.y, a.dir, now / 250 + 2, false, false);
+  drawChar(OKAMI, DESK.staff[0] * T, DESK.staff[1] * T, 3, now / 250, false, false);
+  for (const a of staff) if (a.state === 'desk') drawChar(staffLook(a.c), a.x, a.y, a.dir, now / 250 + 2, false, false);
   spr('counter', DESK.x * T, DESK.y * T);
 
   // 擺設、客人、員工一起按照 y 排序,才有前後遮擋
   const items = [];
   for (const d of S.decor) items.push({ y: (d.y + 1) * T, draw: () => sprF(d.type, d.x * T, (d.y + 1) * T - sprH(d.type), d.flip) });
-  for (const g of vis) if (!g.under) items.push({ y: g.y, draw: () => drawChar(g.char, g.x, g.y, g.dir, g.frame, g.moving, g.soak) });
-  for (const a of staff) if (a.state !== 'desk') items.push({ y: a.y, draw: () => drawChar(a.char, a.x, a.y, a.dir, a.frame, a.moving, false) });
+  for (const g of vis) if (!g.under && !g.lie) items.push({ y: g.y, draw: () => drawChar(guestLook(g.char), g.x, g.y, g.dir, g.frame, g.moving, g.soak) });
+  for (const a of staff) if (a.state !== 'desk') items.push({ y: a.y, draw: () => drawChar(staffLook(a.c), a.x, a.y, a.dir, a.frame, a.moving, false) });
   items.sort((a, b) => a.y - b.y).forEach(i => i.draw());
 
   for (const f of S.facs) {
@@ -1271,11 +1329,11 @@ function draw(now) {
     const r = selected.fac ? facRect(selected.fac) : { x: selected.decor.x, y: selected.decor.y, w: decorW(selected.decor.type), h: 1 };
     ctx.strokeRect(r.x * T + 1, r.y * T + 1, r.w * T - 2, r.h * T - 2);
   }
-  for (const a of [...vis, ...staff]) if (a.bubble) bubbleAt(a.x, a.y - (a.soak ? 50 : 66), a.bubble.text);
+  for (const a of [...vis, ...staff]) if (a.bubble) bubbleAt(a.x, a.y - (a.soak ? 24 : a.lie ? 22 : 34), a.bubble.text);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const a of staff) if (!a.bubble) {
     ctx.font = `${Math.round(10 * kz())}px sans-serif`; ctx.fillStyle = '#fff';
-    ctx.fillText(STAFF_ROLES[a.c.role].icon + (a.c.lv > 1 ? a.c.lv : ''), a.x, a.y - 64);
+    ctx.fillText(STAFF_ROLES[a.c.role].icon + (a.c.lv > 1 ? a.c.lv : ''), a.x, a.y - 38);
   }
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const f of fx) {
@@ -1409,9 +1467,7 @@ function openDecor() {
   openSheet('🌿 擺設(放走道上,附近 2 格的設施會變好)', DECOR_ORDER.map(id => {
     const d = DECOR[id];
     const lock = !unlocked(id) ? '需要研究' : '';
-    const r = R[id];
-    const pic = r ? `<span class="pic" style="background-image:url(${BASE}onsen/atlas.png);background-position:-${r[0]}px -${r[1]}px;width:${r[2]}px;height:${r[3]}px"></span>`
-      : `<img class="pic" src="${PROC[id].toDataURL()}" style="width:${PROC[id].width * 0.6}px">`;
+    const pic = `<img class="pic" src="${sprURL(id)}" style="width:${sprW(id)}px;height:${sprH(id)}px">`;
     return itemHTML({ act: 'decor:' + id, icon: pic, name: d.name, sub: `風雅 +${d.val}${d.plant ? ' · 植物' : ''}`, cost: '¥' + d.cost, lockText: lock, disabled: !!lock || S.money < d.cost });
   }).join(''));
 }
@@ -1424,10 +1480,21 @@ function openResearch() {
     return itemHTML({ act: 'research:' + r.id, icon: r.fac ? FAC[r.fac].icon : r.decor ? '🌿' : '📘', name: r.name, sub: what, cost: '💡' + r.cost, lockText: lock, disabled: !!lock || S.ideas < r.cost });
   }).join(''));
 }
+const faceCache = {};
+/** 員工名單的大頭照:正面待機那一格 */
+function faceURL(c) {
+  const k = c.id + c.role;
+  if (!faceCache[k]) {
+    const cv2 = document.createElement('canvas'); cv2.width = FW; cv2.height = FH;
+    cv2.getContext('2d').drawImage(sheetOf(staffLook(c)), 0, 0, FW, FH, 0, 0, FW, FH);
+    faceCache[k] = cv2.toDataURL();
+  }
+  return faceCache[k];
+}
 function openStaff() {
   const max = staffMax(stars()), cost = STAFF_HIRE(S.crew.length), full = S.crew.length >= max;
   const dirty = S.facs.filter(f => f.dirty).length;
-  const face = c => { const r = R['char' + c.char]; return `<span class="face" style="background-image:url(${BASE}onsen/atlas.png);background-position:-${r[0] + 18 * 32}px -${r[1] + 6}px"></span>`; };
+  const face = c => `<img class="face" src="${faceURL(c)}" alt="">`;
   const cards = S.crew.map(c => {
     const ro = STAFF_ROLES[c.role], need = xpNeed(c.lv), maxed = c.lv >= STAFF_MAX_LV, ready = !maxed && c.xp >= need;
     const tc = trainCost(c.lv);
@@ -1517,7 +1584,7 @@ function doTrain(id) {
   if (!c || c.lv >= STAFF_MAX_LV || c.xp < xpNeed(c.lv) || S.money < trainCost(c.lv)) return;
   S.money -= trainCost(c.lv); c.lv++; c.xp = 0;
   fanfare(); toast(`🎓 ${c.name}升到 Lv${c.lv}!${STAFF_ROLES[c.role].pow(c.lv)}`);
-  const a = staff.find(x => x.c === c); if (a) float(a.x, a.y - 70, 'Lv UP!', '#ffd84a');
+  const a = staff.find(x => x.c === c); if (a) float(a.x, a.y - 44, 'Lv UP!', '#ffd84a');
   hud(); openStaff(); save();
 }
 function doFire(id) {
@@ -1831,7 +1898,7 @@ function tapWorld(wx, wy) {
   if (mode === 'place') { movePlace(wx, wy); tone(500, 0.03, 'square', 0.04); return; }
   if (mode === 'land') { pickLand(wx, wy); return; }
   const all = [...guests.filter(visible), ...staff].sort((a, b) => b.y - a.y);
-  const g = all.find(g => Math.abs(wx - g.x) < 13 && wy < g.y + 2 && wy > g.y - 46);
+  const g = all.find(g => Math.abs(wx - g.x) < 12 && wy < g.y + 2 && wy > g.y - 32);
   if (g) { if (g.type) showGuest(g); else bubble(g, `${g.c.name} ${STAFF_ROLES[g.c.role].icon}Lv${g.c.lv}`, 2); tone(700, 0.05, 'sine', 0.1); return; }
   const tx = Math.floor(wx / T), ty = Math.floor(wy / T);
   const o = occ[ty] && occ[ty][tx];
@@ -1870,7 +1937,6 @@ function loop(now) {
 // ---------- 開始 ----------
 function show(id) { for (const s of ['startScreen', 'gameScreen']) $(s).classList.toggle('on', s === id); }
 async function start(fresh) {
-  await atlasReady;
   S = fresh ? freshSave() : (readJSON(SAVE_KEY, null) || freshSave());
   S.ads = S.ads || {}; S.research = S.research || []; S.combos = S.combos || [];
   for (const [k, v] of Object.entries(extraFields())) if (S[k] == null) S[k] = v;
@@ -1916,7 +1982,7 @@ refreshStart();
 
 // 開發用:窗格在背景時 requestAnimationFrame 不跑,用 advance(秒) 快轉
 if (import.meta.env.DEV) window.ON = {
-  get S() { return S; }, guests: () => guests, staff: () => staff, t: () => t, rebuild, canPlace, tapWorld, openPanel, facById,
+  get S() { return S; }, focus: () => { focusOwned(); }, spotsOf, cam: (x, y, s) => { Object.assign(cam, { x, y, s }); }, guests: () => guests, staff: () => staff, t: () => t, rebuild, canPlace, tapWorld, openPanel, facById,
   advance(sec, st = 0.05) { for (let s = 0; s < sec && !inSummary && !inChoice; s += st) step(st * speed); $('clock').textContent = clockText(); draw(performance.now()); },
   place(kind, type, x, y) { if (kind === 'fac') startPlaceFac(type); else startPlaceDecor(type); place.x = x; place.y = y; updatePlace(); const r = place.reason; if (!r) confirmPlace(); else endMode(); return r; },
   buy(cx, cy) { mode = 'land'; landPick = { cx, cy, k: `${cx},${cy}` }; buyLand(); },
