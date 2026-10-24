@@ -17,7 +17,7 @@
   :root { --accent:#e8603c; --bg:#14204a; --card:#fff8ee;
           --pn:#1d3577; --pn2:#14204a; --edge:#7fd3ff; --gold:#ffd84a; }
   .start { background:radial-gradient(120% 80% at 50% 0%, #2d5a8a 0%, #14204a 75%); }
-  .credit { font-size:11px; color:var(--dim); margin-top:10px; line-height:1.6; }
+  .credit { font-size:12px; color:var(--dim); margin-top:10px; line-height:1.6; }
   #oldNote { font-size:12px; color:#c0573a; margin-top:8px; }
 
   /* 像素面板 */
@@ -34,20 +34,20 @@
     padding:calc(4px + env(safe-area-inset-top)) calc(8px + env(safe-area-inset-right)) 4px calc(8px + env(safe-area-inset-left));
   }
   .bar .box { padding:3px 8px; line-height:1.2; }
-  .bar .icon { width:34px; height:34px; border-radius:6px; border:2px solid var(--edge); background:var(--pn); color:#fff; font-size:14px; cursor:pointer; flex:none; }
+  .bar .icon { width:34px; height:34px; border-radius:6px; border:2px solid var(--edge); background:var(--pn); color:#fff; font-size:12px; cursor:pointer; flex:none; }
   #dayBox { text-align:center; }
   #day { font-size:12px; color:#cfe7ff; white-space:nowrap; }
-  #clock { font-size:14px; font-weight:bold; color:var(--gold); font-variant-numeric:tabular-nums; }
+  #clock { font-size:12px; font-weight:bold; color:var(--gold); font-variant-numeric:tabular-nums; }
   #moneyBox { margin-left:auto; text-align:right; }
-  #money { font-weight:bold; color:#fff; font-variant-numeric:tabular-nums; font-size:17px; }
+  #money { font-weight:bold; color:#fff; font-variant-numeric:tabular-nums; font-size:12px; }
   #ideas { font-size:12px; color:#bfe8ff; }
   .rankbox { text-align:right; }
   #rank { color:var(--gold); letter-spacing:1px; font-size:12px; }
-  #nation { font-size:11px; color:#cfe7ff; }
+  #nation { font-size:12px; color:#cfe7ff; }
   #repTrack { width:72px; height:4px; background:rgba(255,255,255,.2); border-radius:2px; overflow:hidden; margin-left:auto; }
   #repFill { height:100%; width:0; background:var(--gold); }
   .speeds { display:flex; gap:3px; }
-  .speeds button { width:30px; height:28px; border:2px solid var(--edge); border-radius:6px; background:var(--pn); color:#fff; font-size:10px; cursor:pointer; }
+  .speeds button { width:30px; height:28px; border:2px solid var(--edge); border-radius:6px; background:var(--pn); color:#fff; font-size:12px; cursor:pointer; }
   .speeds button.on { background:var(--accent); }
 
   /* 收起來的面板不要露出來;clip 比 hidden 嚴格,程式 scrollIntoView 也捲不動 */
@@ -59,7 +59,7 @@
 
   #toast {
     position:absolute; left:50%; top:8px; transform:translate(-50%,-8px); z-index:5; opacity:0;
-    padding:7px 14px; font-size:14px; max-width:86%; text-align:center; pointer-events:none;
+    padding:7px 14px; font-size:12px; max-width:86%; text-align:center; pointer-events:none;
     transition:opacity .25s, transform .25s;
   }
   #toast.on { opacity:1; transform:translate(-50%,0); }
@@ -73,8 +73,8 @@
     flex:1 1 0; max-width:96px; min-width:44px; padding:5px 2px; cursor:pointer; font:inherit;
     display:flex; flex-direction:column; align-items:center; gap:1px;
   }
-  .tools2 .ic { font-size:20px; line-height:1.1; }
-  .tools2 .lb { font-size:11px; font-weight:bold; }
+  .tools2 .ic { font-size:24px; line-height:1.1; }
+  .tools2 .lb { font-size:12px; font-weight:bold; }
   .tools2 button:active { transform:translateY(2px); }
 
   /* 選單抽屜 */
@@ -85,7 +85,7 @@
   }
   #sheet.on { transform:translate(-50%, 0); }
   #sheet .hd { display:flex; align-items:center; gap:8px; padding:8px 10px; border-bottom:2px solid rgba(127,211,255,.4); }
-  #sheetTitle { flex:1; font-weight:bold; font-size:14px; }
+  #sheetTitle { flex:1; font-weight:bold; font-size:12px; }
   #sheetClose { width:30px; height:30px; border-radius:6px; border:2px solid var(--edge); background:transparent; color:#fff; cursor:pointer; }
   #sheetBody { overflow-y:auto; padding:6px; touch-action:pan-y; }
   .item {
@@ -98,10 +98,10 @@
   .item .ic { font-size:24px; width:40px; display:grid; place-items:center; flex:none; min-height:32px; overflow:hidden; }
   .item .pic { display:block; background-repeat:no-repeat; image-rendering:pixelated; transform:scale(.8); transform-origin:center; }
   .item .tx { flex:1; min-width:0; display:flex; flex-direction:column; }
-  .item b { font-size:14px; }
-  .item small { font-size:11px; color:#bcd3f5; line-height:1.4; }
-  .item .sz { font-size:10px; color:#9fb7e0; font-weight:normal; }
-  .item .pr { font-weight:bold; color:var(--gold); font-size:13px; white-space:nowrap; }
+  .item b { font-size:12px; }
+  .item small { font-size:12px; color:#bcd3f5; line-height:1.4; }
+  .item .sz { font-size:12px; color:#9fb7e0; font-weight:normal; }
+  .item .pr { font-weight:bold; color:var(--gold); font-size:12px; white-space:nowrap; }
   .note { font-size:12px; color:#cfe7ff; line-height:1.6; padding:4px 6px 8px; }
 
   /* 擺放 / 買地確認列 */
@@ -111,8 +111,8 @@
     transform:translate(-50%, 140%); transition:transform .2s;
   }
   #placeBar.on { transform:translate(-50%, 0); }
-  #pbText { flex:1; font-size:13px; line-height:1.4; }
-  #placeBar button { font:inherit; font-weight:bold; font-size:14px; padding:9px 12px; border-radius:6px; cursor:pointer; border:2px solid var(--edge); color:#fff; white-space:nowrap; }
+  #pbText { flex:1; font-size:12px; line-height:1.4; }
+  #placeBar button { font:inherit; font-weight:bold; font-size:12px; padding:9px 12px; border-radius:6px; cursor:pointer; border:2px solid var(--edge); color:#fff; white-space:nowrap; }
   #pbOk { background:#2f9e5b; } #pbOk:disabled { background:#55607a; opacity:.7; cursor:default; }
   #pbCancel { background:transparent; }
   #pbFlip { background:#3b6fb6; }
@@ -125,43 +125,50 @@
   #panel.on { transform:translate(-50%, 0); }
   #panel .top { display:flex; align-items:center; gap:10px; }
   #pIcon { font-size:26px; }
-  #pName { font-weight:bold; font-size:16px; flex:1; }
+  #pName { font-weight:bold; font-size:12px; flex:1; }
   #pClose { border:2px solid var(--edge); background:transparent; color:#fff; width:30px; height:30px; border-radius:6px; cursor:pointer; }
   #pDesc { font-size:12px; color:#bcd3f5; margin:5px 0 3px; line-height:1.5; }
   #pStat { font-size:12px; color:#9dffbf; margin-bottom:8px; min-height:1em; line-height:1.5; }
   .pbtns { display:flex; gap:8px; }
-  .pbtns button { flex:1; font:inherit; font-weight:bold; font-size:14px; padding:9px; border-radius:6px; border:2px solid var(--edge); color:#fff; cursor:pointer; }
+  .pbtns button { flex:1; font:inherit; font-weight:bold; font-size:12px; padding:9px; border-radius:6px; border:2px solid var(--edge); color:#fff; cursor:pointer; }
   #pBtn { background:var(--accent); } #pBtn:disabled { background:#55607a; opacity:.7; cursor:default; }
   #pSell { background:transparent; flex:0 0 auto; font-size:12px; }
-  #pMove, #pFlip { background:#3b6fb6; flex:0 0 auto; font-size:13px; }
+  #pMove, #pFlip { background:#3b6fb6; flex:0 0 auto; font-size:12px; }
+  #pDeco { background:#b06ad0; flex:0 0 auto; font-size:12px; }
+  .swatches { display:grid; grid-template-columns:repeat(auto-fill,minmax(76px,1fr)); gap:6px; }
+  .swatch { display:flex; flex-direction:column; align-items:center; gap:2px; padding:5px 3px; border-radius:6px; cursor:pointer;
+    border:2px solid rgba(127,211,255,.35); background:rgba(255,255,255,.06); color:#fff; font:inherit; font-size:12px; }
+  .swatch img { width:48px; height:36px; object-fit:cover; object-position:top; image-rendering:pixelated; border-radius:3px; }
+  .swatch small { font-size:12px; color:#bcd3f5; } .swatch.on { border-color:var(--gold); background:rgba(255,216,74,.18); }
+  .swatch:disabled:not(.on) { opacity:.5; cursor:default; }
 
   /* 員工卡 */
   .crew { display:flex; align-items:center; gap:10px; padding:8px; margin:0 0 6px; border:2px solid var(--edge); border-radius:6px; background:rgba(255,255,255,.04); }
   .crew .face { width:36px; height:48px; image-rendering:pixelated; flex:0 0 auto; }
   .crew .tx { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
-  .crew b { font-size:14px; } .crew small { font-size:11px; color:#bcd3f5; line-height:1.4; }
+  .crew b { font-size:12px; } .crew small { font-size:12px; color:#bcd3f5; line-height:1.4; }
   .crew .xp { height:6px; background:#1d2a44; border-radius:3px; overflow:hidden; }
   .crew .xp i { display:block; height:100%; background:#9dffbf; }
   .crew .btns { display:flex; flex-direction:column; gap:4px; }
   .crew button { font:inherit; font-size:12px; font-weight:bold; padding:6px 8px; border-radius:6px; border:2px solid var(--edge); color:#fff; background:var(--accent); cursor:pointer; white-space:nowrap; }
-  .crew button.ghost { background:transparent; font-weight:normal; font-size:11px; padding:3px 6px; }
+  .crew button.ghost { background:transparent; font-weight:normal; font-size:12px; padding:3px 6px; }
   .crew button:disabled { background:#55607a; opacity:.7; cursor:default; }
-  h4.sec { margin:10px 4px 6px; font-size:13px; color:var(--gold); }
+  h4.sec { margin:10px 4px 6px; font-size:12px; color:var(--gold); }
 
   /* 手機橫放(矮螢幕):面板、選單靠右,不擋地圖 */
   @media (orientation:landscape) and (max-height:540px) {
     #panel, #sheet, #placeBar { left:auto; right:calc(52px + env(safe-area-inset-right)); width:340px; transform:translateX(130%); }
     #panel.on, #sheet.on, #placeBar.on { transform:none; }
     .tools2 button { padding:3px 2px; }
-    .tools2 .ic { font-size:17px; }
+    .tools2 .ic { font-size:12px; }
   }
   /* 直式手機:資訊列擠一點 */
   @media (max-width:560px) {
     .tools2 { gap:3px; padding-left:4px; padding-right:4px; }
     .tools2 .ic { font-size:18px; }
     .bar .box { padding:2px 6px; }
-    #money { font-size:15px; }
-    .tools2 .lb { font-size:10px; }
+    #money { font-size:12px; }
+    .tools2 .lb { font-size:12px; }
   }
 
   /* 一天結算 */
@@ -170,15 +177,15 @@
   #summary .card { max-height:100%; overflow-y:auto; touch-action:pan-y; }
   .nums { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:10px 0 6px; }
   .nums div { background:rgba(0,0,0,.05); border-radius:10px; padding:7px 4px; }
-  .nums b { display:block; font-size:17px; }
-  .nums span { font-size:11px; color:var(--dim); }
+  .nums b { display:block; font-size:12px; }
+  .nums span { font-size:12px; color:var(--dim); }
   #sTurned { font-size:12px; color:#c0573a; min-height:1em; }
-  .year { margin:8px 0; padding:10px; border-radius:12px; background:linear-gradient(135deg,#fff3c4,#ffd98a); color:#5a3a00; font-size:14px; }
-  .review { text-align:left; background:rgba(0,0,0,.04); border-radius:12px; padding:7px 10px; margin-top:6px; font-size:13px; line-height:1.6; }
+  .year { margin:8px 0; padding:10px; border-radius:12px; background:linear-gradient(135deg,#fff3c4,#ffd98a); color:#5a3a00; font-size:12px; }
+  .review { text-align:left; background:rgba(0,0,0,.04); border-radius:12px; padding:7px 10px; margin-top:6px; font-size:12px; line-height:1.6; }
   .rs { color:#e8a317; margin-right:4px; }
-  .rw { display:block; font-size:11px; color:var(--dim); }
+  .rw { display:block; font-size:12px; color:var(--dim); }
   #sRep { font-size:12px; color:var(--dim); margin:10px 0 4px; }
-  .achline { margin-top:6px; padding:6px 10px; border-radius:10px; background:#fff3c4; color:#5a3a00; font-size:13px; }
+  .achline { margin-top:6px; padding:6px 10px; border-radius:10px; background:#fff3c4; color:#5a3a00; font-size:12px; }
 
   /* 人生選擇 */
   #choice { position:fixed; inset:0; z-index:7; display:none; align-items:center; justify-content:center; padding:14px; background:rgba(5,10,30,.65); }
@@ -187,7 +194,7 @@
   .copt { display:flex; flex-direction:column; gap:2px; width:100%; text-align:left; font:inherit; cursor:pointer;
     margin-top:8px; padding:11px 14px; border-radius:14px; border:2px solid #e3d3bd; background:#fffdf8; color:var(--ink); }
   .copt:hover { border-color:var(--accent); }
-  .copt b { font-size:16px; } .copt small { font-size:12px; color:var(--dim); }
+  .copt b { font-size:12px; } .copt small { font-size:12px; color:var(--dim); }
 
   /* 經營報表 */
   .tabs { display:flex; gap:4px; margin-bottom:8px; overflow-x:auto; }
@@ -196,35 +203,35 @@
   .tab.on { background:var(--edge); color:#0b1230; }
   .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
   .kpis div { background:rgba(255,255,255,.07); border-radius:6px; padding:6px 4px; text-align:center; }
-  .kpis b { display:block; font-size:16px; color:var(--gold); } .kpis span { font-size:10px; color:#bcd3f5; }
+  .kpis b { display:block; font-size:12px; color:var(--gold); } .kpis span { font-size:12px; color:#bcd3f5; }
   #sheetBody h4 { font-size:12px; color:#cfe7ff; margin:12px 2px 6px; }
   .bars { display:flex; align-items:flex-end; gap:3px; height:80px; padding:0 2px; }
   .bars .bar { flex:1; height:100%; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; }
   .bars i { display:block; width:100%; background:linear-gradient(180deg,var(--gold),#e8a317); border-radius:2px 2px 0 0; }
-  .bars span { font-size:8px; color:#9fb7e0; margin-top:2px; }
+  .bars span { font-size:12px; color:#9fb7e0; margin-top:2px; }
   .hbar { display:flex; align-items:center; gap:6px; font-size:12px; margin:3px 2px; }
   .hbar span { width:96px; flex:none; white-space:nowrap; overflow:hidden; }
   .hbar i { height:10px; border-radius:3px; background:var(--edge); min-width:3px; }
   .hbar i.wish { background:#ff8fb8; }
-  .hbar em { font-style:normal; color:#bcd3f5; font-size:11px; }
-  .rk { display:flex; align-items:center; gap:8px; padding:6px 8px; margin-bottom:3px; border-radius:6px; background:rgba(255,255,255,.05); font-size:13px; }
+  .hbar em { font-style:normal; color:#bcd3f5; font-size:12px; }
+  .rk { display:flex; align-items:center; gap:8px; padding:6px 8px; margin-bottom:3px; border-radius:6px; background:rgba(255,255,255,.05); font-size:12px; }
   .rk.me { background:rgba(255,216,74,.22); border:1px solid var(--gold); }
   .rk .no { width:20px; text-align:center; font-weight:bold; color:var(--gold); }
-  .rk .nm { flex:1; } .rk .st { color:var(--gold); font-size:10px; } .rk .rp { width:60px; text-align:right; color:#bcd3f5; font-variant-numeric:tabular-nums; }
+  .rk .nm { flex:1; } .rk .st { color:var(--gold); font-size:12px; } .rk .rp { width:60px; text-align:right; color:#bcd3f5; font-variant-numeric:tabular-nums; }
   .item.sel { border-color:var(--gold); }
 
   /* 存檔小字、目標 */
-  #saveDot { position:absolute; top:6px; right:calc(56px + env(safe-area-inset-right)); z-index:4; font-size:11px; padding:3px 8px; border-radius:10px;
+  #saveDot { position:absolute; top:6px; right:calc(56px + env(safe-area-inset-right)); z-index:4; font-size:12px; padding:3px 8px; border-radius:10px;
     background:rgba(20,30,60,.75); color:#cfe7ff; opacity:0; transition:opacity .3s; pointer-events:none; }
   #saveDot.on { opacity:1; } #saveDot.bad { background:#b8342a; color:#fff; }
-  .goal { margin-top:8px; padding:8px 10px; border-radius:12px; background:#e8f4ff; color:#1d3a5f; font-size:13px; line-height:1.5; }
+  .goal { margin-top:8px; padding:8px 10px; border-radius:12px; background:#e8f4ff; color:#1d3a5f; font-size:12px; line-height:1.5; }
   .goal small { color:#4a6a8f; }
-  .msline { margin-top:6px; padding:8px 10px; border-radius:12px; background:linear-gradient(135deg,#ffe0f0,#ffd2a8); color:#5a2a10; font-size:14px; }
-  .msline small { font-size:11px; color:#7a4a30; }
+  .msline { margin-top:6px; padding:8px 10px; border-radius:12px; background:linear-gradient(135deg,#ffe0f0,#ffd2a8); color:#5a2a10; font-size:12px; }
+  .msline small { font-size:12px; color:#7a4a30; }
   .trophies { display:grid; grid-template-columns:repeat(auto-fill,minmax(92px,1fr)); gap:6px; }
-  .trophies div { background:rgba(255,216,74,.12); border:1px solid rgba(255,216,74,.4); border-radius:8px; padding:6px 4px; text-align:center; font-size:11px; color:#fff3c4; }
+  .trophies div { background:rgba(255,216,74,.12); border:1px solid rgba(255,216,74,.4); border-radius:8px; padding:6px 4px; text-align:center; font-size:12px; color:#fff3c4; }
   .trophies b { display:block; font-size:24px; }
-  .trophies small { color:#bcd3f5; font-size:10px; }
+  .trophies small { color:#bcd3f5; font-size:12px; }
 
   /* 結局 */
   #ending { position:fixed; inset:0; z-index:8; display:none; align-items:center; justify-content:center; padding:14px;
@@ -234,12 +241,12 @@
   #ending h1 { font-size:26px; margin:2px 0; background:linear-gradient(90deg,#d8452f,#e8a317); -webkit-background-clip:text; background-clip:text; color:transparent; }
   #ending .crown { font-size:44px; animation:bob 1.6s ease-in-out infinite; }
   @keyframes bob { 50% { transform:translateY(-6px); } }
-  #eSub { font-size:13px; color:var(--dim); }
+  #eSub { font-size:12px; color:var(--dim); }
   #eCrew { font-size:12px; color:var(--dim); margin:6px 0; line-height:1.6; }
   #eRoll { height:150px; overflow:hidden; position:relative; margin:10px 0; border-radius:12px; background:#1a1430; color:#fff6e8;
     -webkit-mask-image:linear-gradient(transparent,#000 20%,#000 80%,transparent); mask-image:linear-gradient(transparent,#000 20%,#000 80%,transparent); }
   #eRoll .rollin { position:absolute; left:0; right:0; top:100%; animation:roll 22s linear forwards; }
-  #eRoll p { margin:0 0 12px; font-size:14px; } #eRoll small { display:block; font-size:10px; color:#bba8e8; letter-spacing:.1em; }
+  #eRoll p { margin:0 0 12px; font-size:12px; } #eRoll small { display:block; font-size:12px; color:#bba8e8; letter-spacing:.1em; }
   #eRoll .fin { font-size:18px; margin-top:20px; }
   @keyframes roll { to { transform:translateY(calc(-100% - 150px)); } }
 
@@ -247,8 +254,15 @@
   #codeBox { position:fixed; inset:0; z-index:9; display:none; align-items:center; justify-content:center; padding:14px; background:rgba(5,10,30,.7); }
   #codeBox.on { display:flex; }
   #codeBox textarea { width:100%; height:120px; font:12px ui-monospace,monospace; border-radius:10px; border:2px solid #e3d3bd; padding:8px; word-break:break-all; }
-  #codeMsg { font-size:13px; min-height:1.2em; margin:6px 0; }
+  #codeMsg { font-size:12px; min-height:1.2em; margin:6px 0; }
   .startextra { font-size:12px; color:var(--dim); margin-top:8px; line-height:1.6; }
+
+  /* v2.4 像素字:俐方體11號(Cubic 11,免費可散佈,public/fonts/)。像素字用 12 / 24px 最清楚,不要假粗體 */
+  @font-face { font-family:'Cubic11'; src:url('/fonts/Cubic_11.woff2') format('woff2'); font-display:swap; }
+  body, button, input, textarea, select { font-family:'Cubic11','PingFang TC','Microsoft JhengHei',sans-serif !important; font-synthesis:none; }
+  b, strong, h1, h4, .btn { font-weight:normal !important; }
+  .card h1 { font-size:24px; letter-spacing:.04em; } .card p.how { font-size:12px; line-height:1.8; }
+  .btn { font-size:12px; } .who { font-size:12px; } .back-link, .credit { font-size:12px; }
 </style>
 </head>
 <body>
@@ -262,7 +276,7 @@
         你是旅館老闆!在自己的土地上<b>自由蓋</b>和室、浴場、露天風呂…<br>
         客人留好評就會升星;用客人給的 <b>💡 靈感</b> 研究新設施,<br>
         <b>買地擴建</b>、請員工、打廣告,擺出<b>組合</b>,目標<b>全國第一</b>!
-        <br><span style="font-size:13px">點設施可以升級;手指拖曳移動畫面、兩指縮放。</span>
+        <br><span style="font-size:12px">點設施可以升級;手指拖曳移動畫面、兩指縮放。</span>
       </p>
       <button class="btn wide" id="startBtn">開一間溫泉旅館!</button>
       <div class="btnrow"><button class="btn ghost" id="newBtn" style="display:none">重新開一間</button></div>
@@ -311,7 +325,7 @@
         <div class="top"><span id="pIcon"></span><span id="pName"></span><button id="pClose">✕</button></div>
         <div id="pDesc"></div>
         <div id="pStat"></div>
-        <div class="pbtns"><button id="pBtn">升級</button><button id="pMove">✋ 搬移</button><button id="pFlip">⇋ 轉向</button><button id="pSell">拆除</button></div>
+        <div class="pbtns"><button id="pBtn">升級</button><button id="pDeco">🎨 裝潢</button><button id="pMove">✋ 搬移</button><button id="pFlip">⇋ 轉向</button><button id="pSell">拆除</button></div>
       </div>
     </div>
     <div class="tools2">
@@ -327,7 +341,7 @@
 
   <div id="summary">
     <div class="card">
-      <h1 id="sTitle" style="font-size:22px">第 1 天結束</h1>
+      <h1 id="sTitle" style="font-size:24px">第 1 天結束</h1>
       <div class="nums">
         <div><b id="sIncome">¥0</b><span>今日收入</span></div>
         <div><b id="sSalary">-¥0</b><span>員工薪水</span></div>
@@ -348,7 +362,7 @@
 
   <div id="choice">
     <div class="card">
-      <h1 id="cTitle" style="font-size:21px"></h1>
+      <h1 id="cTitle" style="font-size:24px"></h1>
       <p class="how" id="cText" style="margin:8px 0 12px"></p>
       <div id="cOpts"></div>
     </div>
@@ -380,7 +394,7 @@
 
   <div id="codeBox">
     <div class="card">
-      <h1 id="codeTitle" style="font-size:20px">存檔碼</h1>
+      <h1 id="codeTitle" style="font-size:24px">存檔碼</h1>
       <p class="how" id="codeHow"></p>
       <textarea id="codeText" spellcheck="false" autocomplete="off"></textarea>
       <div id="codeMsg"></div>

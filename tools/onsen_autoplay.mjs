@@ -36,7 +36,7 @@ window.BOT = async () => {
   if (next && unl(next) && st >= D.FAC[next].need[0] && S.money >= D.FAC[next].cost[0] + 200) {
     const d = D.FAC[next]; let done = false;
     for (let y = 0; y < D.ROWS && !done; y++) for (let x = 0; x < D.COLS && !done; x++) {
-      if (!S.owned.includes(Math.floor(x / 8) + ',' + Math.floor(y / 8))) continue;
+      if (!S.owned.includes(Math.floor(x / D.CHUNK) + ',' + Math.floor(y / D.CHUNK))) continue;
       if (ON.canPlace(d.w, d.h, x, y)) continue;
       if (!ON.place('fac', next, x, y)) { done = true; log.push('蓋' + d.name); }
     }
@@ -46,9 +46,9 @@ window.BOT = async () => {
   for (const f of ups) if (S.money >= D.FAC[f.type].cost[f.lv] + 500) { ON.upgrade(f.id); log.push('升級' + D.FAC[f.type].name); }
   // 6. 買地
   const n = S.owned.length;
-  if (n < 12 && st >= D.landNeed(n) && S.money >= D.landCost(n) * 1.3) {
+  if (n < (D.COLS / D.CHUNK) * (D.ROWS / D.CHUNK) && st >= D.landNeed(n) && S.money >= D.landCost(n) * 1.3) {
     for (const k of S.owned) { const [cx, cy] = k.split(',').map(Number); let ok = false;
-      for (const [dx, dy] of [[0, -1], [-1, 0], [1, 0], [0, 1]]) { const a = cx + dx, b = cy + dy; if (a < 0 || b < 0 || a > 3 || b > 2 || S.owned.includes(a + ',' + b)) continue; ON.buy(a, b); ok = true; log.push('買地'); break; }
+      for (const [dx, dy] of [[0, -1], [-1, 0], [1, 0], [0, 1]]) { const a = cx + dx, b = cy + dy; if (a < 0 || b < 0 || a >= D.COLS / D.CHUNK || b >= D.ROWS / D.CHUNK || S.owned.includes(a + ',' + b)) continue; ON.buy(a, b); ok = true; log.push('買地'); break; }
       if (ok) break; }
   }
   // 7. 擺植物(有閒錢就擺在設施旁邊的走道上)
@@ -99,7 +99,8 @@ async function runOnce(run) {
     for (let s = 2; s <= st; s++) mark(s + '★', info.day);
     for (const r of [10, 3, 1]) if (info.rank <= r) mark('第' + r + '名內', info.day);
     for (const m of info.ms.split(',').filter(Boolean)) mark('里程碑:' + m, info.day);
-    if (info.land === 12) mark('全部土地', info.day);
+    if (info.land === 12) mark('12 塊地', info.day);
+    if (info.land === 28) mark('全部 28 塊地', info.day);
     last = info;
     if (day % 14 === 0) console.log(`  [${run}] 第${info.day}天 ${st}★ #${info.rank} 口碑${info.rep} ¥${info.money} 設施${info.facs}(Lv3×${info.lv3}) 地${info.land} 員工${info.crew} 客${info.guests} 組合${info.combos} 存檔${(info.size / 1024).toFixed(1)}KB`);
     // 結局:summary 按下一步會跳結局畫面

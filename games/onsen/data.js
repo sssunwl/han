@@ -4,28 +4,30 @@
    ============================================================ */
 
 export const T = 32;                  // 一格 32px(pixelkit 32px 格)
-export const COLS = 32, ROWS = 24;    // 整片土地(格)
-export const CHUNK = 8;               // 一塊地 8×8 格,買地以塊為單位 → 4×3 塊
+export const COLS = 32, ROWS = 56;    // 整片土地(格)。v2.4 往上加高:直向手機縮到最小剛好填滿
+export const CHUNK = 8;               // 一塊地 8×8 格,買地以塊為單位 → 4×7 = 28 塊
+export const OY = 32;                 // v2.4 在上面多了 4 排地;舊存檔讀進來時 y 要 +OY(main.js migrateMap)
 export const DAY_SECONDS = 140;       // 1 倍速下一天幾秒(地圖大,要給客人時間走路)
 export const YEAR_DAYS = 28;          // 一年 = 四季 × 7 天
 
 // ---------- 起始土地、大門、櫃台 ----------
-export const START_CHUNKS = ['1,2', '2,2'];       // 下方中間兩塊(x8~23, y16~23)
-export const ENTRANCE = [16, 23];                 // 大門那一格
-export const SPAWN = [16.5, 24.7];                // 客人從畫面外走進來
-export const DESK = { x: 13, y: 20, w: 3, h: 2, staff: [14.5, 20.55] };
-export const QUEUE = { x: 14, y: 22, max: 8 };    // 排隊:從 (14,22) 往右排
+export const START_CHUNKS = ['1,6', '2,6'];       // 最下排中間兩塊(x8~23, y48~55)
+export const ENTRANCE = [16, OY + 23];            // 大門那一格(地圖最下面)
+export const SPAWN = [16.5, OY + 24.7];           // 客人從畫面外走進來
+export const DESK = { x: 13, y: OY + 20, w: 3, h: 2, staff: [14.5, OY + 20.55] };
+export const QUEUE = { x: 14, y: OY + 22, max: 8 };    // 排隊:從 (14,OY+22) 往右排
 /** 不能蓋東西、但可以走的格子(排隊區、大門) */
 export function isReserved(x, y) {
-  if (y === 22 && x >= 12 && x <= 22) return true;
-  if (x === 16 && y === 23) return true;
+  if (y === OY + 22 && x >= 12 && x <= 22) return true;
+  if (x === 16 && y === OY + 23) return true;
   return false;
 }
 /** 櫃台本體與後面的員工區:不能蓋、也不能走 */
-export const isDeskArea = (x, y) => x >= 13 && x <= 15 && y >= 19 && y <= 21;
+export const isDeskArea = (x, y) => x >= 13 && x <= 15 && y >= OY + 19 && y <= OY + 21;
 
 /** 第 n 塊地(已經有 n 塊)的價錢與星級門檻 */
-export const landCost = n => Math.round(600 * Math.pow(1.55, n - 2) / 50) * 50;
+// 第 12 塊以後(v2.4 新加的地)改成每塊貴 12%,不然會貴到天文數字;是後期的花錢目標
+export const landCost = n => Math.round((n <= 12 ? 600 * Math.pow(1.55, n - 2) : 600 * Math.pow(1.55, 10) * Math.pow(1.12, n - 12)) / 50) * 50;
 export const landNeed = n => [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 5][n - 2] || 5;
 
 // ---------- 設施 ----------
@@ -133,8 +135,23 @@ export const DECOR = {
   stone_lantern: { name: '石燈籠', cost: 120, val: 4 },
   fireplace: { name: '暖爐', cost: 150, val: 4, research: true },
   koinobori: { name: '鯉魚旗', cost: 180, val: 5, research: true },
+  // v2.4:更好玩的擺設。stars = 要幾星才買得到;use = 客人路過會停下來用(fee 收錢、sat 加滿意度)
+  daruma: { name: '達摩', cost: 60, val: 2 },
+  tanuki: { name: '狸貓擺設', cost: 90, val: 3 },
+  maneki: { name: '招財貓', cost: 150, val: 4, stars: 2 },
+  vending: { name: '牛奶販賣機', cost: 200, val: 2, use: { icon: '🥛', fee: 15, sat: 5 } },
+  bookshelf: { name: '漫畫書櫃', cost: 180, val: 3, stars: 2, use: { icon: '📖', fee: 0, sat: 4 } },
+  gacha: { name: '扭蛋機', cost: 250, val: 2, stars: 2, use: { icon: '🎁', fee: 20, sat: 4, likes: 'family' } },
+  shishi: { name: '添水', cost: 220, val: 5, stars: 2 },
+  claw: { name: '夾娃娃機', cost: 300, val: 2, stars: 3, use: { icon: '🧸', fee: 25, sat: 5, likes: 'family' } },
+  mchair: { name: '按摩椅', cost: 280, val: 3, stars: 3, use: { icon: '💺', fee: 10, sat: 6, likes: 'elder' } },
+  screen: { name: '金屏風', cost: 260, val: 5, stars: 3 },
+  sakura: { name: '櫻花樹', cost: 400, val: 7, stars: 3, plant: true },
+  maple: { name: '紅葉樹', cost: 400, val: 7, stars: 3, plant: true },
+  capybara: { name: '水豚泡湯', cost: 350, val: 5, stars: 4, use: { icon: '📸', fee: 0, sat: 7 } },
+  aquarium: { name: '大水族箱', cost: 500, val: 6, stars: 4, use: { icon: '🐟', fee: 0, sat: 5 } },
 };
-export const DECOR_ORDER = ['bush', 'pot', 'andon', 'bonsai_s', 'plant', 'vase', 'bamboo', 'flowers', 'bench', 'stone_lantern', 'palm', 'fishbowl', 'bonsai_l', 'fireplace', 'garland', 'koinobori'];
+export const DECOR_ORDER = ['vending', 'daruma', 'bush', 'pot', 'andon', 'tanuki', 'bonsai_s', 'plant', 'vase', 'bamboo', 'flowers', 'bench', 'maneki', 'bookshelf', 'gacha', 'shishi', 'stone_lantern', 'palm', 'fishbowl', 'bonsai_l', 'claw', 'mchair', 'screen', 'sakura', 'maple', 'fireplace', 'garland', 'capybara', 'aquarium', 'koinobori'];
 
 // ---------- 組合(發現時口碑 +20,效果持續)----------
 export const COMBOS = [
@@ -145,6 +162,10 @@ export const COMBOS = [
   { id: 'plaza', name: '足湯廣場', hint: '足湯 2 格內有長椅', effect: '足湯滿意度 +6' },
   { id: 'festival', name: '燈籠祭', hint: '擺 3 串以上燈籠串', effect: '每天多 1 位客人' },
   { id: 'aquarium', name: '金魚大廳', hint: '櫃台 3 格內有金魚缸', effect: '入住時滿意度 +4' },
+  { id: 'milk', name: '湯上牛奶', hint: '牛奶販賣機放在大浴場或露天風呂 2 格內', effect: '那個浴池滿意度 +6' },
+  { id: 'hanami', name: '賞櫻風呂', hint: '櫻花樹或紅葉樹在露天風呂、足湯 2 格內', effect: '那個浴池滿意度 +8' },
+  { id: 'gamecorner', name: '電玩角落', hint: '扭蛋機跟夾娃娃機都在遊戲機台區 2 格內', effect: '遊戲機台區滿意度 +8' },
+  { id: 'lucky', name: '招財櫃台', hint: '招財貓放在櫃台 3 格內', effect: '每天多 1 位客人' },
 ];
 
 // ---------- 研究(用客人給的 💡 靈感點)----------
@@ -292,10 +313,11 @@ export const ACHIEVEMENTS = [
   { id: 'occ', name: '全館客滿', desc: '入住率 100%(至少 6 間房)', kind: 'occ100', n: 6, reward: { money: 500 } },
   { id: 'perfect', name: '完美的一天', desc: '一天至少 5 則評價而且全部 5 星', kind: 'perfect', n: 5, reward: { ideas: 10 } },
   { id: 'land6', name: '地主', desc: '擁有 6 塊土地', kind: 'land', n: 6, reward: { money: 800 } },
-  { id: 'land12', name: '溫泉鄉', desc: '買下全部 12 塊土地', kind: 'land', n: 12, reward: { money: 5000 } },
+  { id: 'land12', name: '溫泉鄉', desc: '擁有 12 塊土地', kind: 'land', n: 12, reward: { money: 5000 } },
+  { id: 'land28', name: '溫泉王國', desc: '買下全部 28 塊土地', kind: 'land', n: 28, reward: { money: 20000, ideas: 50 } },
   { id: 'types', name: '什麼都有', desc: '每一種設施都至少蓋一間', kind: 'types', n: 16, reward: { ideas: 30 } },
   { id: 'combo3', name: '組合高手', desc: '發現 3 種組合', kind: 'combos', n: 3, reward: { ideas: 10 } },
-  { id: 'comboAll', name: '組合大師', desc: '發現全部組合', kind: 'combos', n: 7, reward: { money: 3000 } },
+  { id: 'comboAll', name: '組合大師', desc: '發現全部組合', kind: 'combos', n: 11, reward: { money: 3000 } },
   { id: 'staff5', name: '大家庭', desc: '請到 5 位員工', kind: 'staff', n: 5, reward: { money: 500 } },
   { id: 'heart', name: '有人情味的老闆', desc: '在人生選擇裡選了 5 次溫暖的選項', kind: 'heart', n: 5, reward: { ideas: 15 } },
   { id: 'wish', name: '有求必應', desc: '滿足客人的願望 20 次', kind: 'wishes', n: 20, reward: { ideas: 10 } },
@@ -389,3 +411,21 @@ export const LEGEND_GROW = 1.5;        // 傳說模式:對手每天成長 ×1.5
 export const NG_MONEY = n => 800 + 2200 * Math.min(n, 3);
 export const NG_RIVAL = n => 1 + 0.25 * n;
 export const NG_CARRY_MAX_LV = 3;      // 帶過去的員工最多保留到 Lv3
+
+// ---------- 裝潢(v2.4):每間室內設施可以換地板、牆紙;走廊、大廳也能換地板 ----------
+// 換過地板 +2、換過牆紙 +2 滿意度(裝潢加成)。cost = 換一次的錢,stars = 要幾星
+export const FLOORS = {
+  tatami: { name: '榻榻米', cost: 100 }, fl_wood: { name: '原木地板', cost: 100 }, fl_wood2: { name: '胡桃木地板', cost: 100 },
+  fl_dark: { name: '深色木地板', cost: 150 }, fl_dining: { name: '紅木地板', cost: 150 }, fl_bamboo: { name: '竹蓆', cost: 150 },
+  fl_bath: { name: '淺藍磁磚', cost: 120 }, fl_mint: { name: '薄荷磁磚', cost: 150 }, fl_stone: { name: '石板', cost: 120 },
+  fl_pink: { name: '粉紅格子', cost: 200, stars: 2 }, fl_grass: { name: '草地', cost: 200, stars: 2 }, fl_carpet: { name: '紅地毯', cost: 300, stars: 3 },
+  fl_star: { name: '星空', cost: 400, stars: 4 }, fl_marble: { name: '大理石', cost: 500, stars: 4 },
+};
+export const WALLS = {
+  wl_plain: { name: '米色灰泥', cost: 100 }, wl_washi: { name: '和紙', cost: 120 }, wl_wood: { name: '木板', cost: 120 },
+  wl_bamboo: { name: '竹子', cost: 150 }, wl_leaf: { name: '唐草', cost: 150 }, wl_wave: { name: '青海波', cost: 200, stars: 2 },
+  wl_sakura: { name: '櫻花', cost: 200, stars: 2 }, wl_stripe: { name: '粉紅條紋', cost: 200, stars: 2 },
+  wl_star: { name: '星星', cost: 400, stars: 4 }, wl_gold: { name: '金箔', cost: 600, stars: 5 },
+};
+export const DECO_BONUS = 2;          // 換過地板、換過牆紙各 +2 滿意度
+export const HALL_COST = 300;         // 走廊/大廳換一次地板

@@ -6,11 +6,12 @@ import { toCanvas } from '../../shared/pixelkit/core.js';
 import { JP_KIT } from '../../shared/pixelkit/japanese.js';
 import { makeCharacter, randomLook, FW, FH, HAIRS, SKINS } from '../../shared/pixelkit/character.js';
 import {
-  T, COLS, ROWS, CHUNK, DAY_SECONDS, YEAR_DAYS, START_CHUNKS, ENTRANCE, SPAWN, DESK, QUEUE, isReserved, isDeskArea,
+  T, COLS, ROWS, CHUNK, OY, DAY_SECONDS, YEAR_DAYS, START_CHUNKS, ENTRANCE, SPAWN, DESK, QUEUE, isReserved, isDeskArea,
   landCost, landNeed, FAC, FAC_ORDER, DECOR, DECOR_ORDER, COMBOS, RESEARCH, STAFF_HIRE, staffMax,
   STAFF_ROLES, ROLE_ORDER, STAFF_NAMES, STAFF_MAX_LV, xpNeed, trainCost, salaryOf,
   ADS, AD_DAYS, STAR_REP, REVIEW_REP, starsOf, TYPES, TYPE_KEYS, seasonOf, EVENTS, REVIEWS,
   INNS, RIVAL_NEWS, ACHIEVEMENTS, CHOICES, PATHS, WISHES,
+  FLOORS, WALLS, DECO_BONUS, HALL_COST,
   MILESTONES, LEGEND_GOALS, LEGEND_RIVAL, LEGEND_GROW, NG_MONEY, NG_RIVAL, NG_CARRY_MAX_LV,
 } from './data.js';
 import { loadBest, saveBoth, encodeSave, decodeSave } from './store.js';
@@ -34,6 +35,7 @@ const BASE = import.meta.env.BASE_URL;
 const $ = id => document.getElementById(id);
 
 lockGestures();
+if (document.fonts) document.fonts.load('12px Cubic11').catch(() => {});   // 畫布上的字也要用像素字,先載好
 renderWho($('who'), '是老闆');
 
 // ---------- 素材 ----------
@@ -81,10 +83,10 @@ function freshSave() {
     v: 2, day: 1, money: 800, rep: 0, ideas: 0, nextId: 3,
     owned: [...START_CHUNKS],
     facs: [
-      { id: 'f1', type: 'room', x: 8, y: 16, lv: 1 },
-      { id: 'f2', type: 'bath', x: 19, y: 16, lv: 1 },
+      { id: 'f1', type: 'room', x: 8, y: OY + 16, lv: 1 },
+      { id: 'f2', type: 'bath', x: 19, y: OY + 16, lv: 1 },
     ],
-    decor: [{ id: 'd1', type: 'bonsai_s', x: 12, y: 21 }, { id: 'd2', type: 'bush', x: 17, y: 21 }],
+    decor: [{ id: 'd1', type: 'bonsai_s', x: 12, y: OY + 21 }, { id: 'd2', type: 'bush', x: 17, y: OY + 21 }], mapV: 2,
     research: [], crew: [newCrew('clean', [])], combos: [], ads: {}, sleepers: [], bestRank: null,
     stats: { guests: 0, earned: 0, best5: 0, wishes: 0 },
     ...extraFields(),
@@ -283,7 +285,12 @@ function computeBonuses() {
     if (f.type === 'shop' && S.facs.some(o => o.type === 'dining' && near(r, facRect(o), 1))) { found.add('street'); f.street = true; f.comboNames.push('溫泉街'); }
     if (f.type === 'lounge' && S.facs.some(o => (o.type === 'bath' || o.type === 'onsen') && near(r, facRect(o), 2))) add('yuagari', 8);
     if (f.type === 'footbath' && decorNear(r, 2, d => d.type === 'bench').length) add('plaza', 6);
+    if ((f.type === 'bath' || f.type === 'onsen') && decorNear(r, 2, d => d.type === 'vending').length) add('milk', 6);
+    if ((f.type === 'onsen' || f.type === 'footbath') && decorNear(r, 2, d => d.type === 'sakura' || d.type === 'maple').length) add('hanami', 8);
+    if (f.type === 'arcade' && decorNear(r, 2, d => d.type === 'gacha').length && decorNear(r, 2, d => d.type === 'claw').length) add('gamecorner', 8);
+    f.deco = OUTDOOR[f.type] ? (f.floor ? DECO_BONUS : 0) : (f.floor ? DECO_BONUS : 0) + (f.wall ? DECO_BONUS : 0);   // 裝潢加成
   }
+  if (decorNear({ x: DESK.x, y: DESK.y, w: DESK.w, h: DESK.h }, 3, d => d.type === 'maneki').length) found.add('lucky');
   if (S.decor.filter(d => d.type === 'garland').length >= 3) found.add('festival');
   if (decorNear({ x: DESK.x, y: DESK.y, w: DESK.w, h: DESK.h }, 3, d => d.type === 'fishbowl').length) found.add('aquarium');
   S.activeCombos = [...found];
@@ -490,18 +497,50 @@ function exitFac(a) {
 
 function nextActivity(g) {
   if (t > (has('night') ? 0.88 : 0.8) || !g.plan.length) { goSleep(g); return; }
+  // 路上有牛奶販賣機、扭蛋機、按摩椅…的話,有時候會先停下來玩一下(每人最多 2 次)
+  if ((g.attr || 0) < 2 && Math.random() < 0.35 && tryAttraction(g)) return;
   const type = g.plan.shift();
   const f = pickFac(type, g);
   if (!f) { nextActivity(g); return; }
   bubble(g, FAC[type].icon, 2);
   enterFac(g, f.id, () => { g.state = 'using'; g.timer = FAC[type].time * (0.85 + Math.random() * 0.3); g.using = f.id; });
 }
+/** 找一個附近可以用的擺設,走到旁邊、停一下、付錢、開心 */
+function tryAttraction(g) {
+  const [gx, gy] = tileOf(g);
+  const cands = [];
+  for (const d of S.decor) {
+    const u = DECOR[d.type].use; if (!u) continue;
+    const w = decorW(d.type);
+    // 擺設前面(下面一格)或左右,走得到的格子
+    const spots = [];
+    for (let x = d.x; x < d.x + w; x++) spots.push([x, d.y + 1, 1]);
+    spots.push([d.x - 1, d.y, 0], [d.x + w, d.y, 2]);
+    const ok = spots.find(([x, y]) => y >= 0 && y < ROWS && x >= 0 && x < COLS && walk[y][x] && dist[y][x] >= 0);
+    if (ok) cands.push({ d, u, at: ok, far: Math.abs(ok[0] - gx) + Math.abs(ok[1] - gy) });
+  }
+  if (!cands.length) return false;
+  cands.sort((a, b) => a.far - b.far);
+  const c = cands[Math.floor(Math.random() * Math.min(3, cands.length))];
+  if (c.far > 14) return false;                      // 太遠就算了
+  g.attr = (g.attr || 0) + 1; S.stats.attr = (S.stats.attr || 0) + 1;
+  g.state = 'toFac';
+  goTo(g, c.at[0], c.at[1], () => {
+    if (!S.decor.includes(c.d)) { nextActivity(g); return; }
+    g.dir = c.at[2]; g.state = 'rest'; g.timer = 2.2;
+    bubble(g, c.u.icon, 2);
+    g.sat += c.u.sat + (c.u.likes === g.type ? 3 : 0);
+    if (c.u.fee) pay(g, c.u.fee);
+    else float(g.x, g.y - 36, '♥', '#ff7a9a');
+  });
+  return true;
+}
 function finishActivity(g) {
   const f = facById(g.using);
   g.using = null;
   if (!f) { exitFac(g); nextActivity(g); return; }
   const d = F(f), L = f.lv;
-  let gain = d.sat[L - 1] + (f.aura || 0) + (f.combo || 0);
+  let gain = d.sat[L - 1] + (f.aura || 0) + (f.combo || 0) + (f.deco || 0);
   if (TYPES[g.type].likes.includes(f.type)) { gain *= 1.5; g.favHit = f.type; }
   if (f.type === 'onsen') gain *= seasonOf(S.day).onsen;
   if (event && event.id === 'rain' && d.pool) gain *= 1.3;
@@ -614,13 +653,13 @@ function updateGuest(g, dt) {
 //    湯守  在各個浴池之間巡,調水溫
 // ============================================================
 const DESK_SPOTS = [DESK.x + 0.55, DESK.x + DESK.w - 0.55];
-const LOBBY = i => [11 + i % 4, 21];
+const LOBBY = i => [11 + i % 4, OY + 21];
 function syncStaff() {
   staff = staff.filter(a => S.crew.includes(a.c));
   for (const c of S.crew) {
     if (staff.some(a => a.c === c)) continue;
     const i = staff.length;
-    staff.push({ id: c.id, c, char: c.char, x: (LOBBY(i)[0]) * T + 16, y: 21.8 * T, dir: 3, frame: 0, moving: false, path: [], state: 'idle', target: null, post: null, timer: 0, at: null });
+    staff.push({ id: c.id, c, char: c.char, x: (LOBBY(i)[0]) * T + 16, y: (OY + 21.8) * T, dir: 3, frame: 0, moving: false, path: [], state: 'idle', target: null, post: null, timer: 0, at: null });
   }
 }
 /** 讓員工離開現在的崗位(設施要拆、要搬的時候) */
@@ -710,6 +749,7 @@ function startDay() {
   if (event && event.id === 'rain') n *= 0.7;
   if (S.ads.tv) n += 3;
   if (comboOn('festival')) n += 1;
+  if (comboOn('lucky')) n += 1;
   n += modSum('arrive');
   n += Object.keys(S.ads).filter(k => k !== 'tv').length;
   n = Math.max(1, Math.min(30, Math.round(n + (Math.random() * 2 - 1))));
@@ -1070,6 +1110,8 @@ const FLOOR = { room: 'tatami', bigroom: 'tatami', bath: 'fl_bath', family: 'fl_
   egg: 'fl_stone', arcade: 'fl_dining', tea: 'tatami', massage: 'fl_wood', koi: 'fl_stone', shrine: 'fl_stone' };
 const OUTDOOR = { onsen: 1, footbath: 1, egg: 1, koi: 1, shrine: 1 };
 
+const floorOf = f => f.floor || FLOOR[f.type];
+const wallOf = f => f.wall || 'wl_plain';
 function renderStatic() {
   const c = document.createElement('canvas');
   c.width = WW; c.height = WH;
@@ -1081,9 +1123,19 @@ function renderStatic() {
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   for (let i = 0; i < 3800; i++) { g.fillStyle = rnd() < 0.5 ? '#6aa94e' : '#8ccb68'; g.fillRect(Math.floor(rnd() * WW / 4) * 4, Math.floor(rnd() * WH / 4) * 4, 4, 4); }
   // 自己的土地:木頭走廊;櫃台一帶是大廳
-  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (isOwned(x, y)) tile(g, 'fl_wood2', x * T, y * T, T, T);
-  tile(g, 'fl_wood', 11 * T, 19 * T, 10 * T, 4 * T);
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (isOwned(x, y)) tile(g, hallFloor('hall'), x * T, y * T, T, T);
+  tile(g, hallFloor('lobby'), 11 * T, (OY + 19) * T, 10 * T, 4 * T);
   tile(g, 'fl_stone', ENTRANCE[0] * T, ENTRANCE[1] * T, T, T);
+  // 還沒買的地:種一些樹、竹林,看起來像山邊(買下來就清掉)
+  const SCEN = ['bush', 'bamboo', 'bush', 'maple', 'sakura', 'bamboo', 'bush'];
+  for (let cy = 0; cy < ROWS / CHUNK; cy++) for (let cx = 0; cx < COLS / CHUNK; cx++) {
+    if (S.owned.includes(`${cx},${cy}`)) continue;
+    let s2 = cx * 31 + cy * 17 + 3;
+    const r2 = () => (s2 = (s2 * 16807) % 2147483647) / 2147483647;
+    const items = [];
+    for (let i = 0; i < 4; i++) items.push([SCEN[Math.floor(r2() * SCEN.length)], cx * CHUNK + 1 + Math.floor(r2() * (CHUNK - 3)), cy * CHUNK + 3 + Math.floor(r2() * (CHUNK - 3))]);
+    items.sort((a, b) => a[2] - b[2]).forEach(([n, x, y]) => g.drawImage(SPR[n], x * T, (y + 1) * T - sprH(n)));
+  }
   // 還沒買的地:暗一點
   g.fillStyle = 'rgba(20,40,10,.22)';
   for (let cy = 0; cy < ROWS / CHUNK; cy++) for (let cx = 0; cx < COLS / CHUNK; cx++) if (!S.owned.includes(`${cx},${cy}`)) g.fillRect(cx * CHUNK * T, cy * CHUNK * T, CHUNK * T, CHUNK * T);
@@ -1098,8 +1150,13 @@ function renderStatic() {
   }
   // 設施的地板與牆
   for (const f of S.facs) {
-    tile(g, FLOOR[f.type], f.x * T, f.y * T, F(f).w * T, F(f).h * T);
-    if (!OUTDOOR[f.type]) wallBox(g, f);
+    tile(g, floorOf(f), f.x * T, f.y * T, F(f).w * T, F(f).h * T);
+    if (!OUTDOOR[f.type]) {
+      // 牆紙:室內設施最上面那一條(家具、客人會畫在它上面,看起來像靠著牆)
+      const wl = SPR[wallOf(f)], w = F(f).w * T;
+      for (let x = 0; x < w; x += 32) g.drawImage(wl, 0, 0, Math.min(32, w - x), 24, f.x * T + x, f.y * T, Math.min(32, w - x), 24);
+      wallBox(g, f);
+    }
   }
   staticLayer = c;
 }
@@ -1281,7 +1338,7 @@ function drawFac(f, now, layer) {
 const kz = () => 1 / Math.min(1, cam.s);
 function label(x, y, text, bg) {
   const k = kz();
-  ctx.font = `bold ${Math.round(11 * k)}px "PingFang TC",sans-serif`;
+  ctx.font = `${Math.round(12 * k)}px "Cubic11","PingFang TC",sans-serif`;
   const w = ctx.measureText(text).width + 12 * k, hh = 18 * k;
   ctx.fillStyle = bg; roundRect(x - w / 2, y - hh / 2, w, hh, hh / 2); ctx.fill();
   ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -1289,7 +1346,7 @@ function label(x, y, text, bg) {
 }
 function bubbleAt(x, y, text) {
   const k = kz();
-  ctx.font = `${Math.round(13 * k)}px "PingFang TC",sans-serif`;
+  ctx.font = `${Math.round(12 * k)}px "Cubic11","PingFang TC",sans-serif`;
   const w = Math.max(24 * k, ctx.measureText(text).width + 12 * k), hh = 20 * k;
   ctx.fillStyle = 'rgba(255,255,255,.95)';
   roundRect(x - w / 2, y - hh, w, hh, 8 * k); ctx.fill();
@@ -1372,7 +1429,7 @@ function draw(now) {
   for (const f of S.facs) {
     if (!isRoom(f) || !guests.some(g => g.room === f.id && g.state === 'sleep')) continue;
     const k = (now / 600) % 1;
-    ctx.fillStyle = `rgba(255,255,255,${1 - k})`; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillStyle = `rgba(255,255,255,${1 - k})`; ctx.font = '12px "Cubic11",sans-serif'; ctx.textAlign = 'center';
     ctx.fillText('z', f.x * T + 40 + k * 8, f.y * T + 30 - k * 14);
     ctx.fillText('Z', f.x * T + 48 + k * 8, f.y * T + 22 - k * 16);
   }
@@ -1412,7 +1469,7 @@ function draw(now) {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const f of fx) {
     ctx.globalAlpha = 1 - f.t;
-    ctx.font = `bold ${Math.round(13 * kz())}px "PingFang TC",sans-serif`;
+    ctx.font = `${Math.round(12 * kz())}px "Cubic11","PingFang TC",sans-serif`;
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(40,25,10,.8)';
     ctx.strokeText(f.text, f.x, f.y - f.t * 24); ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y - f.t * 24);
     ctx.globalAlpha = 1;
@@ -1423,7 +1480,7 @@ function drawGhost(now) {
   const p = place, x = p.x * T, y = p.y * T, w = p.w * T, h = p.h * T;
   ctx.globalAlpha = 0.75;
   if (!isFacPlace(p)) sprF(p.type, x, y + T - sprH(p.type), p.flip);
-  else { tile(ctx, FLOOR[p.type], x, y, w, h); drawFac({ type: p.type, x: p.x, y: p.y, lv: p.obj ? p.obj.lv : 1 }, now); }
+  else { tile(ctx, p.obj ? floorOf(p.obj) : FLOOR[p.type], x, y, w, h); drawFac({ type: p.type, x: p.x, y: p.y, lv: p.obj ? p.obj.lv : 1 }, now); }
   ctx.globalAlpha = 1;
   ctx.fillStyle = p.reason ? 'rgba(230,60,60,.35)' : 'rgba(80,220,120,.3)';
   ctx.fillRect(x, y, w, h);
@@ -1521,7 +1578,7 @@ $('sheetBody').addEventListener('click', e => {
   const b = e.target.closest('[data-act]');
   if (!b || b.disabled) return;
   const [act, id] = b.dataset.act.split(':');
-  ({ build: startPlaceFac, decor: startPlaceDecor, research: doResearch, hire: doHire, train: doTrain, fire: doFire, ad: doAd })[act](id);
+  ({ build: startPlaceFac, decor: startPlaceDecor, research: doResearch, hire: doHire, train: doTrain, fire: doFire, ad: doAd, hall: k => openInterior({ hall: k }) })[act](id);
 });
 
 function itemHTML({ act, icon, name, sub, cost, lockText, disabled }) {
@@ -1540,10 +1597,14 @@ function openBuild() {
 function openDecor() {
   openSheet('🌿 擺設(放走道上,附近 2 格的設施會變好)', DECOR_ORDER.map(id => {
     const d = DECOR[id];
-    const lock = !unlocked(id) ? '需要研究' : '';
+    const lock = !unlocked(id) ? '需要研究' : d.stars && stars() < d.stars ? `🔒 ${d.stars}★` : '';
     const pic = `<img class="pic" src="${sprURL(id)}" style="width:${sprW(id)}px;height:${sprH(id)}px">`;
-    return itemHTML({ act: 'decor:' + id, icon: pic, name: d.name, sub: `風雅 +${d.val}${d.plant ? ' · 植物' : ''}`, cost: '¥' + d.cost, lockText: lock, disabled: !!lock || S.money < d.cost });
-  }).join(''));
+    const use = d.use ? ` · ${d.use.icon}客人會用${d.use.fee ? `(¥${d.use.fee})` : ''}` : '';
+    return itemHTML({ act: 'decor:' + id, icon: pic, name: d.name, sub: `風雅 +${d.val}${d.plant ? ' · 植物' : ''}${use}`, cost: '¥' + d.cost, lockText: lock, disabled: !!lock || S.money < d.cost });
+  }).join('') + `<h4 class="sec">🎨 換地板</h4>` +
+    itemHTML({ act: 'hall:hall', icon: `<img class="pic" src="${sprURL(hallFloor('hall'))}" style="width:32px;height:32px">`, name: '走廊地板', sub: '整片走廊換一種地板', cost: '¥' + HALL_COST, lockText: '', disabled: false }) +
+    itemHTML({ act: 'hall:lobby', icon: `<img class="pic" src="${sprURL(hallFloor('lobby'))}" style="width:32px;height:32px">`, name: '大廳地板', sub: '櫃台那一區', cost: '¥' + HALL_COST, lockText: '', disabled: false }) +
+    '<p class="note">室內設施的地板、牆紙:點設施 → 🎨 裝潢</p>');
 }
 function openResearch() {
   const st = stars();
@@ -1791,8 +1852,8 @@ function openPanel(sel) {
     const d = DECOR[sel.decor.type];
     $('pIcon').textContent = '🌿'; $('pName').textContent = d.name;
     $('pDesc').textContent = `風雅 +${d.val}。讓附近 2 格內的設施客人更滿意。`;
-    $('pStat').textContent = '';
-    $('pBtn').style.display = 'none'; $('pFlip').style.display = '';
+    $('pStat').textContent = d.use ? `客人經過會停下來用:${d.use.icon}${d.use.fee ? ` 收 ¥${d.use.fee}` : ''} · 滿意 +${d.use.sat}` : '';
+    $('pBtn').style.display = 'none'; $('pFlip').style.display = ''; $('pDeco').style.display = 'none';
     $('pSell').textContent = `收起(退 ¥${Math.floor(d.cost / 2)})`;
   } else {
     const f = sel.fac, d = F(f), L = f.lv, st = stars();
@@ -1802,6 +1863,7 @@ function openPanel(sel) {
     if (d.cap) stat.push(`${d.cap[L - 1]} 人`);
     if (d.fee) stat.push(`消費 ¥${d.fee[L - 1]}`);
     if (f.aura) stat.push(`擺設 +${f.aura}`);
+    if (f.deco) stat.push(`🎨裝潢 +${f.deco}`);
     if (f.comboNames && f.comboNames.length) stat.push('🎉' + f.comboNames.join('、'));
     if (isRoom(f)) stat.push(f.dirty ? '🧹 待打掃' : guests.some(g => g.room === f.id) ? '有客人' : '空房');
     if (!f.door) stat.push('⚠️ 沒有路進去');
@@ -1809,7 +1871,7 @@ function openPanel(sel) {
     $('pName').textContent = `${d.name} · ${'●'.repeat(L)}${'○'.repeat(3 - L)}`;
     $('pDesc').textContent = d.desc;
     $('pStat').textContent = stat.join(' · ');
-    const btn = $('pBtn'); btn.style.display = ''; $('pFlip').style.display = 'none';
+    const btn = $('pBtn'); btn.style.display = ''; $('pFlip').style.display = 'none'; $('pDeco').style.display = '';
     if (L >= 3) { btn.textContent = '已經是最高級'; btn.disabled = true; }
     else if (st < d.need[L]) { btn.textContent = `🔒 升級需要 ${d.need[L]}★`; btn.disabled = true; }
     else { btn.textContent = `升級 ¥${d.cost[L].toLocaleString()}`; btn.disabled = S.money < d.cost[L]; }
@@ -1822,6 +1884,37 @@ function closePanel() { selected = null; $('panel').classList.remove('on'); }
 $('pMove').addEventListener('click', () => { if (selected) startMove(selected); });
 $('pFlip').addEventListener('click', () => { const d = selected && selected.decor; if (!d) return; d.flip = !d.flip; tone(520, 0.04, 'square', 0.05); save(); });
 $('pClose').addEventListener('click', closePanel);
+$('pDeco').addEventListener('click', () => { const f = selected && selected.fac; if (f) openInterior({ fac: f }); });
+
+// ---------- 裝潢:換地板、牆紙 ----------
+let interiorFor = null;
+/** target = { fac } 或 { hall: 'hall' | 'lobby' } */
+function openInterior(target) {
+  interiorFor = target;
+  const f = target.fac, st = stars();
+  const cur = f ? floorOf(f) : hallFloor(target.hall);
+  const sw = (id, info, kind, on) => {
+    const lock = info.stars && st < info.stars ? `🔒${info.stars}★` : '';
+    return `<button class="swatch ${on ? 'on' : ''}" data-deco="${kind}:${id}" ${lock || on ? 'disabled' : ''}>
+      <img src="${sprURL(id)}" alt=""><b>${info.name}</b><small>${on ? '使用中' : lock || '¥' + (f ? info.cost : HALL_COST)}</small></button>`;
+  };
+  let html = `<h4 class="sec">地板</h4><div class="swatches">${Object.entries(FLOORS).map(([id, info]) => sw(id, info, 'floor', id === cur)).join('')}</div>`;
+  if (f && !OUTDOOR[f.type]) html += `<h4 class="sec">牆紙</h4><div class="swatches">${Object.entries(WALLS).map(([id, info]) => sw(id, info, 'wall', id === wallOf(f))).join('')}</div>`;
+  html += f ? `<p class="note">換過地板 +${DECO_BONUS}、換過牆紙 +${DECO_BONUS},這間的客人更滿意(${F(f).name}現在 🎨+${f.deco || 0})</p>` : '<p class="note">走廊、大廳換地板只是好看,沒有加成</p>';
+  openSheet(f ? `🎨 裝潢:${F(f).name}` : target.hall === 'lobby' ? '🎨 大廳地板' : '🎨 走廊地板', html);
+}
+$('sheetBody').addEventListener('click', e => {
+  const b = e.target.closest('[data-deco]'); if (!b || !interiorFor) return;
+  const [kind, id] = b.dataset.deco.split(':'), info = (kind === 'wall' ? WALLS : FLOORS)[id];
+  const f = interiorFor.fac, cost = f ? info.cost : HALL_COST;
+  if (S.money < cost) { toast('錢不夠喔'); return; }
+  if (info.stars && stars() < info.stars) return;
+  S.money -= cost;
+  if (f) f[kind] = id; else { S.hall = S.hall || {}; S.hall[interiorFor.hall] = id; }
+  rebuild(); hud(); save();
+  tone(660, 0.08, 'triangle', 0.14); setTimeout(() => tone(990, 0.1, 'triangle', 0.12), 90);
+  openInterior(interiorFor);
+});
 $('pBtn').addEventListener('click', () => {
   const f = selected && selected.fac; if (!f) return;
   const d = F(f), L = f.lv;
@@ -2091,6 +2184,16 @@ function show(id) { for (const s of ['startScreen', 'gameScreen']) $(s).classLis
 async function start(fresh) {
   boot(fresh ? freshSave() : ((await loadBest(SAVE_KEY)) || freshSave()));
 }
+/** v2.4 地圖往上加高 OY 格:舊存檔的東西整個往下搬,土地編號 cy + 4 */
+function migrateMap(sv) {
+  if (sv.mapV >= 2) return;
+  for (const f of sv.facs) f.y += OY;
+  for (const d of sv.decor) d.y += OY;
+  sv.owned = sv.owned.map(k => { const [cx, cy] = k.split(',').map(Number); return `${cx},${cy + OY / CHUNK}`; });
+  sv.mapV = 2;
+}
+/** 走廊、大廳的地板(可以在擺設選單換) */
+const hallFloor = k => (S.hall && S.hall[k]) || (k === 'lobby' ? 'fl_wood' : 'fl_wood2');
 /** 把一份存檔放進遊戲、從頭初始化畫面(開始、讀存檔碼、開第二間旅館都走這裡) */
 function boot(save0) {
   S = save0;
@@ -2099,6 +2202,7 @@ function boot(save0) {
   S.stats.wishes = S.stats.wishes || 0;
   if (!S.crew) { S.crew = []; for (let i = 0; i < (S.staff || 1); i++) S.crew.push(newCrew('clean', S.crew)); delete S.staff; }
   for (const d of S.decor) d.flip = !!d.flip;
+  migrateMap(S);
   if (S.dayDone) { delete S.dayDone; if (!S.endingPending) S.day++; }      // 上次停在結算畫面
   guests = []; staff = []; fx = []; parts = []; deskQueue = [];
   inSummary = false; inChoice = false; $('summary').classList.remove('on'); $('choice').classList.remove('on'); $('ending').classList.remove('on');

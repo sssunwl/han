@@ -676,3 +676,212 @@ export const JP_KIT = {
   massagebed: { w: 64, h: 32, tags: ['家具'], make: massagebed },
   teaset: { w: 32, h: 32, tags: ['和風', '小物'], make: teaset },
 };
+
+// ================= 第三批(v2.4):有玩頭的擺設、可以換的地板與牆紙 =================
+const PINK = tone('#ffb3c9'), SAKURA = tone('#ffc4d6'), MAPLE = tone('#e8583a'), TRUNK = tone('#7a5238');
+
+const maneki = mk(32, 48, b => {
+  // 招財貓:舉右手、紅項圈、金鈴鐺、拿小判
+  b.rect(8, 40, 16, 6, RED.mid); b.hline(8, 40, 16, RED.hi);                                       // 坐墊
+  b.oval(16, 31, 9, 10, WHITE.lo); b.oval(15, 30, 8.5, 9.5, WHITE.mid); b.oval(12, 27, 3, 4, WHITE.hi);   // 身體
+  b.oval(16, 16, 9, 8, WHITE.mid); b.oval(13, 13, 3, 2, WHITE.hi);                                   // 頭
+  b.map(7, 6, ['#...', '##..', '###.'], { '#': WHITE.mid }); b.map(21, 6, ['...#', '..##', '.###'], { '#': WHITE.mid });   // 耳朵
+  b.px(9, 8, PINK.mid); b.px(22, 8, PINK.mid);
+  b.rect(11, 15, 2, 2, '#2b1f2e'); b.rect(19, 15, 2, 2, '#2b1f2e'); b.px(16, 18, PINK.lo);           // 眼、鼻
+  b.hline(9, 18, 3, '#c8c0d0'); b.hline(20, 18, 3, '#c8c0d0');
+  b.rect(10, 23, 12, 2, RED.mid); b.oval(16, 26, 2, 2, GOLD.mid); b.px(15, 25, GOLD.hi);             // 項圈鈴鐺
+  b.rect(23, 6, 5, 9, WHITE.mid); b.rect(23, 6, 5, 2, WHITE.hi); b.px(24, 5, PINK.mid);               // 舉起的手
+  b.rect(9, 30, 9, 6, GOLD.mid); b.hline(9, 30, 9, GOLD.hi); b.hline(10, 33, 7, GOLD.lo);            // 小判
+});
+const daruma = mk(32, 32, b => {
+  b.oval(16, 19, 11, 11, RED.lo); b.oval(15, 18, 10.5, 10.5, RED.mid); b.oval(11, 13, 3, 4, RED.hi);
+  b.oval(16, 15, 6.5, 5.5, '#ffe9d6');                                                               // 臉
+  b.rect(12, 14, 2, 2, '#2b1f2e'); b.rect(18, 14, 2, 2, '#ffffff'); b.px(18, 14, '#c8c0d0');         // 一隻眼睛畫好了
+  b.hline(11, 12, 4, '#2b1f2e'); b.hline(17, 12, 4, '#2b1f2e'); b.hline(14, 18, 4, '#2b1f2e');
+  b.map(12, 22, ['#.#.#', '.###.', '#.#.#'], { '#': GOLD.mid });                                     // 金色的字
+});
+const tanuki = mk(32, 48, b => {
+  // 信樂燒狸貓:斗笠、大肚子、酒瓶
+  const t = tone('#9a6a48');
+  b.oval(16, 34, 10, 11, t.lo); b.oval(15, 33, 9.5, 10.5, t.mid);
+  b.oval(16, 36, 6, 6, '#e8d2b0'); b.oval(15, 35, 3, 3, '#f6e6cc');                                  // 肚子
+  b.oval(16, 18, 8, 7, t.mid); b.oval(13, 21, 2.6, 2, '#3a2c2a'); b.oval(19, 21, 2.6, 2, '#3a2c2a');  // 臉+眼圈
+  b.px(13, 21, '#fff'); b.px(19, 21, '#fff'); b.rect(15, 23, 2, 2, '#2b1f2e');
+  b.oval(16, 12, 12, 3, tone('#c9a46a').mid); b.oval(16, 10, 6, 3, tone('#c9a46a').hi);              // 斗笠
+  b.rect(24, 30, 6, 10, tone('#6a8a9a').mid); b.rect(25, 28, 4, 3, tone('#6a8a9a').hi); b.px(26, 34, '#fff');  // 酒瓶
+  b.rect(8, 44, 7, 3, t.dk); b.rect(17, 44, 7, 3, t.dk);
+});
+const vending = mk(32, 64, b => {
+  // 溫泉牛奶販賣機
+  box(b, 3, 2, 26, 60, 3, tone('#5aa8e8'));
+  b.rect(6, 7, 20, 8, '#ffffff'); b.map(9, 8, ['#.#.###.#...#.#', '###..#..#...#.#', '#.#..#..#...##.', '#.#..#..#...#.#', '#.#.###.###.#.#'], { '#': '#3a7ac8' });   // MILK
+  b.rect(6, 16, 20, 24, '#d8f1ff');
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) {
+    const x = 7 + c * 5, y = 18 + r * 7, cap = ['#ff8fb1', '#ffd25a', '#8a5a3c', '#ffffff'][c];
+    b.rect(x, y + 1, 3, 5, '#ffffff'); b.rect(x, y, 3, 1, cap); b.px(x, y + 3, '#c8e0f0');
+  }
+  b.rect(6, 42, 20, 4, '#3a3440'); b.px(22, 43, '#5dff9b'); b.px(9, 43, '#ffd84a');
+  b.rect(8, 50, 16, 7, '#2b1f2e'); b.rect(9, 51, 14, 5, '#4a4452');                                  // 取物口
+});
+const gacha = mk(32, 64, b => {
+  // 扭蛋機:透明圓頂裝滿彩色扭蛋
+  box(b, 6, 30, 20, 30, 3, RED);
+  b.oval(16, 18, 11, 12, '#d8f1ffcc');
+  const cols = ['#ff8fb1', '#ffd25a', '#6fc3ff', '#7fdc8a', '#b98cff', '#ff9a52'];
+  for (let i = 0; i < 11; i++) { const x = 9 + (i * 5) % 14, y = 16 + Math.floor(i / 3) * 4 + (i % 2); b.oval(x, y, 2.4, 2.4, cols[i % 6]); b.px(x - 1, y - 1, '#ffffff'); }
+  b.px(10, 10, '#ffffff'); b.px(11, 9, '#ffffff'); b.px(10, 11, '#ffffffaa');
+  b.rect(5, 28, 22, 3, STEEL.mid); b.hline(5, 28, 22, STEEL.hi);
+  b.oval(16, 40, 4, 4, STEEL.mid); b.rect(13, 39, 6, 2, STEEL.hi);                                   // 轉鈕
+  b.rect(12, 50, 8, 6, '#2b1f2e'); b.oval(16, 53, 2, 2, '#ffd25a');                                  // 出口
+});
+const claw = mk(32, 64, b => {
+  // 夾娃娃機
+  box(b, 3, 2, 26, 60, 3, tone('#ff8fb1'));
+  b.rect(5, 6, 22, 5, '#ffe04a'); b.map(9, 7, ['#.#.#.#.#', '.#.#.#.#.', '#.#.#.#.#'], { '#': '#ff4fb8' });
+  b.rect(5, 12, 22, 26, '#eaf6ff'); b.rect(5, 12, 22, 2, '#c8e0f0');
+  b.vline(16, 14, 6, STEEL.lo); b.map(13, 20, ['#....#', '.#..#.', '..##..'], { '#': STEEL.mid });   // 爪子
+  for (const [x, c] of [[9, '#ffd25a'], [15, '#8a5a3c'], [21, '#7fdc8a'], [12, '#6fc3ff'], [19, '#ffb3c9']]) {
+    const y = x % 2 ? 31 : 29; b.oval(x, y, 3, 3, c); b.px(x - 1, y - 1, '#2b1f2e'); b.px(x + 1, y - 1, '#2b1f2e');   // 娃娃
+  }
+  b.rect(5, 34, 22, 4, '#ff9fc4');
+  box(b, 3, 40, 26, 10, 3, tone('#e86aa0'));
+  b.rect(9, 41, 2, 4, '#c8c8d0'); b.oval(10, 41, 2, 1.6, '#ff4040'); b.oval(21, 44, 2, 2, '#5dff9b');
+  b.rect(12, 53, 8, 5, '#2b1f2e');
+});
+const mchair = mk(32, 64, b => {
+  // 按摩椅(面向前)
+  const t = tone('#8a4a3a');
+  b.rrect(5, 6, 22, 34, t.lo, 2); b.rrect(5, 5, 22, 33, t.mid, 2); b.rrect(8, 8, 16, 26, t.hi, 2); b.rrect(9, 9, 14, 24, t.mid, 2);
+  for (let y = 12; y < 32; y += 5) b.hline(11, y, 10, t.lo);
+  b.rrect(2, 26, 7, 22, t.mid, 2); b.rrect(23, 26, 7, 22, t.lo, 2); b.rect(3, 30, 5, 3, '#5dff9b');   // 扶手+控制鈕
+  b.rrect(6, 36, 20, 14, t.mid, 2); b.hline(7, 36, 18, t.hi);
+  b.rect(8, 50, 16, 10, t.lo); b.rect(9, 51, 14, 8, t.mid);                                           // 腳墊
+});
+function tree(kind) {
+  return mk(64, 96, b => {
+    const L = kind === 'sakura' ? SAKURA : MAPLE, L2 = kind === 'sakura' ? tone('#ff9fbe') : tone('#ffb03a');
+    b.rect(28, 56, 8, 36, TRUNK.mid); b.vline(28, 56, 36, TRUNK.hi); b.vline(35, 56, 36, TRUNK.lo);
+    b.rect(20, 66, 10, 3, TRUNK.mid); b.rect(36, 60, 12, 3, TRUNK.mid);                               // 樹枝
+    b.oval(32, 92, 18, 3, '#00000030');
+    const blob = (x, y, rx, ry) => { b.oval(x + 1, y + 2, rx, ry, L.lo); b.oval(x, y, rx, ry, L.mid); b.oval(x - rx * 0.3, y - ry * 0.35, rx * 0.5, ry * 0.4, L.hi); };
+    blob(18, 50, 14, 11); blob(46, 48, 15, 12); blob(32, 36, 18, 14); blob(16, 30, 11, 9); blob(48, 28, 12, 10); blob(32, 18, 14, 11);
+    for (let i = 0; i < 22; i++) { const x = 8 + (i * 23) % 48, y = 12 + (i * 17) % 46; b.px(x, y, L2.mid); b.px(x + 1, y, L2.hi); }
+    for (const [x, y] of [[14, 80], [44, 84], [24, 88], [50, 76]]) b.px(x, y, L.mid);                   // 落花/落葉
+  });
+}
+const capybara = mk(64, 48, b => {
+  // 水豚泡湯:小木桶裡泡著一隻水豚,頭上頂著柚子
+  box(b, 6, 20, 52, 26, 6, HINOKI);
+  b.rect(10, 22, 44, 4, '#7fd8d0');
+  const c = tone('#a8764e');
+  b.oval(32, 18, 14, 9, c.lo); b.oval(31, 17, 13.5, 8.5, c.mid); b.oval(26, 13, 6, 3, c.hi);           // 頭
+  b.rect(19, 10, 4, 3, c.lo); b.rect(40, 10, 4, 3, c.lo);                                             // 耳
+  b.rect(24, 16, 2, 2, '#2b1f2e'); b.rect(37, 16, 2, 2, '#2b1f2e');
+  b.oval(31, 21, 5, 3, c.dk); b.px(29, 20, '#2b1f2e'); b.px(33, 20, '#2b1f2e');                        // 鼻子
+  b.oval(31, 6, 5, 4, '#ffd23a'); b.oval(30, 5, 2, 1.6, '#fff09a'); b.px(31, 1, '#5a8a3a');            // 柚子
+  b.rect(10, 26, 44, 2, '#ffffff88');
+  for (const x of [14, 50]) { b.px(x, 14, '#ffffff99'); b.px(x + 1, 12, '#ffffff77'); }              // 熱氣
+  b.hline(6, 34, 52, IRON.mid); b.hline(6, 42, 52, IRON.mid);
+});
+const shishi = mk(64, 48, b => {
+  // 添水(鹿威):竹筒 + 石盆 + 小水流
+  b.oval(40, 38, 16, 7, STONE.lo); b.oval(39, 37, 15, 6, STONE.mid); b.oval(39, 36, 11, 4, '#56b7b0'); b.px(35, 35, '#ffffff');
+  b.rect(10, 18, 4, 26, '#a8b85a'); b.vline(10, 18, 26, '#c8d87a'); b.rect(28, 22, 4, 22, '#a8b85a');   // 支架
+  for (let i = 0; i < 30; i++) b.rect(8 + i, 24 - Math.round(i * 0.35), 1, 4, i < 2 ? '#7a8a3a' : '#a8b85a');   // 斜竹筒
+  b.rect(36, 12, 3, 4, '#a8b85a'); b.vline(37, 16, 18, '#9fe8ff');                                     // 引水竹管 + 水
+  b.oval(10, 44, 6, 2, '#6a5040'); b.px(26, 40, '#7cb85a'); b.px(54, 34, '#7cb85a');
+});
+const aquarium = mk(64, 64, b => {
+  box(b, 2, 40, 60, 22, 4, DARK);                                                                     // 櫃子
+  b.rect(4, 4, 56, 36, '#3a8ac8'); b.rect(5, 5, 54, 34, '#6fc3ff'); b.rect(5, 5, 54, 6, '#9fd8ff');
+  for (const [x, y, c] of [[14, 20, '#ff8a3d'], [36, 16, '#ffd84a'], [46, 28, '#ff5050'], [24, 30, '#ffffff']]) { b.oval(x, y, 4, 2.4, c); b.px(x + 4, y - 1, c); b.px(x + 4, y + 1, c); b.px(x - 2, y - 1, '#2b1f2e'); }
+  for (const x of [10, 30, 52]) { for (let y = 26; y < 39; y++) b.px(x + Math.round(Math.sin(y / 2) * 1.5), y, '#3a9a4a'); }
+  b.rect(5, 36, 54, 3, '#e8d2a0');
+  for (const [x, y] of [[20, 12], [21, 9], [44, 10]]) b.px(x, y, '#ffffff');
+  b.rect(2, 2, 60, 3, STEEL.mid);
+});
+
+// ---------- 地板(64×64 可重複鋪,不描邊)----------
+const fl_carpet = tile(b => {
+  b.rect(0, 0, 64, 64, '#b8302a');
+  for (let y = 0; y < 64; y += 16) for (let x = 0; x < 64; x += 16) {
+    const ox = x + ((y / 16) % 2) * 8;
+    b.map(ox + 4, y + 5, ['..#..', '.#.#.', '#...#', '.#.#.', '..#..'], { '#': '#e8bf5a' });
+  }
+  b.rect(0, 0, 64, 1, '#c8423a');
+});
+const fl_pink = tile(b => {
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) { const t = (x + y) % 2 ? PINK : CREAM; b.rect(x * 16, y * 16, 16, 16, t.mid); b.hline(x * 16, y * 16, 16, t.hi); b.hline(x * 16, y * 16 + 15, 16, t.lo); }
+});
+const fl_dark = tile(b => planks(b, tone('#5a3a2a'), 8, 31));
+const fl_bamboo = tile(b => {
+  for (let x = 0; x < 64; x += 8) { const t = tone(x % 16 ? '#c8c878' : '#b8b868'); b.rect(x, 0, 8, 64, t.mid); b.vline(x, 0, 64, t.hi); b.vline(x + 7, 0, 64, t.lo); for (let y = (x * 3) % 20; y < 64; y += 20) b.hline(x, y, 8, t.dk); }
+});
+const fl_marble = tile(b => {
+  for (let y = 0; y < 64; y += 32) for (let x = 0; x < 64; x += 32) { b.rect(x, y, 32, 32, '#f2eee8'); b.hline(x, y, 32, '#ffffff'); b.vline(x, y, 32, '#ffffff'); b.hline(x, y + 31, 32, '#cfc8c0'); b.vline(x + 31, y, 32, '#cfc8c0'); }
+  for (let i = 0; i < 40; i++) b.px((i * 37) % 64, (i * 23 + Math.floor(i / 3)) % 64, '#d8d0c8');
+  for (let i = 0; i < 14; i++) b.px(6 + i * 2, 10 + i, '#c8c0b8');
+});
+const fl_mint = tile(b => {
+  b.rect(0, 0, 64, 64, '#c8eedf');
+  for (let i = 0; i < 64; i += 16) { b.hline(0, i, 64, '#9fd8c4'); b.vline(i, 0, 64, '#9fd8c4'); }
+  for (const [x, y] of [[6, 6], [38, 22], [22, 40], [54, 54]]) b.px(x, y, '#ffffff');
+});
+const fl_star = tile(b => {
+  b.rect(0, 0, 64, 64, '#2e3a6a');
+  for (const [x, y, big] of [[8, 10, 1], [40, 6, 0], [26, 30, 1], [54, 26, 0], [12, 48, 0], [44, 50, 1], [60, 58, 0]]) {
+    b.px(x, y, '#ffe28a'); if (big) { b.px(x - 1, y, '#ffd84a'); b.px(x + 1, y, '#ffd84a'); b.px(x, y - 1, '#ffd84a'); b.px(x, y + 1, '#ffd84a'); }
+  }
+});
+const fl_grass = tile(b => {
+  b.rect(0, 0, 64, 64, '#7cc06a');
+  for (let i = 0; i < 70; i++) { const x = (i * 29) % 64, y = (i * 41 + i) % 64; b.px(x, y, i % 2 ? '#94d27e' : '#6aac58'); b.px(x, y - 1, i % 2 ? '#94d27e' : '#6aac58'); }
+  for (const [x, y] of [[10, 12], [44, 36], [28, 54]]) { b.px(x, y, '#ffffff'); b.px(x + 1, y, '#ffe28a'); }
+});
+
+// ---------- 牆紙:畫在室內設施最上面那一條(32×24,左右接續,不描邊)----------
+function wallBand(fn) {
+  return () => {
+    const b = new Bmp(32, 24);
+    fn(b);
+    b.rect(0, 0, 32, 2, '#6a4a30'); b.hline(0, 2, 32, '#8a6a48');                 // 上緣木條
+    b.rect(0, 20, 32, 4, '#7a5238'); b.hline(0, 20, 32, '#9a6a48'); b.hline(0, 23, 32, '#5a3a2a');   // 踢腳板
+    return b;
+  };
+}
+const WALLS = {
+  wl_plain: wallBand(b => { b.rect(0, 3, 32, 17, '#efe2c8'); for (let i = 0; i < 9; i++) b.px((i * 13) % 32, 5 + (i * 7) % 14, '#e2d2b4'); }),
+  wl_washi: wallBand(b => { b.rect(0, 3, 32, 17, '#f8f0dc'); for (let x = 0; x < 32; x += 8) b.vline(x, 3, 17, '#e8dcc0'); b.hline(0, 11, 32, '#e8dcc0'); }),
+  wl_wood: wallBand(b => { for (let x = 0; x < 32; x += 6) { b.rect(x, 3, 6, 17, x % 12 ? '#b07a4e' : '#a06a40'); b.vline(x, 3, 17, '#c88a5a'); } }),
+  wl_bamboo: wallBand(b => { for (let x = 0; x < 32; x += 4) { b.rect(x, 3, 4, 17, '#a8c06a'); b.vline(x, 3, 17, '#c8d88a'); b.vline(x + 3, 3, 17, '#88a04a'); b.hline(x, 6 + (x % 3) * 4, 4, '#788a3a'); } }),
+  wl_wave: wallBand(b => { b.rect(0, 3, 32, 17, '#3a5a9a'); for (let r = 0; r < 3; r++) for (let x = (r % 2) * 4; x < 36; x += 8) for (let a = 0; a < 8; a++) b.px(x - 4 + a, 18 - r * 5 - Math.round(Math.sin(a / 7 * Math.PI) * 3), '#cfe0ff'); }),
+  wl_sakura: wallBand(b => { b.rect(0, 3, 32, 17, '#ffe4ec'); for (const [x, y] of [[5, 7], [19, 14], [27, 6], [12, 16]]) b.map(x - 2, y - 2, ['.#.', '#o#', '.#.'], { '#': '#ff9fbe', o: '#ffe28a' }); }),
+  wl_leaf: wallBand(b => { b.rect(0, 3, 32, 17, '#dff0d0'); for (let x = 0; x < 32; x += 8) for (let a = 0; a < 8; a++) b.px(x + a, 11 + Math.round(Math.sin(a / 8 * Math.PI * 2) * 4), '#7ab060'); }),
+  wl_stripe: wallBand(b => { for (let x = 0; x < 32; x += 8) { b.rect(x, 3, 4, 17, '#ffc4d6'); b.rect(x + 4, 3, 4, 17, '#ffffff'); } }),
+  wl_star: wallBand(b => { b.rect(0, 3, 32, 17, '#2e3a6a'); for (const [x, y] of [[4, 6], [14, 12], [24, 7], [29, 16], [9, 16]]) { b.px(x, y, '#ffe28a'); b.px(x + 1, y, '#ffd84a'); } }),
+  wl_gold: wallBand(b => { b.rect(0, 3, 32, 17, '#e8bf5a'); for (let y = 3; y < 20; y += 6) for (let x = (y % 12 ? 0 : 6); x < 32; x += 12) b.rect(x, y, 6, 6, '#f2d27a'); }),
+};
+
+Object.assign(JP_KIT, {
+  maneki: { w: 32, h: 48, tags: ['和風', '裝飾'], make: maneki },
+  daruma: { w: 32, h: 32, tags: ['和風', '裝飾'], make: daruma },
+  tanuki: { w: 32, h: 48, tags: ['和風', '裝飾'], make: tanuki },
+  vending: { w: 32, h: 64, tags: ['家具'], make: vending },
+  gacha: { w: 32, h: 64, tags: ['家具'], make: gacha },
+  claw: { w: 32, h: 64, tags: ['家具'], make: claw },
+  mchair: { w: 32, h: 64, tags: ['家具'], make: mchair },
+  sakura: { w: 64, h: 96, tags: ['和風', '裝飾', '植物'], make: tree('sakura') },
+  maple: { w: 64, h: 96, tags: ['和風', '裝飾', '植物'], make: tree('maple') },
+  capybara: { w: 64, h: 48, tags: ['裝飾'], make: capybara },
+  shishi: { w: 64, h: 48, tags: ['和風', '裝飾'], make: shishi },
+  aquarium: { w: 64, h: 64, tags: ['家具'], make: aquarium },
+  fl_carpet: { w: 64, h: 64, tags: ['地板'], make: fl_carpet },
+  fl_pink: { w: 64, h: 64, tags: ['地板'], make: fl_pink },
+  fl_dark: { w: 64, h: 64, tags: ['地板'], make: fl_dark },
+  fl_bamboo: { w: 64, h: 64, tags: ['和風', '地板'], make: fl_bamboo },
+  fl_marble: { w: 64, h: 64, tags: ['地板'], make: fl_marble },
+  fl_mint: { w: 64, h: 64, tags: ['地板'], make: fl_mint },
+  fl_star: { w: 64, h: 64, tags: ['地板'], make: fl_star },
+  fl_grass: { w: 64, h: 64, tags: ['地板'], make: fl_grass },
+  ...Object.fromEntries(Object.entries(WALLS).map(([k, make]) => [k, { w: 32, h: 24, tags: ['牆紙', '可接續'], make }])),
+});
