@@ -1,5 +1,18 @@
 import './shared/offline.js';
 import { AVATARS, getProfiles, addProfile, removeProfile, getCurrentId, setCurrentId, currentProfile } from './shared/profile.js';
+import { tone } from './shared/kit.js';
+
+// 機舖音效:投幣是兩聲上揚的方波,選角色是短短一聲
+const coin = () => { tone(988, 0.08, 'square', 0.08); setTimeout(() => tone(1319, 0.22, 'square', 0.08), 80); };
+const blip = () => tone(660, 0.06, 'square', 0.06);
+
+// 點機台:先投幣再進遊戲(等音效播完一點點)
+document.querySelectorAll('.cab').forEach(a => a.addEventListener('click', e => {
+  if (e.metaKey || e.ctrlKey) return;
+  e.preventDefault();
+  coin();
+  setTimeout(() => { location.href = a.href; }, 260);
+}));
 
 const playersEl = document.getElementById('players');
 const newBox = document.getElementById('newBox');
@@ -17,6 +30,7 @@ function drawPlayers() {
     const el = document.createElement('div');
     el.className = 'player' + (p.id === cur ? ' on' : '');
     el.style.color = p.color;
+    el.style.setProperty('--pc', p.color);   // 「1P」標籤用(偽元素裡 currentColor 會變成自己的字色)
     el.innerHTML = `
       <span class="del" title="刪掉這個玩家">✕</span>
       <div class="face">${p.avatar}</div>
@@ -31,6 +45,7 @@ function drawPlayers() {
         return;
       }
       setCurrentId(p.id);
+      blip();
       drawPlayers();
     };
     playersEl.appendChild(el);
