@@ -49,9 +49,11 @@ scene.draw = drawScene;
 drawScene();
 
 // ---------- 換裝 ----------
-import { makeCharacter, makeFrame, randomLook, DEFAULT, FW, FH, DIRS, SKINS, HAIR_COLORS, CLOTH_COLORS, HAIRS, HAIR_NAMES } from '../../shared/pixelkit/character.js';
+import { makeCharacter, makeFrame, randomLook, FW, FH, SKINS, HAIR_COLORS, CLOTH_COLORS, HAIRS } from '../../shared/pixelkit/character.js';
 
-const look = { ...DEFAULT, hair: 'twintails', hairColor: HAIR_COLORS[3], cloth: CLOTH_COLORS[0] };
+const DIRS=['down','left','right','up'];
+const HAIR_NAMES={short:'短髮',bob:'妹妹頭',long:'長髮',ponytail:'馬尾',twintails:'雙馬尾',spiky:'刺刺頭',bun:'包包頭',curly:'捲髮'};
+const look = { ...randomLook(13), hair: 'twintails', hairColor: HAIR_COLORS[3], cloth: CLOTH_COLORS[0] };
 const ctl = $('controls');
 const opt = (label, key, list, names, swatch) => {
   ctl.insertAdjacentHTML('beforeend', `<b>${label}</b><div class="row" data-key="${key}">${list.map(v =>
@@ -136,4 +138,25 @@ window.PK = { look, makeCharacter, makeFrame };
     put({ hair: h, hairColor: HAIR_COLORS[(i + 5) % 7], skin: SKINS[(i + 1) % 5], cloth: CLOTH_COLORS[(i + 2) % 8] }, 8 + i * 30, 84, 'right');
     put({ hair: h, hairColor: HAIR_COLORS[(i + 1) % 7], skin: SKINS[(i + 3) % 5], cloth: CLOTH_COLORS[(i + 6) % 8] }, 8 + i * 30, 122, 'up');
   });
+}
+
+// ===== 雪糕店擴充素材 =====
+import { ICE_KIT } from '../../shared/pixelkit/icecream.js';
+for (const [name, kit] of Object.entries(ICE_KIT)) {
+  const bitmap = kit.make();
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.w * Z;
+  canvas.height = bitmap.h * Z;
+  const context = canvas.getContext('2d');
+  context.imageSmoothingEnabled = false;
+  context.drawImage(toCanvas(bitmap), 0, 0, canvas.width, canvas.height);
+  const card = document.createElement('div');
+  card.className = 'card';
+  const wrap = document.createElement('div');
+  wrap.className = 'checker';
+  wrap.append(canvas);
+  card.append(wrap, Object.assign(document.createElement('span'), {
+    textContent: `${name} ${bitmap.w}×${bitmap.h}`
+  }));
+  $('kitIce').append(card);
 }

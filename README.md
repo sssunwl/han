@@ -2,7 +2,23 @@
 
 給小孩玩的網頁小遊戲集。線上版:https://sssunwl.github.io/han/
 
-第一款是**方塊世界**(Minecraft 風格沙盒,目標對象小學四年級)。目前有六款:溫泉旅館(經營)、方塊世界、彈珠台、章魚燒、畫 Pizza、疊漢堡,全部可以離線玩。
+第一款是**方塊世界**(Minecraft 風格沙盒,目標對象小學四年級)。目前有七款:雪糕店(經營與找錢)、溫泉旅館(經營)、方塊世界、彈珠台、章魚燒、畫 Pizza、疊漢堡,全部可以離線玩。
+
+## 雪糕店(`games/icecream/`)
+
+用一隻手指照單疊雪糕：選甜筒或杯裝、點口味桶、加配料，完全符合就自動交出；也能直接交給客人，做錯只少一點小費。收錢後用三個大按鈕練找零（設定可關閉），客人坐下吃、留評價；點髒桌子清潔，也能請店員、清潔與宣傳員工幫忙。拖曳與雙指／滾輪能調整鏡頭，長按家具 450ms 可以搬移。
+
+每局從三個隨機地點選店面，客群與最愛口味重新抽選。有限的冰櫃格子要在客人最愛、季節口味與研究新品間取捨；每天有挑戰、特別訂單與人生選擇，每七天參加主題雪糕節。五星加上雪糕節冠軍通往結局，之後可玩傳說目標，或繼承研究、獎盃和一位員工開分店；分店新增美食家、彩虹、金箔與霓虹招牌。
+
+存檔以 `saveKey('icecream','save1')` 隔離玩家，localStorage 與 IndexedDB 雙重保存，營業每 15 秒以及隱藏／離頁時自動存檔。開始畫面可以輸出／輸入 ICE1 存檔碼，結算後重開從下一天開始。音效與音樂都是 WebAudio 合成，家具、角色與新素材全是遊戲間自己用 Pixelkit 程式畫的，沒有外部素材。
+
+自動玩家先啟動 `npm run dev`，再執行 `node tools/icecream_autoplay.mjs [最多天數=150] [跑幾次=1]`。使用 headless Chrome＋CDP 和獨立暫存設定檔，不碰個人瀏覽器存檔；可用 CHROME 指定執行檔、ICECREAM_URL 指定網址。每天先研究、訓練、請人、補冰櫃與擴店，白天每 0.5 秒服務，約 15% 會做錯，並處理選擇與比賽；輸出每個里程碑、五星與結局天數、每七天狀態與頁面錯誤。`window.ICE` 只在 Vite DEV 提供。
+
+**平衡**(自動玩家,2026-10-25):第一版口碑門檻 [0,150,500,1300,3000] 第 14 天就到結局,太快 → 改成 **[0,500,2000,5500,13000]**,連跑 2 次:開張大吉 第 3 天、雪糕大店 第 8 天、口味收藏家 第 9~10 天、人氣小店 第 11~13 天、**5★+雪糕節冠軍=結局 第 50 / 51 天**,0 錯誤。已知:後期 💡 會堆到一兩百點沒地方花,之後可以加研究項目。
+
+`ICE_SHOT=路徑 node tools/icecream_autoplay.mjs 13` 會在第 12 天中午截一張 240×150 當大廳機台圖(`public/lobby/icecream.png` 就是這樣來的)。
+
+分工:規格與審查 Claude、實作 Codex。`shared/tycoon/` 這次只給雪糕店用,溫泉旅館之後再遷移過來。
 
 ## 溫泉旅館(`games/onsen/`)— v2 自由建造版
 
@@ -167,6 +183,7 @@ SS:「我想要 LimeZu 版跟新版都在裡面」。做法:**同一款遊戲加
 
 ## 結構
 
+
 ```
 index.html          大廳:選自己是誰 → 選遊戲
 lobby.js
@@ -181,8 +198,10 @@ games/takoyaki/     章魚燒
 games/pizza/        畫 Pizza
 games/burger/       疊漢堡
 games/onsen/        溫泉旅館(data.js 數值、main.js 引擎)
-shared/pixelkit/    自己畫的像素素材(core 點陣圖、furniture 雪糕店、japanese 和風、character Q 版人物)
-tools/              素材匯出腳本(pixelkit_export.mjs)
+games/icecream/     雪糕店(data.js 數值、main.js 引擎,用 shared/tycoon)
+shared/tycoon/      經營遊戲共用骨架(存檔、格子尋路、客人、一天、目標結局、鏡頭、觸控、擺放),見該目錄 README
+shared/pixelkit/    自己畫的像素素材(core 點陣圖、furniture 雪糕店、icecream 雪糕與裝潢、japanese 和風、character Q 版人物)
+tools/              素材匯出、自動玩家(onsen_autoplay.mjs、icecream_autoplay.mjs)
 ```
 
 ## 怎麼跑

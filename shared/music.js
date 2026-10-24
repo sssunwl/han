@@ -11,6 +11,7 @@ const YO = [0, 2, 5, 7, 9];
 const IN = [0, 1, 5, 7, 8];
 
 export const TRACKS = {
+  icecream: { name: '雪糕車', bpm: 126, root: 65, scale: YO, lead: 'square', prog: [0, 4, 3, 4], drums: 'walk', seed: 73 },
   yu:       { name: '溫泉街',  bpm: 112, root: 62, scale: YO, lead: 'square',   prog: [0, 3, 4, 0], drums: 'walk',   seed: 11 },
   yozakura: { name: '夜櫻',    bpm: 76,  root: 64, scale: IN, lead: 'triangle', prog: [0, 3, 0, 4], drums: 'none',   seed: 23 },
   matsuri:  { name: '祭典',    bpm: 138, root: 62, scale: YO, lead: 'square',   prog: [0, 0, 3, 4], drums: 'taiko',  seed: 37 },
