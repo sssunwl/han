@@ -121,7 +121,8 @@ function compare(seeds) {
       for (const f of S.feed.filter(f => f.n > seen && f.n <= S.seq)) {
         if (f.kind === 'sys') continue;
         const op = f.op && S.ops.find(o => o.id === f.op);
-        console.log(`  [${f.kind}] ${f.id ? name(f.id) + ':' : ''}${f.text}${f.kind === 'bid' && op ? `  (搶 ${op.title})` : ''}`);
+        const who = f.id && !f.text.startsWith(name(f.id)) ? name(f.id) + ':' : '';
+        console.log(`  [${f.kind}] ${who}${f.text}${f.kind === 'bid' && op ? `  (搶 ${op.title})` : ''}`);
       }
       seen = S.seq;
       const r = E.endWeek(S);

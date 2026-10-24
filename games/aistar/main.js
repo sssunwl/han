@@ -258,11 +258,20 @@ function updateBubbles(now) {
     box.appendChild(el);
     bubOn.set(id, { el, until: now + 2600 + text.length * 70 });
   }
-  for (const [id, b] of bubOn) {
+  const placed = [], W = $('bubbles').clientWidth;
+  for (const [id, b] of [...bubOn].sort((p, q) => actors.get(q[0]).y - actors.get(p[0]).y)) {
     const a = actors.get(id); if (!a) continue;
-    const half = b.el.offsetWidth / 2, W = $('bubbles').clientWidth;      // 靠邊的泡泡往內推,不要被擠扁
-    b.el.style.left = Math.max(half + 4, Math.min(W - half - 4, cam.ox + a.x * cam.s)) + 'px';
-    b.el.style.top = (cam.oy + (a.y - 33) * cam.s) + 'px';
+    const w = b.el.offsetWidth, h = b.el.offsetHeight;
+    const x = Math.max(w / 2 + 4, Math.min(W - w / 2 - 4, cam.ox + a.x * cam.s));     // 靠邊的泡泡往內推,不要被擠扁
+    let y = cam.oy + (a.y - 33) * cam.s;
+    // 跟已經放好的泡泡疊到 → 往上移
+    for (let k = 0; k < 6; k++) {
+      const hit = placed.find(p => Math.abs(p.x - x) < (p.w + w) / 2 + 2 && y - h < p.y + 2 && y > p.y - p.h - 2);
+      if (!hit) break;
+      y = hit.y - hit.h - 6;
+    }
+    placed.push({ x, y, w, h });
+    b.el.style.left = x + 'px'; b.el.style.top = Math.max(h + 2, y) + 'px';
   }
 }
 

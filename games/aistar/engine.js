@@ -72,7 +72,7 @@ function pickLine(S, st, table) {
 }
 function withCatch(S, st, text, p = 0.35) {
   if (!text) return text;
-  return chance(S, p) ? text.replace(/[。!?~]*$/, m => m || '!') + ' ' + st.catch : text;
+  return chance(S, p) ? text.replace(/[。!?~…]*$/, m => m || '!') + ' ' + st.catch : text;
 }
 export function feed(S, id, text, kind = 'say', extra = {}) {
   S.seq = (S.seq || 0) + 1;
@@ -80,6 +80,9 @@ export function feed(S, id, text, kind = 'say', extra = {}) {
   if (S.feed.length > 160) S.feed.splice(0, S.feed.length - 160);
 }
 function say(S, st, table, vars = {}, kind = 'say', extra = {}) {
+  // 夢想家的「夢想成真/夢想沒了」只在跟夢想的媒體有關時才講
+  const op = extra.op && opById(S, extra.op);
+  if (has(st, 'dream') && table.dream && (!op || op.type !== st.dream)) { table = { ...table }; delete table.dream; }
   const text = withCatch(S, st, fill(pickLine(S, st, table), { name: st.name, ...vars }));
   feed(S, st.id, text, kind, extra);
   return text;

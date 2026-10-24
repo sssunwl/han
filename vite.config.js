@@ -54,6 +54,7 @@ export default {
         pizza: 'games/pizza/index.html',
         burger: 'games/burger/index.html',
         onsen: 'games/onsen/index.html',
+        aistar: 'games/aistar/index.html',
       },
     },
   },
