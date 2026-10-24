@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixelkit 素材預覽</title>
+<style>
+  :root { --bg:#241d33; --panel:#332a48; --edge:#1a1426; --ink:#fff6e8; --dim:#c9bfe0; --gold:#ffd84a; --accent:#ff7a9a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:"PingFang TC","Noto Sans TC",sans-serif; padding:16px; }
+  h1 { font-size:20px; margin:0 0 4px; } h2 { font-size:16px; margin:22px 0 10px; color:var(--gold); }
+  .sub { color:var(--dim); font-size:13px; margin:0 0 12px; line-height:1.6; }
+  canvas { image-rendering:pixelated; display:block; }
+  .grid { display:flex; flex-wrap:wrap; gap:10px; }
+  .card { background:var(--panel); border:3px solid var(--edge); border-radius:6px; padding:8px; display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .card span { font-size:11px; color:var(--dim); font-family:ui-monospace,monospace; }
+  .checker { background:repeating-conic-gradient(#3d3456 0 25%, #463c62 0 50%) 0 0/12px 12px; padding:6px; border-radius:4px; }
+  #scene { width:100%; max-width:768px; border:3px solid var(--edge); border-radius:6px; }
+  .dress { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start; }
+  .controls { display:grid; grid-template-columns:auto 1fr; gap:8px 10px; align-items:center; font-size:13px; background:var(--panel); border:3px solid var(--edge); border-radius:6px; padding:12px; min-width:280px; }
+  .controls .row { display:flex; flex-wrap:wrap; gap:4px; }
+  .controls button { font:inherit; font-size:12px; padding:4px 8px; border-radius:5px; border:2px solid var(--edge); background:#463c62; color:var(--ink); cursor:pointer; }
+  .controls button.on { background:var(--accent); }
+  .sw { width:22px; height:22px; padding:0 !important; }
+  .walkers { display:flex; flex-wrap:wrap; gap:12px; background:var(--panel); border:3px solid var(--edge); border-radius:6px; padding:12px; }
+  .walkers figure { margin:0; text-align:center; font-size:11px; color:var(--dim); }
+  #crowd { width:100%; max-width:768px; }
+</style>
+</head>
+<body>
+<h1>Pixelkit 素材預覽</h1>
+<p class="sub">全部用程式畫(shared/pixelkit/),沒有任何外部素材。下面依序是:場景組合、換裝、所有家具。放大 3 倍顯示。</p>
+
+<h2>場景:雪糕店</h2>
+<canvas id="scene" width="256" height="192"></canvas>
+
+<h2>角色(換髮型、換顏色)</h2>
+<div class="dress">
+  <div class="controls" id="controls"></div>
+  <div class="walkers" id="walkers"></div>
+</div>
+<h2>8 種髮型(四個方向,顏色隨便換)</h2>
+<canvas id="gallery" width="256" height="160" style="width:100%;max-width:768px"></canvas>
+<h2>隨機路人</h2>
+<canvas id="crowd" width="256" height="48"></canvas>
+
+<h2>家具與小物</h2>
+<div class="grid" id="kit"></div>
+
+<script type="module" src="./main.js"></script>
+</body>
+</html>
