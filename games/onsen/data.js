@@ -81,8 +81,38 @@ export const FAC = {
     sat: [10, 16, 24], cap: [3, 3, 4], fee: [20, 35, 50], time: 6,
     desc: '唱歌的包廂。家族跟外國旅客最愛,會付錢。',
   },
+  egg: {
+    name: '溫泉蛋攤', icon: '🥚', w: 2, h: 2, cost: [200, 350, 600], need: [1, 1, 2],
+    sat: [5, 8, 12], cap: [2, 2, 3], fee: [10, 15, 25], time: 3,
+    desc: '用溫泉水煮蛋的小攤子,便宜又受歡迎。外國旅客最愛。',
+  },
+  arcade: {
+    name: '遊戲機台區', icon: '🕹', w: 3, h: 3, cost: [450, 800, 1300], need: [1, 2, 3],
+    sat: [8, 13, 19], cap: [2, 3, 4], fee: [15, 25, 40], time: 5,
+    desc: '溫泉旅館必備的復古遊戲機台。家族跟上班族會投幣玩。',
+  },
+  tea: {
+    name: '茶室', icon: '🍵', w: 3, h: 3, cost: [500, 900, 1500], need: [2, 2, 3], research: true,
+    sat: [12, 18, 26], cap: [2, 3, 3], fee: [25, 40, 60], time: 6,
+    desc: '喝抹茶、吃和菓子的安靜房間。長輩跟外國旅客最愛。',
+  },
+  massage: {
+    name: '按摩室', icon: '💆', w: 3, h: 3, cost: [600, 1000, 1600], need: [2, 3, 4], research: true,
+    sat: [14, 20, 28], cap: [1, 2, 2], fee: [50, 80, 120], time: 7,
+    desc: '泡完湯按摩最舒服。人少但很賺,上班族跟長輩最愛。',
+  },
+  koi: {
+    name: '錦鯉池', icon: '🎏', w: 4, h: 3, cost: [900, 1500, 2400], need: [2, 3, 4],
+    sat: [9, 13, 18], cap: [3, 4, 5], time: 5, pool: 'koi',
+    desc: '戶外的鯉魚池,看魚游來游去很療癒。情侶跟長輩喜歡。',
+  },
+  shrine: {
+    name: '小神社', icon: '⛩', w: 2, h: 2, cost: [800, 1300, 2000], need: [3, 3, 4], research: true,
+    sat: [8, 12, 16], cap: [2, 2, 3], fee: [10, 20, 30], time: 4,
+    desc: '客人會來參拜、買御守。有神社的旅館,遇到事件時運氣比較好。',
+  },
 };
-export const FAC_ORDER = ['room', 'bigroom', 'bath', 'onsen', 'family', 'footbath', 'dining', 'shop', 'lounge', 'karaoke'];
+export const FAC_ORDER = ['room', 'bigroom', 'bath', 'onsen', 'family', 'footbath', 'dining', 'shop', 'lounge', 'karaoke', 'egg', 'arcade', 'tea', 'massage', 'koi', 'shrine'];
 
 // ---------- 擺設 ----------
 // 放在走道上,會讓附近 2 格內的設施變好(val 加總的一半,最多 +10)
@@ -98,8 +128,13 @@ export const DECOR = {
   fishbowl: { name: '金魚缸', cost: 80, val: 3, research: true },
   bonsai_l: { name: '松樹盆景', cost: 140, val: 5, plant: true, research: true },
   garland: { name: '燈籠串', cost: 160, val: 5, research: true },
+  andon: { name: '行燈', cost: 60, val: 2 },
+  bamboo: { name: '竹叢', cost: 80, val: 3, plant: true },
+  stone_lantern: { name: '石燈籠', cost: 120, val: 4 },
+  fireplace: { name: '暖爐', cost: 150, val: 4, research: true },
+  koinobori: { name: '鯉魚旗', cost: 180, val: 5, research: true },
 };
-export const DECOR_ORDER = ['bush', 'pot', 'bonsai_s', 'plant', 'vase', 'flowers', 'bench', 'palm', 'fishbowl', 'bonsai_l', 'garland'];
+export const DECOR_ORDER = ['bush', 'pot', 'andon', 'bonsai_s', 'plant', 'vase', 'bamboo', 'flowers', 'bench', 'stone_lantern', 'palm', 'fishbowl', 'bonsai_l', 'fireplace', 'garland', 'koinobori'];
 
 // ---------- 組合(發現時口碑 +20,效果持續)----------
 export const COMBOS = [
@@ -123,6 +158,11 @@ export const RESEARCH = [
   { id: 'bonsai_l', name: '松樹盆景', cost: 20, need: 2, decor: 'bonsai_l' },
   { id: 'karaoke', name: '卡拉OK', cost: 50, need: 3, fac: 'karaoke' },
   { id: 'garland', name: '燈籠串', cost: 25, need: 3, decor: 'garland' },
+  { id: 'tea', name: '茶室', cost: 30, need: 2, fac: 'tea' },
+  { id: 'massage', name: '按摩室', cost: 55, need: 2, fac: 'massage' },
+  { id: 'fireplace', name: '暖爐', cost: 20, need: 2, decor: 'fireplace' },
+  { id: 'shrine', name: '小神社', cost: 60, need: 3, fac: 'shrine' },
+  { id: 'koinobori', name: '鯉魚旗', cost: 30, need: 3, decor: 'koinobori' },
   // 被動研究:不解鎖東西,而是讓整間旅館變強
   { id: 'service', name: '接待訓練', cost: 40, need: 1, perk: '入住時滿意度 +4,櫃台辦手續變快' },
   { id: 'cleaning', name: '清潔用具', cost: 35, need: 1, perk: '員工打掃時間減半' },
@@ -160,16 +200,33 @@ export function starsOf(rep) {
 }
 
 // ---------- 全國溫泉旅館排行(每年年底結算)----------
-export const RIVALS = [24000, 18000, 14000, 10500, 7800, 5600, 3900, 2600, 1600, 900, 400, 120];
-export const rankOf = rep => 1 + RIVALS.filter(v => v > rep).length;
+// 每間有自己的起始口碑跟每天成長;第二年年底剛好跟玩家拚第一(自動玩家實測)
+export const INNS = [
+  { name: '箱根 滿月亭', rep: 3000, grow: 360 },
+  { name: '草津 鶴之湯', rep: 2400, grow: 290 },
+  { name: '別府 地獄屋', rep: 1900, grow: 230 },
+  { name: '由布院 花水木', rep: 1500, grow: 180 },
+  { name: '登別 熊之湯', rep: 1100, grow: 135 },
+  { name: '道後 白鷺館', rep: 800, grow: 100 },
+  { name: '城崎 柳月', rep: 550, grow: 70 },
+  { name: '銀山 燈屋', rep: 380, grow: 48 },
+  { name: '黑川 森之宿', rep: 240, grow: 30 },
+  { name: '熱海 海音', rep: 140, grow: 18 },
+  { name: '下呂 翡翠庵', rep: 70, grow: 9 },
+  { name: '乳頭 秘湯庵', rep: 20, grow: 4 },
+];
+/** 對手的新聞:會讓那間成長變快,並在幾天內搶走你的客人 */
+export const RIVAL_NEWS = [
+  '開了全新的露天風呂', '請到名廚坐鎮', '上了電視旅遊節目', '推出情侶優惠', '整修完成重新開幕', '辦了賞月祭',
+];
 
 // ---------- 客人 ----------
 export const TYPES = {
-  family: { name: '家族旅行', likes: ['shop', 'karaoke', 'family', 'footbath'], size: [2, 4] },
-  couple: { name: '情侶', likes: ['onsen', 'family', 'dining'], size: [2, 2] },
-  worker: { name: '上班族', likes: ['bath', 'dining', 'lounge'], size: [1, 1] },
-  tourist: { name: '外國旅客', likes: ['onsen', 'shop', 'footbath', 'karaoke'], size: [1, 2] },
-  elder: { name: '長輩', likes: ['bath', 'lounge', 'footbath'], size: [1, 2] },
+  family: { name: '家族旅行', likes: ['shop', 'karaoke', 'family', 'footbath', 'arcade', 'egg'], size: [2, 4] },
+  couple: { name: '情侶', likes: ['onsen', 'family', 'dining', 'koi', 'shrine'], size: [2, 2] },
+  worker: { name: '上班族', likes: ['bath', 'dining', 'lounge', 'massage', 'arcade'], size: [1, 1] },
+  tourist: { name: '外國旅客', likes: ['onsen', 'shop', 'egg', 'tea', 'shrine', 'karaoke'], size: [1, 2] },
+  elder: { name: '長輩', likes: ['bath', 'lounge', 'tea', 'massage', 'koi'], size: [1, 2] },
 };
 export const TYPE_KEYS = Object.keys(TYPES);
 
@@ -197,4 +254,101 @@ export const REVIEWS = {
   3: ['還不錯,但可以再多一點設施', '普通的溫泉旅館', '房間有點簡單'],
   2: ['等太久了…', '想泡湯但人太多', '有點失望'],
   1: ['不會再來了', '什麼都沒有…', '房間好髒…'],
+};
+
+// ---------- 成就(kind 由 main.js 判斷;reward 解鎖時直接給)----------
+export const ACHIEVEMENTS = [
+  { id: 'g1', name: '開張大吉', desc: '招待第 1 位客人', kind: 'guests', n: 1, reward: { money: 100 } },
+  { id: 'g50', name: '小有名氣', desc: '累積招待 50 位客人', kind: 'guests', n: 50, reward: { money: 300 } },
+  { id: 'g300', name: '人氣旅館', desc: '累積招待 300 位客人', kind: 'guests', n: 300, reward: { money: 1000 } },
+  { id: 'g1000', name: '千客萬來', desc: '累積招待 1000 位客人', kind: 'guests', n: 1000, reward: { money: 3000, ideas: 30 } },
+  { id: 'r5_10', name: '好評不斷', desc: '拿到 10 則 5 星評價', kind: 'best5', n: 10, reward: { ideas: 5 } },
+  { id: 'r5_100', name: '口碑傳奇', desc: '拿到 100 則 5 星評價', kind: 'best5', n: 100, reward: { ideas: 20 } },
+  { id: 's3', name: '三星旅館', desc: '升到 3 星', kind: 'stars', n: 3, reward: { money: 500 } },
+  { id: 's5', name: '五星旅館', desc: '升到 5 星', kind: 'stars', n: 5, reward: { money: 2000, ideas: 20 } },
+  { id: 'top10', name: '全國前十', desc: '排行進入前 10 名', kind: 'rank', n: 10, reward: { money: 500 } },
+  { id: 'top3', name: '頒獎台', desc: '排行進入前 3 名', kind: 'rank', n: 3, reward: { money: 1500 } },
+  { id: 'top1', name: '日本第一', desc: '排行第 1 名', kind: 'rank', n: 1, reward: { money: 5000, ideas: 50 } },
+  { id: 'e10k', name: '萬元戶', desc: '累積賺到 ¥10,000', kind: 'earned', n: 10000, reward: { ideas: 5 } },
+  { id: 'e100k', name: '溫泉大亨', desc: '累積賺到 ¥100,000', kind: 'earned', n: 100000, reward: { ideas: 30 } },
+  { id: 'd1500', name: '大豐收', desc: '一天收入超過 ¥1,500', kind: 'dayIncome', n: 1500, reward: { money: 300 } },
+  { id: 'd3000', name: '爆滿的一天', desc: '一天收入超過 ¥3,000', kind: 'dayIncome', n: 3000, reward: { money: 800 } },
+  { id: 'occ', name: '全館客滿', desc: '入住率 100%(至少 6 間房)', kind: 'occ100', n: 6, reward: { money: 500 } },
+  { id: 'perfect', name: '完美的一天', desc: '一天至少 5 則評價而且全部 5 星', kind: 'perfect', n: 5, reward: { ideas: 10 } },
+  { id: 'land6', name: '地主', desc: '擁有 6 塊土地', kind: 'land', n: 6, reward: { money: 800 } },
+  { id: 'land12', name: '溫泉鄉', desc: '買下全部 12 塊土地', kind: 'land', n: 12, reward: { money: 5000 } },
+  { id: 'types', name: '什麼都有', desc: '每一種設施都至少蓋一間', kind: 'types', n: 16, reward: { ideas: 30 } },
+  { id: 'combo3', name: '組合高手', desc: '發現 3 種組合', kind: 'combos', n: 3, reward: { ideas: 10 } },
+  { id: 'comboAll', name: '組合大師', desc: '發現全部組合', kind: 'combos', n: 7, reward: { money: 3000 } },
+  { id: 'staff5', name: '大家庭', desc: '請到 5 位員工', kind: 'staff', n: 5, reward: { money: 500 } },
+  { id: 'heart', name: '有人情味的老闆', desc: '在人生選擇裡選了 5 次溫暖的選項', kind: 'heart', n: 5, reward: { ideas: 15 } },
+  { id: 'wish', name: '有求必應', desc: '滿足客人的願望 20 次', kind: 'wishes', n: 20, reward: { ideas: 10 } },
+];
+
+// ---------- 人生選擇(每天開始時有機會跳出;need = 條件)----------
+// effect 欄位:money / rep / ideas / staff / closed(今天不營業) / arrive(今天客人數 +/-) /
+//   mod:{ sat, arrive, days }(幾天內的加成)/ path:'heart'|'biz'|'trad' / gamble:{ p, win, lose } / perm:'source' 之類永久效果
+export const CHOICES = [
+  { id: 'typhoon', title: '🌀 颱風要來了!', text: '氣象報告說今晚颱風會經過。', options: [
+    { label: '照常營業', desc: '客人會少一半,而且可能有損壞', effect: { arrive: -0.5, gamble: { p: 0.5, win: {}, lose: { money: -400 } }, path: 'biz' } },
+    { label: '休息一天,順便大掃除', desc: '今天不營業,接下來 3 天客人更滿意', effect: { closed: true, mod: { sat: 6, days: 3 }, path: 'trad' } },
+    { label: '開放給附近居民避難', desc: '今天沒收入,但口碑大加', effect: { closed: true, rep: 120, path: 'heart' } },
+  ] },
+  { id: 'star', title: '🎬 大明星想包場', text: '有位大明星想包下整間旅館一天,開價很高。', need: { stars: 3 }, options: [
+    { label: '接受!', desc: '¥3,000 入帳,今天沒有其他客人', effect: { money: 3000, closed: true, path: 'biz' } },
+    { label: '婉拒,常客比較重要', desc: '口碑 +40', effect: { rep: 40, path: 'trad' } },
+  ] },
+  { id: 'raise', title: '🧹 員工想加薪', text: '員工們說最近太忙了,希望加薪。', need: { staff: 2 }, options: [
+    { label: '加薪', desc: '每天薪水多 ¥10/人,大家更有幹勁(打掃更快)', effect: { perm: 'raise', path: 'heart' } },
+    { label: '發一次獎金', desc: '花 ¥400,大家開心幾天', effect: { money: -400, mod: { sat: 3, days: 3 }, path: 'heart' } },
+    { label: '不加', desc: '可能有人會離職', effect: { gamble: { p: 0.5, win: {}, lose: { staff: -1 } }, path: 'biz' } },
+  ] },
+  { id: 'source', title: '♨️ 源泉的主人來了', text: '附近的溫泉源頭要賣,買下來泉質會更好。', need: { stars: 2 }, once: true, options: [
+    { label: '買下源泉', desc: '花 ¥3,000,所有浴池永久滿意度 +8', effect: { money: -3000, perm: 'source', path: 'trad' } },
+    { label: '先不要', desc: '', effect: {} },
+  ] },
+  { id: 'influencer', title: '📱 網紅想免費入住', text: '有位旅遊網紅說,讓她免費住就幫忙宣傳。', options: [
+    { label: '好啊', desc: '接下來 3 天每天多 2 位客人', effect: { mod: { arrive: 2, days: 3 }, path: 'biz' } },
+    { label: '不行,要付錢', desc: '¥100 入帳', effect: { money: 100, path: 'trad' } },
+  ] },
+  { id: 'noise', title: '🎤 鄰居抱怨太吵', text: '附近居民說卡拉OK晚上太吵了。', need: { fac: 'karaoke' }, options: [
+    { label: '加裝隔音', desc: '花 ¥500', effect: { money: -500, rep: 10, path: 'heart' } },
+    { label: '不理他', desc: '口碑 -40', effect: { rep: -40, path: 'biz' } },
+  ] },
+  { id: 'cooking', title: '🍱 料理比賽邀請', text: '溫泉鄉要辦料理比賽,問你要不要派廚師參加。', need: { fac: 'dining' }, options: [
+    { label: '參加!', desc: '報名費 ¥200,贏了口碑大漲', effect: { money: -200, gamble: { p: 0.5, win: { rep: 150, ideas: 10 }, lose: { rep: 10 } }, path: 'biz' } },
+    { label: '這次先不要', desc: '', effect: {} },
+  ] },
+  { id: 'lostkid', title: '🧒 有小朋友迷路了', text: '一個小朋友在旅館門口哭,說找不到爸爸媽媽。', options: [
+    { label: '大家一起幫忙找', desc: '今天客人少一點,口碑 +50', effect: { arrive: -2, rep: 50, path: 'heart' } },
+    { label: '交給警察', desc: '口碑 +10', effect: { rep: 10, path: 'biz' } },
+  ] },
+  { id: 'antique', title: '🏮 老旅館要收起來了', text: '隔壁鎮的老旅館老闆退休,想把古董家具便宜賣給你。', options: [
+    { label: '買下來', desc: '花 ¥600,靈感 +20、口碑 +30', effect: { money: -600, ideas: 20, rep: 30, path: 'trad' } },
+    { label: '不用了', desc: '', effect: {} },
+  ] },
+  { id: 'festival', title: '🎆 地方祭典要贊助', text: '溫泉鄉的夏日祭典在找贊助商。', options: [
+    { label: '贊助 ¥800', desc: '接下來 2 天每天多 4 位客人', effect: { money: -800, mod: { arrive: 4, days: 2 }, path: 'heart' } },
+    { label: '不贊助', desc: '', effect: {} },
+  ] },
+  { id: 'tv', title: '📺 電視台想來採訪', text: '旅遊節目想來拍你的旅館。拍得好就爆紅,拍得不好…', need: { stars: 2 }, options: [
+    { label: '歡迎!', desc: '評價高的旅館會大紅(神社會保佑你)', effect: { gamble: { p: 0.6, win: { rep: 200, mod: { arrive: 3, days: 3 } }, lose: { rep: -60 } }, path: 'biz' } },
+    { label: '還沒準備好', desc: '', effect: {} },
+  ] },
+  { id: 'poach', title: '😠 對手想挖角', text: '對手旅館想用高薪挖走你的員工。', need: { staff: 2 }, options: [
+    { label: '加薪留人', desc: '花 ¥500', effect: { money: -500, path: 'heart' } },
+    { label: '讓他走', desc: '少一位員工', effect: { staff: -1, path: 'biz' } },
+  ] },
+  { id: 'cat', title: '🐈 旅館來了一隻貓', text: '一隻小貓每天都在大門口等,客人很喜歡牠。', once: true, options: [
+    { label: '收養當看板貓', desc: '永久:每位客人入住時滿意度 +3', effect: { perm: 'cat', rep: 20, path: 'heart' } },
+    { label: '送去收容所', desc: '', effect: { path: 'biz' } },
+  ] },
+];
+export const PATHS = { heart: '人情派', biz: '生意派', trad: '傳統派' };
+
+// ---------- 客人的小願望(想要還沒蓋的設施)----------
+export const WISHES = {
+  egg: '好想吃溫泉蛋…', arcade: '想玩遊戲機!', tea: '想喝杯抹茶', massage: '肩膀好酸,想按摩',
+  koi: '想看錦鯉', shrine: '想去參拜', karaoke: '想唱歌!', footbath: '想泡個腳', onsen: '想泡露天風呂',
+  dining: '肚子好餓', shop: '想買伴手禮', lounge: '想找地方休息',
 };

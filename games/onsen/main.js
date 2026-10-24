@@ -1,10 +1,13 @@
 import '../../shared/offline.js';
 import { saveKey } from '../../shared/profile.js';
-import { readJSON, writeJSON, tone, noise, fanfare, renderWho, lockGestures, escapeHTML } from '../../shared/kit.js';
+import { readJSON, writeJSON, tone, noise, fanfare, renderWho, lockGestures, escapeHTML, audioPrefs, saveAudioPrefs } from '../../shared/kit.js';
+import { TRACKS, playMusic, stopMusic, nowPlaying } from '../../shared/music.js';
+import { buildProcSprites } from './proc.js';
 import {
   T, COLS, ROWS, CHUNK, DAY_SECONDS, YEAR_DAYS, START_CHUNKS, ENTRANCE, SPAWN, DESK, QUEUE, isReserved, isDeskArea,
   landCost, landNeed, FAC, FAC_ORDER, DECOR, DECOR_ORDER, COMBOS, RESEARCH, STAFF_HIRE, STAFF_SALARY, staffMax,
-  ADS, AD_DAYS, STAR_REP, REVIEW_REP, starsOf, rankOf, TYPES, TYPE_KEYS, seasonOf, EVENTS, REVIEWS,
+  ADS, AD_DAYS, STAR_REP, REVIEW_REP, starsOf, TYPES, TYPE_KEYS, seasonOf, EVENTS, REVIEWS,
+  INNS, RIVAL_NEWS, ACHIEVEMENTS, CHOICES, PATHS, WISHES,
 } from './data.js';
 
 /* ============================================================
@@ -34,6 +37,9 @@ const atlasReady = Promise.all([
   fetch(BASE + 'onsen/atlas.json').then(r => r.json()).then(j => { R = j; }),
   new Promise((ok, fail) => { const im = new Image(); im.onload = () => { atlas = im; ok(); }; im.onerror = fail; im.src = BASE + 'onsen/atlas.png'; }),
 ]);
+const PROC = buildProcSprites();           // LimeZu 沒有的東西,程式畫(見 proc.js)
+const sprW = n => R[n] ? R[n][2] : PROC[n] ? PROC[n].width : 32;
+const sprH = n => R[n] ? R[n][3] : PROC[n] ? PROC[n].height : 32;
 
 // ---------- 狀態 ----------
 let S = null;                       // 會存檔的部分
@@ -57,7 +63,15 @@ function freshSave() {
     ],
     decor: [{ id: 'd1', type: 'bonsai_s', x: 12, y: 21 }, { id: 'd2', type: 'bush', x: 17, y: 21 }],
     research: [], staff: 1, combos: [], ads: {}, sleepers: [], bestRank: null,
-    stats: { guests: 0, earned: 0, best5: 0 },
+    stats: { guests: 0, earned: 0, best5: 0, wishes: 0 },
+    ...extraFields(),
+  };
+}
+/** v2.1 新增的欄位;舊存檔讀進來時補上 */
+function extraFields() {
+  return {
+    perm: [], mods: [], paths: { heart: 0, biz: 0, trad: 0 }, ach: [], hist: [], typeCount: {}, wishLog: {},
+    seenChoices: [], inns: INNS.map(i => ({ name: i.name, rep: i.rep, grow: i.grow, boost: 0 })), prevRank: null, news: null,
   };
 }
 const stars = () => starsOf(S.rep);
@@ -66,6 +80,9 @@ const F = f => FAC[f.type];
 const unlocked = id => (FAC[id] ? !FAC[id].research : !DECOR[id].research) || S.research.includes(id);
 const isRoom = f => f.type === 'room' || f.type === 'bigroom';
 const has = id => S.research.includes(id);           // 被動研究
+const perm = id => (S.perm || []).includes(id);      // 人生選擇留下的永久效果
+const rankNow = () => 1 + S.inns.filter(i => i.rep > S.rep).length;
+const modSum = k => (S.mods || []).reduce((a, m) => a + (m[k] || 0), 0);
 
 // ---------- 存檔 ----------
 function save() {
@@ -83,7 +100,7 @@ addEventListener('pagehide', save);
 // ============================================================
 const chunkKey = (x, y) => `${Math.floor(x / CHUNK)},${Math.floor(y / CHUNK)}`;
 const isOwned = (x, y) => x >= 0 && y >= 0 && x < COLS && y < ROWS && S.owned.includes(chunkKey(x, y));
-const decorW = type => Math.max(1, Math.round((R[type] ? R[type][2] : 32) / T));
+const decorW = type => Math.max(1, Math.round(sprW(type) / T));
 
 function buildGrid(extra) {
   const o = Array.from({ length: ROWS }, () => new Array(COLS).fill(null));
@@ -221,6 +238,7 @@ const POOLS = {
   onsen: L => [{ x: 0.7, y: 0.6, w: 3.6, h: 2.6 }, { x: 0.4, y: 0.4, w: 4.6, h: 3.0 }, { x: 0.3, y: 0.3, w: 5.4, h: 3.2 }][L - 1],
   family: () => ({ x: 0.3, y: 0.7, w: 2.4, h: 1.9 }),
   footbath: () => ({ x: 0.25, y: 0.35, w: 1.5, h: 1.25 }),
+  koi: L => [{ x: 0.4, y: 0.4, w: 2.4, h: 1.5 }, { x: 0.3, y: 0.3, w: 3.0, h: 1.6 }, { x: 0.25, y: 0.25, w: 3.5, h: 1.7 }][L - 1],
 };
 function poolSpots(p, n) {
   const rows = n > 4 ? 2 : 1, per = Math.ceil(n / rows), out = [];
@@ -236,6 +254,12 @@ function spotsOf(f) {
     case 'room': return [{ x: 2.45, y: 2.7, dir: 3 }, { x: 1.7, y: 2.85, dir: 3 }];
     case 'bigroom': return [{ x: 0.7, y: 2.85, dir: 3 }, { x: 1.5, y: 2.85, dir: 3 }, { x: 2.5, y: 2.85, dir: 3 }, { x: 3.3, y: 2.85, dir: 3 }];
     case 'bath': case 'onsen': case 'family': case 'footbath': return poolSpots(POOLS[f.type](L), cap);
+    case 'koi': { const p = POOLS.koi(L); return Array.from({ length: cap }, (_, i) => ({ x: p.x + p.w * (i + 0.5) / cap, y: 2.85, dir: 1 })); }
+    case 'egg': return [{ x: 0.6, y: 1.95, dir: 1 }, { x: 1.4, y: 1.95, dir: 1 }, { x: 1.0, y: 1.6, dir: 1 }].slice(0, cap);
+    case 'arcade': return [{ x: 0.5, y: 2.85, dir: 1 }, { x: 1.5, y: 2.85, dir: 1 }, { x: 2.5, y: 2.85, dir: 1 }, { x: 1.5, y: 2.25, dir: 1 }].slice(0, cap);
+    case 'tea': return [{ x: 0.7, y: 2.3, dir: 0 }, { x: 2.3, y: 2.3, dir: 2 }, { x: 1.5, y: 2.85, dir: 1 }].slice(0, cap);
+    case 'massage': return [{ x: 1.5, y: 1.15, dir: 3, under: true }, { x: 1.5, y: 2.45, dir: 3, under: true }].slice(0, cap);
+    case 'shrine': return [{ x: 0.6, y: 1.95, dir: 1 }, { x: 1.4, y: 1.95, dir: 1 }, { x: 1.0, y: 1.7, dir: 1 }].slice(0, cap);
     case 'dining': {
       const out = [{ x: 1, y: 1.05, dir: 3, under: true }, { x: 1, y: 3.0, dir: 1 }];
       if (L >= 2) out.push({ x: 3, y: 1.05, dir: 3, under: true }, { x: 3, y: 3.0, dir: 1 });
@@ -333,9 +357,20 @@ function checkIn(g) {
   if (comboOn('aquarium')) g.sat += 4;
   if (has('service')) g.sat += 4;
   if (has('futon')) g.sat += 5;
+  if (perm('cat')) g.sat += 3;
+  g.sat += modSum('sat');
+  S.typeCount[g.type] = (S.typeCount[g.type] || 0) + 1;
+  // 小願望:想去某個喜歡的設施。有蓋 → 用到就「願望實現」;沒蓋 → 記下來給老闆看
+  const likes = TYPES[g.type].likes;
+  const want = likes[Math.floor(Math.random() * likes.length)];
+  if (Math.random() < 0.35 && WISHES[want]) {
+    if (S.facs.some(f => f.type === want && f.door)) { g.wish = want; if (g.plan && !g.plan.includes(want)) g.plan.unshift(want); }
+    else { S.wishLog[want] = (S.wishLog[want] || 0) + 1; setTimeout(() => bubble(g, WISHES[want], 2.6), 1300); }
+  }
   tone(880, 0.08, 'triangle', 0.14); setTimeout(() => tone(1175, 0.1, 'triangle', 0.12), 90);
   bubble(g, '入住!', 1.2);
   g.plan = makePlan(g);
+  if (g.wish && !g.plan.includes(g.wish)) g.plan.unshift(g.wish);
   enterFac(g, room, () => { g.state = 'rest'; g.timer = 3; });
 }
 
@@ -403,6 +438,9 @@ function finishActivity(g) {
   if (f.type === 'onsen') gain *= seasonOf(S.day).onsen;
   if (event && event.id === 'rain' && d.pool) gain *= 1.3;
   if (has('water') && d.pool) gain += 5;
+  if (perm('source') && d.pool && f.type !== 'koi') gain += 8;
+  f.uses = (f.uses || 0) + 1;
+  if (g.wish === f.type) { gain += 8; g.wish = null; S.stats.wishes++; float(g.x, g.y - 76, '願望實現!', '#9dffbf'); }
   if (has('cuisine') && f.type === 'dining') gain += 4;
   // 玩越多項,後面的開心程度遞減(不然每個人都 5 星,設施等級就沒差了)
   gain *= Math.pow(0.75, g.done || 0);
@@ -454,6 +492,7 @@ function checkOut(g) {
   if (r && !guests.some(o => o !== g && o.room === r.id)) r.dirty = true;
   g.room = null;
   if (stars() > before) starUp();
+  if (S.stats.guests % 5 === 0) checkAch();
   leave(g);
 }
 function leave(g) {
@@ -517,7 +556,7 @@ function updateStaff(a, dt) {
       const ff = facById(a.target);
       if (!ff) { a.state = 'idle'; a.target = null; return; }
       a.at = ff.id; a.x = (ff.x + F(ff).w / 2) * T; a.y = (ff.y + F(ff).h - 0.3) * T;
-      a.state = 'cleaning'; a.timer = has('cleaning') ? 2 : 4; bubble(a, '🧹', a.timer);
+      a.state = 'cleaning'; a.timer = (has('cleaning') ? 2 : 4) * (perm('raise') ? 0.7 : 1); bubble(a, '🧹', a.timer);
     });
   } else if (a.state === 'cleaning') {
     a.timer -= dt;
@@ -548,6 +587,7 @@ function startDay() {
   if (event && event.id === 'rain') n *= 0.7;
   if (S.ads.tv) n += 3;
   if (comboOn('festival')) n += 1;
+  n += modSum('arrive');
   n += Object.keys(S.ads).filter(k => k !== 'tv').length;
   n = Math.max(1, Math.min(30, Math.round(n + (Math.random() * 2 - 1))));
   // 宣傳中的客群出現機率 ×3
@@ -567,8 +607,11 @@ function startDay() {
   if (event && event.id === 'press') arrivals.push({ t: 0.25, type: 'worker', size: 1, vip: true });
   arrivals.sort((x, y) => x.t - y.t);
   guests.filter(g => g.state === 'sleep').forEach((g, i) => { g.wakeAt = 0.01 + i * 0.01; });
-  toast(event ? event.text : `第 ${S.day} 天 · ${season.icon}${season.name}天`);
+  toast(S.news ? `📰 ${S.news}` : event ? event.text : `第 ${S.day} 天 · ${season.icon}${season.name}天`);
+  S.news = null;
   hud();
+  maybeChoice();
+  pickMusic();
 }
 function updateDay(dt) {
   t += dt / DAY_SECONDS;
@@ -581,6 +624,13 @@ function updateDay(dt) {
     if (g.state === 'sleep' && g.wakeAt != null && t >= g.wakeAt) {
       g.wakeAt = null; exitFac(g); g.state = 'toCheckout'; g.checkingOut = true; goDesk(g);
     }
+  }
+  if (t > 0.97 && today.occ == null) {
+    // 入住率 = 今晚有人住的房間 / 全部房間(在大家睡下的那一刻算)
+    const rooms = S.facs.filter(isRoom);
+    const used = new Set(guests.filter(g => g.room && g.state !== 'leaving').map(g => g.room));
+    today.occ = rooms.length ? used.size / rooms.length : 0;
+    today.rooms = rooms.length;
   }
   if (t > 0.97) {
     for (const g of guests) {
@@ -598,13 +648,33 @@ function endDay() {
   for (const g of guests) if (g.state === 'toCheckout' || g.state === 'queueOut') { checkOut(g); g.gone = true; }
   guests = guests.filter(g => !g.gone);
   // 薪水(沒有破產:錢最少扣到 0)
-  today.salary = Math.min(S.money, S.staff * STAFF_SALARY);
+  today.salary = Math.min(S.money, S.staff * (STAFF_SALARY + (perm('raise') ? 10 : 0)));
   S.money -= today.salary;
   for (const k of Object.keys(S.ads)) if (--S.ads[k] <= 0) delete S.ads[k];
+  for (const m of S.mods) m.days--;
+  S.mods = S.mods.filter(m => m.days > 0);
+  // 經營紀錄(最近 28 天)
+  const avg = today.reviews.length ? today.reviews.reduce((a, r) => a + r.st, 0) / today.reviews.length : null;
+  S.hist.push({ d: S.day, income: today.income, served: today.served, occ: today.occ ?? 0, avg });
+  if (S.hist.length > 28) S.hist.shift();
+  // 對手每天成長;偶爾有新聞(成長變快,而且搶走你一點客人)
+  S.prevRank = rankNow();
+  for (const inn of S.inns) {
+    inn.rep += Math.round(inn.grow * (0.7 + Math.random() * 0.6) * (inn.boost > 0 ? 1.6 : 1));
+    if (inn.boost > 0) inn.boost--;
+  }
+  if (Math.random() < 0.18) {
+    const near = S.inns.filter(i => Math.abs(i.rep - S.rep) < Math.max(800, S.rep * 0.4));
+    const inn = (near.length ? near : S.inns)[Math.floor(Math.random() * (near.length || S.inns.length))];
+    inn.boost = 3;
+    S.news = `${inn.name}${RIVAL_NEWS[Math.floor(Math.random() * RIVAL_NEWS.length)]}!客人被搶走了一些(打廣告可以搶回來)`;
+    S.mods.push({ arrive: -2, days: 2, src: 'rival' });
+  }
+  today.newAch = checkAch();
   // 年底排行
   today.year = null;
   if (S.day % YEAR_DAYS === 0) {
-    const rank = rankOf(S.rep);
+    const rank = rankNow();
     const reward = Math.max(0, 13 - rank) * 200;
     S.money += reward; S.ideas += 10;
     S.bestRank = Math.min(S.bestRank || 99, rank);
@@ -613,6 +683,144 @@ function endDay() {
   showSummary();
   save();
 }
+
+// ============================================================
+//  人生選擇
+// ============================================================
+let inChoice = false;
+function choiceOk(c) {
+  const n = c.need || {};
+  if (c.once && S.seenChoices.includes(c.id)) return false;
+  if (n.stars && stars() < n.stars) return false;
+  if (n.staff && S.staff < n.staff) return false;
+  if (n.fac && !S.facs.some(f => f.type === n.fac)) return false;
+  return true;
+}
+function maybeChoice() {
+  if (S.day < 3 || Math.random() > 0.3) return;
+  // 最近 5 天出過的不要再出
+  const recent = S.seenChoices.slice(-5);
+  const pool = CHOICES.filter(c => choiceOk(c) && !recent.includes(c.id));
+  if (!pool.length) return;
+  showChoice(pool[Math.floor(Math.random() * pool.length)]);
+}
+function showChoice(c) {
+  inChoice = true;
+  S.seenChoices.push(c.id);
+  if (S.seenChoices.length > 40) S.seenChoices.shift();
+  $('cTitle').textContent = c.title;
+  $('cText').textContent = c.text;
+  $('cOpts').innerHTML = c.options.map((o, i) => `<button class="copt" data-i="${i}"><b>${escapeHTML(o.label)}</b>${o.desc ? `<small>${escapeHTML(o.desc)}</small>` : ''}</button>`).join('');
+  $('cOpts').onclick = e => {
+    const b = e.target.closest('.copt'); if (!b) return;
+    const o = c.options[Number(b.dataset.i)];
+    const msg = applyEffect(o.effect);
+    $('choice').classList.remove('on');
+    inChoice = false;
+    toast(`${o.label}${msg ? ':' + msg : ''}`);
+    tone(700, 0.08, 'triangle', 0.14);
+    checkAch(); hud(); save();
+  };
+  $('choice').classList.add('on');
+  tone(523, 0.12, 'triangle', 0.15); setTimeout(() => tone(659, 0.15, 'triangle', 0.15), 120);
+}
+/** 套用選項的效果,回傳一句結果說明 */
+function applyEffect(e, depth = 0) {
+  const out = [];
+  if (e.gamble) {
+    // 有神社的旅館運氣比較好
+    const p = e.gamble.p + (S.facs.some(f => f.type === 'shrine') ? 0.15 : 0);
+    const win = Math.random() < p;
+    out.push(win ? '🍀 運氣不錯!' : '💦 運氣不好…');
+    out.push(applyEffect(win ? e.gamble.win : e.gamble.lose, depth + 1));
+  }
+  if (e.money) { S.money = Math.max(0, S.money + e.money); out.push(`${e.money > 0 ? '+' : ''}¥${e.money}`); }
+  if (e.rep) { S.rep = Math.max(0, S.rep + e.rep); out.push(`口碑 ${e.rep > 0 ? '+' : ''}${e.rep}`); }
+  if (e.ideas) { S.ideas += e.ideas; out.push(`💡+${e.ideas}`); }
+  if (e.staff) { S.staff = Math.max(1, S.staff + e.staff); if (staff.length > S.staff) staff.length = S.staff; out.push('少了一位員工'); }
+  if (e.closed) { arrivals = []; out.push('今天休息'); }
+  if (e.arrive) {
+    if (e.arrive < 0 && e.arrive > -1) arrivals = arrivals.filter(() => Math.random() > -e.arrive);
+    else if (e.arrive < 0) arrivals.splice(0, -e.arrive);
+  }
+  if (e.mod) S.mods.push({ ...e.mod });
+  if (e.perm && !S.perm.includes(e.perm)) S.perm.push(e.perm);
+  if (e.path && depth === 0) S.paths[e.path]++;
+  return out.filter(Boolean).join(' ');
+}
+const innStyle = () => {
+  const [k, v] = Object.entries(S.paths).sort((a, b) => b[1] - a[1])[0];
+  return v ? PATHS[k] : '新手老闆';
+};
+
+// ============================================================
+//  成就
+// ============================================================
+function achValue(a) {
+  switch (a.kind) {
+    case 'guests': return S.stats.guests;
+    case 'best5': return S.stats.best5;
+    case 'stars': return stars();
+    case 'rank': return -rankNow();                       // 名次越小越好
+    case 'earned': return S.stats.earned;
+    case 'dayIncome': return today ? today.income : 0;
+    case 'occ100': return today && today.occ >= 1 ? today.rooms : 0;
+    case 'perfect': return today && today.reviews.length && today.reviews.every(r => r.st === 5) ? today.reviews.length : 0;
+    case 'land': return S.owned.length;
+    case 'types': return new Set(S.facs.map(f => f.type)).size;
+    case 'combos': return S.combos.length;
+    case 'staff': return S.staff;
+    case 'heart': return S.paths.heart;
+    case 'wishes': return S.stats.wishes;
+  }
+  return 0;
+}
+const achDone = a => a.kind === 'rank' ? achValue(a) >= -a.n : achValue(a) >= a.n;
+function checkAch() {
+  if (!S) return [];
+  const got = [];
+  for (const a of ACHIEVEMENTS) {
+    if (S.ach.includes(a.id) || !achDone(a)) continue;
+    S.ach.push(a.id); got.push(a);
+    if (a.reward.money) S.money += a.reward.money;
+    if (a.reward.ideas) S.ideas += a.reward.ideas;
+  }
+  got.forEach((a, i) => setTimeout(() => {
+    const r = [a.reward.money && `¥${a.reward.money}`, a.reward.ideas && `💡${a.reward.ideas}`].filter(Boolean).join(' ');
+    toast(`🏆 成就解鎖「${a.name}」${r ? '  獎勵 ' + r : ''}`);
+    [784, 988, 1175, 1568].forEach((f, k) => setTimeout(() => tone(f, 0.12, 'square', 0.06), k * 80));
+  }, 400 + i * 3200));
+  if (got.length) hud();
+  return got;
+}
+
+// ============================================================
+//  配樂:自動依季節與日夜換曲,也可以自己選或關掉
+// ============================================================
+function autoTrack() {
+  if (t > 0.74) return 'yozakura';
+  return { 春: 'yu', 夏: 'matsuri', 秋: 'yu', 冬: 'yuki' }[seasonOf(S.day).name];
+}
+function pickMusic() {
+  if (!running && !S) return;
+  const want = audioPrefs.music === 'off' ? null : audioPrefs.music === 'auto' ? autoTrack() : audioPrefs.music;
+  if (!want) { stopMusic(); return; }
+  if (nowPlaying() !== want) playMusic(want);
+}
+function openMusic() {
+  const cur = audioPrefs.music;
+  const row = (id, name, sub) => `<button class="item ${cur === id ? 'sel' : ''}" data-music="${id}"><span class="ic">${id === 'off' ? '🔇' : id === 'auto' ? '🔁' : '🎵'}</span><span class="tx"><b>${name}</b><small>${sub}</small></span><span class="pr">${cur === id ? '播放中' : ''}</span></button>`;
+  openSheet('🎵 音樂與音效', row('auto', '自動', '依季節換曲,晚上變成夜曲') +
+    Object.entries(TRACKS).map(([id, tr]) => row(id, tr.name, `${tr.bpm} BPM`)).join('') +
+    row('off', '關閉音樂', '') +
+    `<button class="item" data-sfx="1"><span class="ic">${audioPrefs.sfx ? '🔔' : '🔕'}</span><span class="tx"><b>音效:${audioPrefs.sfx ? '開' : '關'}</b><small>點一下切換(投幣、入住、升級的聲音)</small></span></button>`);
+}
+$('sheetBody').addEventListener('click', e => {
+  const m = e.target.closest('[data-music]'), x = e.target.closest('[data-sfx]');
+  if (m) { audioPrefs.music = m.dataset.music; saveAudioPrefs(); pickMusic(); openMusic(); }
+  if (x) { audioPrefs.sfx = !audioPrefs.sfx; saveAudioPrefs(); openMusic(); updateMuteIcon(); }
+});
+function updateMuteIcon() { $('musicBtn').textContent = audioPrefs.music === 'off' && !audioPrefs.sfx ? '🔇' : '🎵'; }
 
 // ============================================================
 //  畫面
@@ -662,7 +870,8 @@ function zoomAt(k, sx, sy) {
 new ResizeObserver(() => { if (running) resize(); }).observe(cv);
 
 function spr(name, x, y, c = ctx) {
-  const r = R[name]; if (!r) return;
+  const r = R[name];
+  if (!r) { if (PROC[name]) c.drawImage(PROC[name], Math.round(x), Math.round(y)); return; }
   c.drawImage(atlas, r[0], r[1], r[2], r[3], Math.round(x), Math.round(y), r[2], r[3]);
 }
 function tile(c, name, x, y, w, h) {
@@ -673,8 +882,9 @@ function tile(c, name, x, y, w, h) {
   }
 }
 
-const FLOOR = { room: 'tatami', bigroom: 'tatami', bath: 'fl_bath', family: 'fl_bath', onsen: 'fl_stone', footbath: 'fl_stone', dining: 'fl_dining', shop: 'fl_wood', lounge: 'fl_wood', karaoke: 'fl_dining' };
-const OUTDOOR = { onsen: 1, footbath: 1 };
+const FLOOR = { room: 'tatami', bigroom: 'tatami', bath: 'fl_bath', family: 'fl_bath', onsen: 'fl_stone', footbath: 'fl_stone', dining: 'fl_dining', shop: 'fl_wood', lounge: 'fl_wood', karaoke: 'fl_dining',
+  egg: 'fl_stone', arcade: 'fl_dining', tea: 'tatami', massage: 'fl_wood', koi: 'fl_stone', shrine: 'fl_stone' };
+const OUTDOOR = { onsen: 1, footbath: 1, egg: 1, koi: 1, shrine: 1 };
 
 function renderStatic() {
   const c = document.createElement('canvas');
@@ -736,6 +946,20 @@ function roundRect(x, y, w, h, r) {
 }
 function drawPool(p, ox, oy, style, now) {
   const x = ox + p.x * T, y = oy + p.y * T, w = p.w * T, h = p.h * T;
+  if (style === 'koi') {
+    // 錦鯉池:石頭邊 + 深綠色的水 + 游來游去的魚
+    drawPool(p, ox, oy, 'onsen', now);
+    ctx.save(); roundRect(x, y, w, h, Math.min(16, h / 2)); ctx.clip();
+    ctx.fillStyle = 'rgba(20,90,80,.55)'; ctx.fillRect(x, y, w, h);
+    for (let i = 0; i < 4; i++) {
+      const a = now / (1400 + i * 300) + i * 1.7;
+      const fx = x + w / 2 + Math.cos(a) * (w / 2 - 10), fy = y + h / 2 + Math.sin(a * 1.3) * (h / 2 - 6);
+      ctx.fillStyle = ['#ff8a3d', '#ffffff', '#ff5050', '#ffd84a'][i];
+      ctx.fillRect(Math.round(fx) - 4, Math.round(fy) - 2, 8, 4); ctx.fillRect(Math.round(fx) + (Math.sin(a) > 0 ? -7 : 4), Math.round(fy) - 1, 3, 2);
+    }
+    ctx.restore();
+    return;
+  }
   if (style === 'bath') {
     ctx.fillStyle = '#9c6b3f'; ctx.fillRect(x - 5, y - 5, w + 10, h + 10);
     ctx.fillStyle = '#c18d58'; ctx.fillRect(x - 5, y - 5, w + 10, 4);
@@ -816,6 +1040,41 @@ function drawFac(f, now) {
       if (L >= 3) spr('plant', ox + 1.1 * T, oy - 0.9 * T);
       break;
     }
+    case 'egg': {
+      spr('eggpot', ox + 0.1 * T, oy + 0.1 * T); spr('eggbasket', ox + 1.0 * T, oy + 0.1 * T);
+      if (L >= 2) spr('andon', ox + 1.3 * T, oy - 0.9 * T);
+      break;
+    }
+    case 'arcade': {
+      spr('cabinet', ox, oy - 0.2 * T); spr('cabinet', ox + T, oy - 0.2 * T);
+      if (L >= 2) spr('cabinet', ox + 2 * T, oy - 0.2 * T);
+      if (L >= 3) spr('fishbowl', ox + 2.1 * T, oy + 1.6 * T);
+      break;
+    }
+    case 'tea': {
+      spr('teatable', ox + 0.5 * T, oy + 0.9 * T); spr('teaset', ox + 0.9 * T, oy + 0.6 * T);
+      spr('scroll2', ox + 0.1 * T, oy - 0.6 * T);
+      if (L >= 2) spr('vase', ox + 2.1 * T, oy - 0.6 * T);
+      if (L >= 3) spr('bonsai_s', ox + 2.1 * T, oy + 0.9 * T);
+      break;
+    }
+    case 'massage': {
+      spr('massagebed', ox + 0.5 * T, oy + 0.4 * T);
+      if (L >= 2) spr('massagebed', ox + 0.5 * T, oy + 1.7 * T);
+      spr('plant', ox + 0.05 * T, oy + 1.0 * T);
+      if (L >= 3) spr('andon', ox + 2.2 * T, oy + 1.3 * T);
+      break;
+    }
+    case 'koi': {
+      drawPool(POOLS.koi(L), ox, oy, 'koi', now);
+      if (L >= 2) spr('stone_lantern', ox + 3.1 * T, oy - 0.8 * T);
+      if (L >= 3) spr('bamboo', ox - 0.1 * T, oy - 0.9 * T);
+      break;
+    }
+    case 'shrine': {
+      spr('torii', ox, oy - 0.6 * T); spr('saisen', ox + 0.5 * T, oy + 0.8 * T);
+      break;
+    }
     case 'karaoke': {
       spr('speaker_s', ox + 0.1 * T, oy - 0.5 * T);
       spr('mic', ox + 1.2 * T, oy + 0.1 * T);
@@ -884,7 +1143,7 @@ function draw(now) {
 
   // 擺設、客人、員工一起按照 y 排序,才有前後遮擋
   const items = [];
-  for (const d of S.decor) { const r = R[d.type]; items.push({ y: (d.y + 1) * T, draw: () => spr(d.type, d.x * T, (d.y + 1) * T - r[3]) }); }
+  for (const d of S.decor) items.push({ y: (d.y + 1) * T, draw: () => spr(d.type, d.x * T, (d.y + 1) * T - sprH(d.type)) });
   for (const g of vis) if (!g.under) items.push({ y: g.y, draw: () => drawChar(g.char, g.x, g.y, g.dir, g.frame, g.moving, g.soak) });
   for (const a of staff) items.push({ y: a.y, draw: () => drawChar(a.char, a.x, a.y, a.dir, a.frame, a.moving, false) });
   items.sort((a, b) => a.y - b.y).forEach(i => i.draw());
@@ -937,7 +1196,7 @@ function draw(now) {
 function drawGhost(now) {
   const p = place, x = p.x * T, y = p.y * T, w = p.w * T, h = p.h * T;
   ctx.globalAlpha = 0.75;
-  if (p.kind === 'decor') { const r = R[p.type]; spr(p.type, x, y + T - r[3]); }
+  if (p.kind === 'decor') spr(p.type, x, y + T - sprH(p.type));
   else { tile(ctx, FLOOR[p.type], x, y, w, h); drawFac({ type: p.type, x: p.x, y: p.y, lv: 1 }, now); }
   ctx.globalAlpha = 1;
   ctx.fillStyle = p.reason ? 'rgba(230,60,60,.35)' : 'rgba(80,220,120,.3)';
@@ -981,7 +1240,7 @@ function drawWeather() {
 }
 function stepParticles(dt) {
   for (const f of S.facs) {
-    if (!F(f).pool) continue;
+    if (!F(f).pool || f.type === 'koi') continue;
     const p = POOLS[f.type](f.lv);
     const rate = (f.type === 'onsen' ? 5 : 2) * (seasonOf(S.day).name === '冬' ? 2 : 1);
     if (Math.random() < dt * rate) parts.push({ x: (f.x + p.x + Math.random() * p.w) * T, y: (f.y + p.y + Math.random() * p.h) * T, t: 0 });
@@ -1005,7 +1264,7 @@ function hud() {
   $('ideas').textContent = '💡' + S.ideas;
   const st = stars();
   $('rank').textContent = '★'.repeat(st) + '☆'.repeat(5 - st);
-  $('nation').textContent = `全國 #${rankOf(S.rep)}`;
+  $('nation').textContent = `全國 #${rankNow()}`;
   const se = seasonOf(S.day);
   $('day').textContent = `${Math.floor((S.day - 1) / YEAR_DAYS) + 1}年 第${(S.day - 1) % YEAR_DAYS + 1}天 ${se.icon}${se.name}`;
   const next = STAR_REP[st];
@@ -1057,7 +1316,8 @@ function openDecor() {
     const d = DECOR[id];
     const lock = !unlocked(id) ? '需要研究' : '';
     const r = R[id];
-    const pic = `<span class="pic" style="background-image:url(${BASE}onsen/atlas.png);background-position:-${r[0]}px -${r[1]}px;width:${r[2]}px;height:${r[3]}px"></span>`;
+    const pic = r ? `<span class="pic" style="background-image:url(${BASE}onsen/atlas.png);background-position:-${r[0]}px -${r[1]}px;width:${r[2]}px;height:${r[3]}px"></span>`
+      : `<img class="pic" src="${PROC[id].toDataURL()}" style="width:${PROC[id].width * 0.6}px">`;
     return itemHTML({ act: 'decor:' + id, icon: pic, name: d.name, sub: `風雅 +${d.val}${d.plant ? ' · 植物' : ''}`, cost: '¥' + d.cost, lockText: lock, disabled: !!lock || S.money < d.cost });
   }).join(''));
 }
@@ -1083,12 +1343,52 @@ function openAds() {
   openSheet(`📣 宣傳(效果 ${AD_DAYS} 天)`, `<p class="note">${now}</p>` +
     ADS.map(a => itemHTML({ act: 'ad:' + a.id, icon: '📣', name: a.name, sub: a.text, cost: '¥' + adCost(a).toLocaleString(), lockText: S.ads[a.id] ? '進行中' : st < a.need ? `🔒 ${a.need}★` : '', disabled: !!S.ads[a.id] || st < a.need || S.money < adCost(a) })).join(''));
 }
-function openBook() {
-  openSheet(`📖 圖鑑(組合 ${S.combos.length}/${COMBOS.length})`, COMBOS.map(c => {
-    const got = S.combos.includes(c.id);
-    return `<div class="item ${got ? '' : 'dim'}"><span class="ic">${got ? '🎉' : '❔'}</span><span class="tx"><b>${got ? c.name : '???'}</b><small>${got ? c.effect : '提示:' + c.hint}</small></span><span class="pr">${got && comboOn(c.id) ? '生效中' : ''}</span></div>`;
-  }).join('') + `<p class="note">最佳全國排名:${S.bestRank ? '#' + S.bestRank : '還沒有(每年年底結算)'} · 總共招待 ${S.stats.guests} 位客人 · 5 星評價 ${S.stats.best5} 則</p>`);
+let statsTab = 'report';
+function openStats(tab = statsTab) {
+  statsTab = tab;
+  const tabs = [['report', '📊 報表'], ['rank', '🏆 排行'], ['ach', `🎖 成就 ${S.ach.length}/${ACHIEVEMENTS.length}`], ['combo', `🎉 組合 ${S.combos.length}/${COMBOS.length}`]];
+  const head = `<div class="tabs">${tabs.map(([id, n]) => `<button class="tab ${id === tab ? 'on' : ''}" data-tab="${id}">${n}</button>`).join('')}</div>`;
+  let body = '';
+  if (tab === 'report') {
+    const h = S.hist.slice(-14);
+    const rooms = S.facs.filter(isRoom).length;
+    const last = h[h.length - 1];
+    const maxInc = Math.max(1, ...h.map(x => x.income));
+    const bars = (key, max, fmt) => `<div class="bars">${h.map(x => `<div class="bar" title="第${x.d}天 ${fmt(x[key])}"><i style="height:${Math.max(3, (x[key] || 0) / max * 100)}%"></i><span>${x.d}</span></div>`).join('')}</div>`;
+    const types = Object.entries(S.typeCount).sort((a, b) => b[1] - a[1]);
+    const totalT = types.reduce((a, b) => a + b[1], 0) || 1;
+    const uses = S.facs.filter(f => !isRoom(f)).sort((a, b) => (b.uses || 0) - (a.uses || 0)).slice(0, 6);
+    const wishes = Object.entries(S.wishLog).filter(([k]) => !S.facs.some(f => f.type === k)).sort((a, b) => b[1] - a[1]).slice(0, 4);
+    body = `<div class="kpis">
+      <div><b>${last ? Math.round(last.occ * 100) : 0}%</b><span>昨晚入住率</span></div>
+      <div><b>${rooms}</b><span>房間數</span></div>
+      <div><b>${last && last.avg ? last.avg.toFixed(1) + '★' : '—'}</b><span>昨天評價</span></div>
+      <div><b>${innStyle()}</b><span>旅館風格</span></div></div>
+      <h4>每天收入(最近 ${h.length} 天)</h4>${h.length ? bars('income', maxInc, v => '¥' + v) : '<p class="note">過完第一天就會有資料</p>'}
+      <h4>入住率</h4>${h.length ? bars('occ', 1, v => Math.round(v * 100) + '%') : ''}
+      <h4>客人類型</h4>${types.map(([k, v]) => `<div class="hbar"><span>${TYPES[k].name}</span><i style="width:${v / totalT * 100}%"></i><em>${v}</em></div>`).join('') || '<p class="note">還沒有客人</p>'}
+      <h4>最受歡迎的設施</h4>${uses.map(f => `<div class="hbar"><span>${F(f).icon} ${F(f).name}</span><i style="width:${(f.uses || 0) / Math.max(1, uses[0].uses || 1) * 100}%"></i><em>${f.uses || 0}</em></div>`).join('') || '<p class="note">還沒有人用過</p>'}
+      ${wishes.length ? `<h4>💬 客人希望有…</h4>${wishes.map(([k, v]) => `<div class="hbar"><span>${FAC[k].icon} ${FAC[k].name}</span><i class="wish" style="width:${Math.min(100, v * 10)}%"></i><em>${v} 次</em></div>`).join('')}` : ''}`;
+  } else if (tab === 'rank') {
+    const list = [...S.inns.map(i => ({ ...i, me: false })), { name: '★ 你的旅館', rep: S.rep, me: true }].sort((a, b) => b.rep - a.rep);
+    const r = rankNow(), d = S.prevRank ? S.prevRank - r : 0;
+    body = `<p class="note">全國溫泉旅館排行(口碑)。現在第 <b>${r}</b> 名${d > 0 ? ` ⬆${d}` : d < 0 ? ` ⬇${-d}` : ''},每年第 ${YEAR_DAYS} 天結算一次領獎金。對手也會成長、偶爾推出新東西搶客人。</p>` +
+      list.map((x, i) => `<div class="rk ${x.me ? 'me' : ''}"><span class="no">${i + 1}</span><span class="nm">${escapeHTML(x.name)}</span><span class="st">${'★'.repeat(starsOf(x.rep))}</span><span class="rp">${x.rep.toLocaleString()}</span>${x.boost > 0 ? '<span class="hot">🔥</span>' : ''}</div>`).join('');
+  } else if (tab === 'ach') {
+    body = ACHIEVEMENTS.map(a => {
+      const got = S.ach.includes(a.id);
+      const r = [a.reward.money && `¥${a.reward.money}`, a.reward.ideas && `💡${a.reward.ideas}`].filter(Boolean).join(' ');
+      return `<div class="item ${got ? '' : 'dim'}"><span class="ic">${got ? '🏆' : '🔒'}</span><span class="tx"><b>${a.name}</b><small>${a.desc}</small></span><span class="pr">${got ? '✅' : r}</span></div>`;
+    }).join('');
+  } else {
+    body = COMBOS.map(c => {
+      const got = S.combos.includes(c.id);
+      return `<div class="item ${got ? '' : 'dim'}"><span class="ic">${got ? '🎉' : '❔'}</span><span class="tx"><b>${got ? c.name : '???'}</b><small>${got ? c.effect : '提示:' + c.hint}</small></span><span class="pr">${got && comboOn(c.id) ? '生效中' : ''}</span></div>`;
+    }).join('') + `<p class="note">最佳全國排名:${S.bestRank ? '#' + S.bestRank : '還沒有'} · 招待 ${S.stats.guests} 位 · 5 星 ${S.stats.best5} 則 · 願望實現 ${S.stats.wishes} 次</p>`;
+  }
+  openSheet('📊 經營', head + body);
 }
+$('sheetBody').addEventListener('click', e => { const t = e.target.closest('[data-tab]'); if (t) openStats(t.dataset.tab); });
 
 function doResearch(id) {
   const r = RESEARCH.find(x => x.id === id);
@@ -1100,7 +1400,7 @@ function doResearch(id) {
 function doHire() {
   const cost = STAFF_HIRE(S.staff);
   if (S.money < cost || S.staff >= staffMax(stars())) return;
-  S.money -= cost; S.staff++; syncStaff();
+  S.money -= cost; S.staff++; syncStaff(); checkAch();
   tone(880, 0.1, 'triangle', 0.15); toast('🧹 新員工來上班了!');
   hud(); openStaff(); save();
 }
@@ -1145,7 +1445,7 @@ function confirmPlace() {
   rebuild();
   noise(0.3, 0.06, 600); [523, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.15, 'triangle', 0.16), i * 90));
   float((place.x + place.w / 2) * T, place.y * T, '完成!', '#ffd84a');
-  hud(); save();
+  checkAch(); hud(); save();
   if (place.kind === 'decor' && S.money >= place.cost) updatePlace();      // 擺設可以連續擺
   else endMode();
 }
@@ -1178,7 +1478,7 @@ function buyLand() {
   const n = S.owned.length, cost = landCost(n);
   if (S.money < cost || stars() < landNeed(n)) return;
   S.money -= cost; S.owned.push(landPick.k);
-  rebuild(); fanfare(); toast('🗺 土地擴大了!可以蓋更多設施');
+  rebuild(); fanfare(); toast('🗺 土地擴大了!可以蓋更多設施'); checkAch();
   hud(); save(); endMode();
 }
 
@@ -1267,13 +1567,17 @@ function showSummary() {
   $('sAvg').textContent = r.length ? `${avg.toFixed(1)}★` : '—';
   $('sIdeas').textContent = '💡+' + today.ideas;
   $('sTurned').textContent = today.turned ? `有 ${today.turned} 組客人沒辦法入住` : '';
+  $('sOcc').textContent = today.rooms ? `${Math.round((today.occ || 0) * 100)}%` : '—';
+  const dr = S.prevRank ? S.prevRank - rankNow() : 0;
+  $('sAch').innerHTML = (today.newAch || []).map(a => `<div class="achline">🏆 成就解鎖:<b>${a.name}</b></div>`).join('') +
+    (dr ? `<div class="achline">${dr > 0 ? '⬆' : '⬇'} 全國排名${dr > 0 ? '上升' : '下降'} ${Math.abs(dr)} 名</div>` : '');
   $('sYear').innerHTML = today.year ? `<div class="year">🏆 年度全國溫泉旅館排行:<b>第 ${today.year.rank} 名</b>${today.year.reward ? `<br>獎金 ¥${today.year.reward.toLocaleString()} + 💡10` : ''}</div>` : '';
   $('sReviews').innerHTML = r.length ? shuffle(r).slice(0, 3).map(x => `
     <div class="review"><span class="rs">${'★'.repeat(x.st)}</span><span class="rt">「${escapeHTML(x.text)}」</span>
     <span class="rw">— ${TYPES[x.type].name}${x.vip ? '(雜誌記者)' : ''}</span></div>`).join('')
     : '<div class="review"><span class="rt">今天還沒有人退房。客人住一晚,明天早上才會留評價。</span></div>';
   const st = stars(), next = STAR_REP[st];
-  $('sRep').textContent = (next ? `口碑 ${S.rep} / ${next}(下一顆星)` : `口碑 ${S.rep} · 五星!`) + ` · 全國 #${rankOf(S.rep)}`;
+  $('sRep').textContent = (next ? `口碑 ${S.rep} / ${next}(下一顆星)` : `口碑 ${S.rep} · 五星!`) + ` · 全國 #${rankNow()}`;
   $('summary').classList.add('on');
   fanfare();
 }
@@ -1290,7 +1594,8 @@ document.querySelectorAll('[data-speed]').forEach(b => b.addEventListener('click
 }));
 $('zIn').addEventListener('click', () => zoomAt(1.25, vw / 2, vh / 2));
 $('zOut').addEventListener('click', () => zoomAt(0.8, vw / 2, vh / 2));
-const TOOLS = { tBuild: openBuild, tDecor: openDecor, tLand: openLand, tResearch: openResearch, tStaff: openStaff, tAds: openAds, tBook: openBook };
+const TOOLS = { tBuild: openBuild, tDecor: openDecor, tLand: openLand, tResearch: openResearch, tStaff: openStaff, tAds: openAds, tStats: openStats };
+$('musicBtn').addEventListener('click', () => { tone(600, 0.04, 'square', 0.05); openMusic(); });
 for (const [id, fn] of Object.entries(TOOLS)) $(id).addEventListener('click', () => { if (mode !== 'normal') endMode(); tone(600, 0.04, 'square', 0.05); fn(); });
 
 // ---------- 輸入:拖曳移動、兩指縮放、點一下 ----------
@@ -1356,7 +1661,7 @@ function tapWorld(wx, wy) {
 // ============================================================
 //  主迴圈
 // ============================================================
-let last = 0, panelAt = 0;
+let last = 0, panelAt = 0, musicAt = 0;
 function step(dt) {
   updateDay(dt); updateDesk(dt);
   for (const g of guests) updateGuest(g, dt);
@@ -1368,8 +1673,9 @@ function loop(now) {
   const real = Math.min(0.05, (now - last) / 1000 || 0);
   last = now;
   if (running) {
-    if (!paused && !inSummary) step(real * speed); else stepParticles(0);
+    if (!paused && !inSummary && !inChoice) step(real * speed); else stepParticles(0);
     $('clock').textContent = clockText();
+    if (now - musicAt > 2000) { musicAt = now; pickMusic(); }
     if (selected && now - panelAt > 600) {
       panelAt = now;
       if (selected.fac && !facById(selected.fac.id)) closePanel(); else openPanel(selected);
@@ -1385,6 +1691,8 @@ async function start(fresh) {
   await atlasReady;
   S = fresh ? freshSave() : (readJSON(SAVE_KEY, null) || freshSave());
   S.ads = S.ads || {}; S.research = S.research || []; S.combos = S.combos || [];
+  for (const [k, v] of Object.entries(extraFields())) if (S[k] == null) S[k] = v;
+  S.stats.wishes = S.stats.wishes || 0;
   guests = []; staff = []; fx = []; parts = []; deskQueue = [];
   for (const f of S.facs) f.occ = [];
   show('gameScreen');
@@ -1425,11 +1733,12 @@ refreshStart();
 // 開發用:窗格在背景時 requestAnimationFrame 不跑,用 advance(秒) 快轉
 if (import.meta.env.DEV) window.ON = {
   get S() { return S; }, guests: () => guests, staff: () => staff, t: () => t, rebuild, canPlace, tapWorld, openPanel, facById,
-  advance(sec, st = 0.05) { for (let s = 0; s < sec && !inSummary; s += st) step(st * speed); $('clock').textContent = clockText(); draw(performance.now()); },
+  advance(sec, st = 0.05) { for (let s = 0; s < sec && !inSummary && !inChoice; s += st) step(st * speed); $('clock').textContent = clockText(); draw(performance.now()); },
   place(kind, type, x, y) { if (kind === 'fac') startPlaceFac(type); else startPlaceDecor(type); place.x = x; place.y = y; updatePlace(); const r = place.reason; if (!r) confirmPlace(); else endMode(); return r; },
   buy(cx, cy) { mode = 'land'; landPick = { cx, cy, k: `${cx},${cy}` }; buyLand(); },
   money(n) { S.money += n; hud(); }, rep(n) { S.rep += n; hud(); }, ideas(n) { S.ideas += n; hud(); }, research: doResearch, hire: doHire, ad: doAd,
   upgrade(id) { selected = { fac: facById(id) }; $('pBtn').click(); closePanel(); },
-  inSummary: () => inSummary, next: () => $('sNext').click(),
+  inSummary: () => inSummary, inChoice: () => inChoice, next: () => $('sNext').click(), showChoice: id => showChoice(CHOICES.find(c => c.id === id)), checkAch,
+  pick: i => document.querySelectorAll('.copt')[i].click(),
 };
 requestAnimationFrame(loop);

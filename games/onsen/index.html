@@ -163,6 +163,40 @@
   .rs { color:#e8a317; margin-right:4px; }
   .rw { display:block; font-size:11px; color:var(--dim); }
   #sRep { font-size:12px; color:var(--dim); margin:10px 0 4px; }
+  .achline { margin-top:6px; padding:6px 10px; border-radius:10px; background:#fff3c4; color:#5a3a00; font-size:13px; }
+
+  /* 人生選擇 */
+  #choice { position:fixed; inset:0; z-index:7; display:none; align-items:center; justify-content:center; padding:14px; background:rgba(5,10,30,.65); }
+  #choice.on { display:flex; }
+  #choice .card { max-height:100%; overflow-y:auto; touch-action:pan-y; }
+  .copt { display:flex; flex-direction:column; gap:2px; width:100%; text-align:left; font:inherit; cursor:pointer;
+    margin-top:8px; padding:11px 14px; border-radius:14px; border:2px solid #e3d3bd; background:#fffdf8; color:var(--ink); }
+  .copt:hover { border-color:var(--accent); }
+  .copt b { font-size:16px; } .copt small { font-size:12px; color:var(--dim); }
+
+  /* 經營報表 */
+  .tabs { display:flex; gap:4px; margin-bottom:8px; overflow-x:auto; }
+  .tab { flex:1; white-space:nowrap; font:inherit; font-size:12px; font-weight:bold; padding:7px 6px; border-radius:6px; cursor:pointer;
+    border:2px solid rgba(127,211,255,.4); background:transparent; color:#cfe7ff; }
+  .tab.on { background:var(--edge); color:#0b1230; }
+  .kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  .kpis div { background:rgba(255,255,255,.07); border-radius:6px; padding:6px 4px; text-align:center; }
+  .kpis b { display:block; font-size:16px; color:var(--gold); } .kpis span { font-size:10px; color:#bcd3f5; }
+  #sheetBody h4 { font-size:12px; color:#cfe7ff; margin:12px 2px 6px; }
+  .bars { display:flex; align-items:flex-end; gap:3px; height:80px; padding:0 2px; }
+  .bars .bar { flex:1; height:100%; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; }
+  .bars i { display:block; width:100%; background:linear-gradient(180deg,var(--gold),#e8a317); border-radius:2px 2px 0 0; }
+  .bars span { font-size:8px; color:#9fb7e0; margin-top:2px; }
+  .hbar { display:flex; align-items:center; gap:6px; font-size:12px; margin:3px 2px; }
+  .hbar span { width:96px; flex:none; white-space:nowrap; overflow:hidden; }
+  .hbar i { height:10px; border-radius:3px; background:var(--edge); min-width:3px; }
+  .hbar i.wish { background:#ff8fb8; }
+  .hbar em { font-style:normal; color:#bcd3f5; font-size:11px; }
+  .rk { display:flex; align-items:center; gap:8px; padding:6px 8px; margin-bottom:3px; border-radius:6px; background:rgba(255,255,255,.05); font-size:13px; }
+  .rk.me { background:rgba(255,216,74,.22); border:1px solid var(--gold); }
+  .rk .no { width:20px; text-align:center; font-weight:bold; color:var(--gold); }
+  .rk .nm { flex:1; } .rk .st { color:var(--gold); font-size:10px; } .rk .rp { width:60px; text-align:right; color:#bcd3f5; font-variant-numeric:tabular-nums; }
+  .item.sel { border-color:var(--gold); }
 </style>
 </head>
 <body>
@@ -189,6 +223,7 @@
   <div class="screen" id="gameScreen">
     <div class="bar">
       <button class="icon" id="backBtn" title="存檔並回開始畫面">✕</button>
+      <button class="icon" id="musicBtn" title="音樂與音效">🎵</button>
       <div class="box px" id="dayBox"><div id="day"></div><div id="clock"></div></div>
       <div class="speeds">
         <button data-speed="0" title="暫停">⏸</button>
@@ -229,7 +264,7 @@
       <button class="px" id="tResearch"><span class="ic">💡</span><span class="lb">研究</span></button>
       <button class="px" id="tStaff"><span class="ic">👥</span><span class="lb">員工</span></button>
       <button class="px" id="tAds"><span class="ic">📣</span><span class="lb">宣傳</span></button>
-      <button class="px" id="tBook"><span class="ic">📖</span><span class="lb">圖鑑</span></button>
+      <button class="px" id="tStats"><span class="ic">📊</span><span class="lb">經營</span></button>
     </div>
   </div>
 
@@ -241,13 +276,23 @@
         <div><b id="sSalary">-¥0</b><span>員工薪水</span></div>
         <div><b id="sIdeas">💡+0</b><span>靈感</span></div>
         <div><b id="sServed">0</b><span>退房客人</span></div>
-        <div style="grid-column:span 2"><b id="sAvg">—</b><span>平均評價</span></div>
+        <div><b id="sOcc">—</b><span>入住率</span></div>
+        <div><b id="sAvg">—</b><span>平均評價</span></div>
       </div>
       <div id="sTurned"></div>
+      <div id="sAch"></div>
       <div id="sYear"></div>
       <div id="sReviews"></div>
       <div id="sRep"></div>
       <button class="btn wide" id="sNext">下一天 →</button>
+    </div>
+  </div>
+
+  <div id="choice">
+    <div class="card">
+      <h1 id="cTitle" style="font-size:21px"></h1>
+      <p class="how" id="cText" style="margin:8px 0 12px"></p>
+      <div id="cOpts"></div>
     </div>
   </div>
 

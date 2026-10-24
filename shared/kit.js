@@ -49,13 +49,22 @@ export function renderGallery(key, grid, emptyEl) {
 }
 
 // ---------- 音效:全部 WebAudio 合成,沒有音檔 ----------
-let ac = null;
+let ac = null, sfxBus = null;
+// 聲音設定存在這台裝置(不是存檔的一部分):{ sfx: true/false, music: 曲目 id 或 'off' }
+const AUDIO_KEY = 'sun-games-audio';
+export const audioPrefs = Object.assign({ sfx: true, music: 'auto' }, readJSON(AUDIO_KEY, {}));
+export function saveAudioPrefs() { writeJSON(AUDIO_KEY, audioPrefs); if (sfxBus) sfxBus.gain.value = audioPrefs.sfx ? 1 : 0; }
 function audio() {
   // iOS 要在使用者觸碰之後才能出聲,所以延到第一次用才建立
-  if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+  if (!ac) {
+    try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; }
+    sfxBus = ac.createGain(); sfxBus.gain.value = audioPrefs.sfx ? 1 : 0; sfxBus.connect(ac.destination);
+  }
   if (ac.state === 'suspended') ac.resume();
   return ac;
 }
+/** 給配樂引擎用:同一個 AudioContext */
+export function audioCtx() { return audio(); }
 export function tone(freq, dur = 0.12, type = 'sine', vol = 0.18, slide = 0) {
   const a = audio(); if (!a) return;
   const t = a.currentTime;
@@ -65,7 +74,7 @@ export function tone(freq, dur = 0.12, type = 'sine', vol = 0.18, slide = 0) {
   if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t + dur);
   g.gain.setValueAtTime(vol, t);
   g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  o.connect(g).connect(a.destination);
+  o.connect(g).connect(sfxBus);
   o.start(t); o.stop(t + dur + 0.02);
 }
 /** 短短的噪音:倒麵糊、滋滋聲 */
@@ -77,7 +86,7 @@ export function noise(dur = 0.2, vol = 0.08, hp = 1200) {
   for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
   const src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
   src.buffer = buf; f.type = 'highpass'; f.frequency.value = hp; g.gain.value = vol;
-  src.connect(f).connect(g).connect(a.destination);
+  src.connect(f).connect(g).connect(sfxBus);
   src.start();
 }
 /** 完成時的上升音階 */
