@@ -22,6 +22,8 @@ SHEETS = {
     'BA': '1_Interiors/32x32/Theme_Sorter_32x32/3_Bathroom_32x32.png',
     'GR': '1_Interiors/32x32/Theme_Sorter_32x32/16_Grocery_store_32x32.png',
     'FL': '1_Interiors/32x32/Room_Bulder_subfiles_32x32/Room_Builder_Floors_32x32.png',
+    'LR': '1_Interiors/32x32/Theme_Sorter_32x32/2_LivingRoom_32x32.png',
+    'MU': '1_Interiors/32x32/Theme_Sorter_32x32/6_Music_and_sport_32x32.png',
 }
 
 # 名字: (圖, x, y, w, h) —— 以 32px 格為單位;FL 地板用像素
@@ -67,6 +69,21 @@ SPRITES = {
     'flowers':     ('GR', 12, 61, 2, 2),
     'garland':     ('GR', 13, 57, 3, 2),
     'bush':        ('GR', 4, 65, 1, 2),
+    # 休憩室、卡拉OK、擺設(v2 新增)
+    'sofa':        ('LR', 1, 28, 3, 2),
+    'sofa_w':      ('LR', 4, 28, 3, 2),
+    'bookshelf':   ('LR', 10, 24, 2, 2),
+    'fireplace':   ('LR', 4, 24, 2, 2.15),
+    'palm':        ('LR', 13.5, 22, 1, 2),
+    'plant':       ('LR', 15, 22, 1, 2),
+    'fishbowl':    ('LR', 1, 25, 1, 1),
+    'pot':         ('LR', 0, 23, 1, 1),
+    'speaker':     ('MU', 6, 0, 1, 3),
+    'speaker_s':   ('MU', 7, 0, 1, 2),
+    'mic':         ('MU', 7, 15, 1, 2),
+    'mic2':        ('MU', 8, 15, 1, 2),
+    'keyboard':    ('MU', 8, 17, 2, 1),
+    'guitar':      ('MU', 10, 3, 1, 2),
     # 地板(像素座標,2×2 格可以重複鋪)
     'fl_wood':     ('FL', 0, 384, 64, 64),
     'fl_wood2':    ('FL', 128, 384, 64, 64),
@@ -76,7 +93,7 @@ SPRITES = {
 }
 
 # 人物:只取「待機」與「走路」兩列(各 4 方向 × 6 格,每格 32×64)
-CHARS = list(range(1, 14))          # 1~12 當客人,13 當櫃台人員
+CHARS = list(range(1, 17))          # 1~12 當客人,13 櫃台,14~16 打掃員工
 CHAR_SHEET = '2_Characters/Character_Generator/0_Premade_Characters/32x32/Premade_Character_32x32_{:02d}.png'
 
 
@@ -89,7 +106,7 @@ def load(key, cache={}):
 def main():
     pieces = []
     for name, (sheet, x, y, w, h) in SPRITES.items():
-        box = (x, y, x + w, y + h) if sheet == 'FL' else (x * T, y * T, (x + w) * T, (y + h) * T)
+        box = (x, y, x + w, y + h) if sheet == 'FL' else tuple(int(v * T) for v in (x, y, x + w, y + h))
         pieces.append((name, load(sheet).crop(box)))
     for i in CHARS:
         im = Image.open(os.path.join(LIMEZU, CHAR_SHEET.format(i))).convert('RGBA')
