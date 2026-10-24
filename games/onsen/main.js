@@ -15,10 +15,14 @@ import {
   MILESTONES, LEGEND_GOALS, LEGEND_RIVAL, LEGEND_GROW, NG_MONEY, NG_RIVAL, NG_CARRY_MAX_LV,
 } from './data.js';
 import { loadBest, saveBoth, encodeSave, decodeSave } from './store.js';
+import { buildProcSprites } from './proc.js';
 
 /* ============================================================
    溫泉旅館 v2 —— 自由建造版
-   像素美術:全部是自己的 pixelkit(shared/pixelkit/)用程式畫的,家具在 japanese.js、人物在 character.js
+   像素美術有兩套,可以在開始畫面 / 🎵 選單切換(只是換圖,存檔、玩法完全一樣):
+     Pixelkit:自己用程式畫的(shared/pixelkit/),家具在 japanese.js、人物在 character.js
+     LimeZu:LimeZu Modern Interiors 裁切後的 atlas(public/onsen/,tools/onsen_atlas.py 產生)+ proc.js;
+             LimeZu 沒有的(v2.4 新擺設、新地板、牆紙)用 Pixelkit 的補
 
    跟 v1 最大的不同:設施不再是固定格子,而是在自己的土地上「想蓋哪就蓋哪」;
    土地可以一塊一塊買;家具擺在走道上會讓附近設施變好,特定擺法會觸發「組合」。
@@ -42,10 +46,38 @@ renderWho($('who'), '是老闆');
 // 家具、地板:pixelkit 和風組(名字跟舊版 atlas 一樣,存檔裡的擺設直接對得上)
 const SPR = {};
 for (const [n, k] of Object.entries(JP_KIT)) SPR[n] = toCanvas(k.make());
-const sprW = n => SPR[n] ? SPR[n].width : 32;
+
+// ---------- 畫風:Pixelkit / LimeZu(存在這台裝置,不是存檔的一部分)----------
+const STYLE_KEY = 'sun-onsen-style';
+let style = (() => { try { return localStorage.getItem(STYLE_KEY) === 'limezu' ? 'limezu' : 'pixel'; } catch (e) { return 'pixel'; } })();
+const LZ = { atlas: null, R: null, spr: {}, proc: {}, ready: null };
+/** LimeZu atlas 用到才載(Pixelkit 模式不用下載那張圖) */
+function loadLimeZu() {
+  if (!LZ.ready) LZ.ready = Promise.all([
+    fetch(BASE + 'onsen/atlas.json').then(r => r.json()),
+    new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = BASE + 'onsen/atlas.png'; }),
+  ]).then(([R, im]) => {
+    LZ.R = R; LZ.atlas = im;
+    for (const [n, r] of Object.entries(R)) {
+      if (n.startsWith('char')) continue;
+      const c = document.createElement('canvas'); c.width = r[2]; c.height = r[3];
+      c.getContext('2d').drawImage(im, r[0], r[1], r[2], r[3], 0, 0, r[2], r[3]);
+      LZ.spr[n] = c;
+    }
+    LZ.proc = buildProcSprites();
+  }).catch(e => { LZ.ready = null; throw e; });
+  return LZ.ready;
+}
+const isLZ = () => style === 'limezu' && !!LZ.atlas;
+/** 依畫風拿圖;LimeZu 沒有的就用 Pixelkit 的 */
+const IMG = n => (isLZ() && (LZ.spr[n] || LZ.proc[n])) || SPR[n];
+const sprW = n => SPR[n] ? SPR[n].width : 32;         // 佔幾格:兩套一樣,一律用 Pixelkit 的尺寸算
 const sprH = n => SPR[n] ? SPR[n].height : 32;
+const imgW = n => IMG(n) ? IMG(n).width : 32;         // 畫的時候:用實際那張圖的大小
+const imgH = n => IMG(n) ? IMG(n).height : 32;
 const picCache = {};
-const sprURL = n => picCache[n] || (picCache[n] = SPR[n].toDataURL());
+const sprURL = n => { const k = (isLZ() ? 'L:' : 'P:') + n; return picCache[k] || (picCache[k] = IMG(n).toDataURL()); };
+if (style === 'limezu') loadLimeZu().catch(() => {});
 
 // 人物:pixelkit 的 Q 版小人(24×32,腳踩 y=30)。只換髮型/顏色,不換衣服
 // 客人:char 是一個數字,同一個數字永遠長一樣(睡覺存檔只存數字)
@@ -64,6 +96,13 @@ function staffLook(c) {
   return looks.get(k);
 }
 const OKAMI = { skin: SKINS[0], hair: 'bun', hairColor: '#3a2a2a', cloth: '#8a4a7a' };      // 櫃台的老闆娘
+// who = { look(Pixelkit 長相), lz(LimeZu premade 角色編號 1~20)}:兩種畫風各自用自己的
+const whoCache = new Map();
+function guestWho(n) { const k = 'g' + n; if (!whoCache.has(k)) whoCache.set(k, { look: guestLook(n), lz: ((n - 1) % 12) + 1 }); return whoCache.get(k); }
+function staffWho(c) { const k = 's' + c.id + c.role; if (!whoCache.has(k)) whoCache.set(k, { look: staffLook(c), lz: c.char || 14 }); return whoCache.get(k); }
+const OKAMI_WHO = { look: OKAMI, lz: 13 };
+/** 跟人物身高有關的數字(對話泡泡、頭上的職業圖示、點人的範圍) */
+const charH = () => isLZ() ? { bub: 66, soak: 50, lie: 30, icon: 64, hit: 46, deskDy: -0.35 * T } : { bub: 34, soak: 24, lie: 22, icon: 38, hit: 32, deskDy: 0 };
 const sheetOf = look => toCanvas(makeCharacter(look));
 
 // ---------- 狀態 ----------
@@ -1029,13 +1068,30 @@ function openMusic() {
   openSheet('🎵 音樂與音效', row('auto', '自動', '依季節換曲,晚上變成夜曲') +
     Object.entries(TRACKS).map(([id, tr]) => row(id, tr.name, `${tr.bpm} BPM`)).join('') +
     row('off', '關閉音樂', '') +
+    `<h4 class="sec">🎨 畫風</h4>` + styleButtons() +
+    `<h4 class="sec">🔔 音效</h4>` +
     `<button class="item" data-sfx="1"><span class="ic">${audioPrefs.sfx ? '🔔' : '🔕'}</span><span class="tx"><b>音效:${audioPrefs.sfx ? '開' : '關'}</b><small>點一下切換(投幣、入住、升級的聲音)</small></span></button>`);
 }
 $('sheetBody').addEventListener('click', e => {
+  const st = e.target.closest('[data-style]');
+  if (st) { setStyle(st.dataset.style).then(() => { if ($('sheet').classList.contains('on')) openMusic(); }); return; }
   const m = e.target.closest('[data-music]'), x = e.target.closest('[data-sfx]');
   if (m) { audioPrefs.music = m.dataset.music; saveAudioPrefs(); pickMusic(); openMusic(); }
   if (x) { audioPrefs.sfx = !audioPrefs.sfx; saveAudioPrefs(); openMusic(); updateMuteIcon(); }
 });
+const STYLES = { pixel: ['Pixelkit', '遊戲間自己畫的 Q 版(預設)'], limezu: ['LimeZu', '原本的 LimeZu 畫風'] };
+function styleButtons() {
+  return Object.entries(STYLES).map(([id, [name, sub]]) => `<button class="item ${style === id ? 'sel' : ''}" data-style="${id}"><span class="ic">${id === 'pixel' ? '🧸' : '🏠'}</span><span class="tx"><b>${name}</b><small>${sub}</small></span><span class="pr">${style === id ? '使用中' : ''}</span></button>`).join('');
+}
+/** 換畫風:只是換圖。LimeZu 的 atlas 第一次用才下載 */
+async function setStyle(s2) {
+  if (s2 === 'limezu') { try { await loadLimeZu(); } catch (e) { toast('LimeZu 的圖載不到,先用 Pixelkit'); s2 = 'pixel'; } }
+  style = s2;
+  try { localStorage.setItem(STYLE_KEY, s2); } catch (e) { /* 存不了也沒關係,這次照樣換 */ }
+  if (S && running) rebuild();
+  updateStyleBtn();
+}
+function updateStyleBtn() { const b = $('styleBtn'); if (b) b.textContent = `🎨 畫風:${STYLES[style][0]}`; }
 function updateMuteIcon() { $('musicBtn').textContent = audioPrefs.music === 'off' && !audioPrefs.sfx ? '🔇' : '🎵'; }
 
 // ============================================================
@@ -1086,20 +1142,21 @@ function zoomAt(k, sx, sy) {
 new ResizeObserver(() => { if (running) resize(); }).observe(cv);
 
 function spr(name, x, y, c = ctx) {
-  if (SPR[name]) c.drawImage(SPR[name], Math.round(x), Math.round(y));
+  const im = IMG(name);
+  if (im) c.drawImage(im, Math.round(x), Math.round(y));
 }
 /** 只畫一張圖的其中幾列(sy 起、sh 高):食堂桌子要把後排坐墊跟桌面分開畫,客人才夾得在中間 */
 function sprRows(name, x, y, sy, sh) {
-  const im = SPR[name];
+  const im = IMG(name);
   ctx.drawImage(im, 0, sy, im.width, sh, Math.round(x), Math.round(y) + sy, im.width, sh);
 }
 /** 擺設用:flip 就左右鏡像 */
 function sprF(name, x, y, flip) {
   if (!flip) { spr(name, x, y); return; }
-  ctx.save(); ctx.translate(Math.round(x) + sprW(name), Math.round(y)); ctx.scale(-1, 1); spr(name, 0, 0); ctx.restore();
+  ctx.save(); ctx.translate(Math.round(x) + imgW(name), Math.round(y)); ctx.scale(-1, 1); spr(name, 0, 0); ctx.restore();
 }
 function tile(c, name, x, y, w, h) {
-  const im = SPR[name];
+  const im = IMG(name);
   for (let yy = y; yy < y + h; yy += 64) for (let xx = x; xx < x + w; xx += 64) {
     const cw = Math.min(64, x + w - xx), ch = Math.min(64, y + h - yy);
     c.drawImage(im, 0, 0, cw, ch, xx, yy, cw, ch);
@@ -1134,7 +1191,7 @@ function renderStatic() {
     const r2 = () => (s2 = (s2 * 16807) % 2147483647) / 2147483647;
     const items = [];
     for (let i = 0; i < 4; i++) items.push([SCEN[Math.floor(r2() * SCEN.length)], cx * CHUNK + 1 + Math.floor(r2() * (CHUNK - 3)), cy * CHUNK + 3 + Math.floor(r2() * (CHUNK - 3))]);
-    items.sort((a, b) => a[2] - b[2]).forEach(([n, x, y]) => g.drawImage(SPR[n], x * T, (y + 1) * T - sprH(n)));
+    items.sort((a, b) => a[2] - b[2]).forEach(([n, x, y]) => g.drawImage(SPR[n], x * T, (y + 1) * T - sprH(n)));   // 一律用 Pixelkit 的樹(LimeZu 的灌木是盆栽)
   }
   // 還沒買的地:暗一點
   g.fillStyle = 'rgba(20,40,10,.22)';
@@ -1206,7 +1263,7 @@ function drawPool(p, ox, oy, style, now) {
     ctx.fillStyle = '#c18d58'; ctx.fillRect(x - 5, y - 5, w + 10, 4);
   } else {
     ctx.save(); roundRect(x - 9, y - 9, w + 18, h + 18, Math.min(22, h / 2)); ctx.clip();
-    for (let yy = y - 9; yy < y + h + 9; yy += 64) for (let xx = x - 9; xx < x + w + 9; xx += 64) ctx.drawImage(SPR.rock, xx, yy);
+    for (let yy = y - 9; yy < y + h + 9; yy += 64) for (let xx = x - 9; xx < x + w + 9; xx += 64) ctx.drawImage(IMG('rock'), xx, yy);
     ctx.restore();
   }
   ctx.save();
@@ -1358,8 +1415,9 @@ function bubbleAt(x, y, text) {
 // 遊戲裡的方向編號(0 右、1 上、2 左、3 下)→ character.js sheet 的列(下、左、右、上)
 const DIR_ROW = [2, 3, 1, 0];
 /** 畫一個人,(x, y) 是腳底。sheet 一列 6 格:待機 0~1、走路 2~5 */
-function drawChar(look, x, y, dir, frame, moving, soak) {
-  const sh = sheetOf(look);
+function drawChar(who, x, y, dir, frame, moving, soak) {
+  if (isLZ()) { drawCharLZ(who.lz, x, y, dir, frame, moving, soak); return; }
+  const sh = sheetOf(who.look);
   const col = moving ? 2 + (Math.floor(frame) % 4) : Math.floor(frame / 3) % 2;
   const sx = col * FW, sy = DIR_ROW[dir] * FH;
   const dx = Math.round(x - FW / 2), dy = Math.round(y - 30);
@@ -1372,11 +1430,37 @@ function drawChar(look, x, y, dir, frame, moving, soak) {
   }
   ctx.drawImage(sh, sx, sy, FW, FH, dx, dy, FW, FH);     // 影子已經畫在 sheet 裡
 }
+/** LimeZu 的 premade 角色:每格 32×64,一列 6 格,方向 0 右 1 上 2 左 3 下;上半待機、下半走路 */
+function drawCharLZ(n, x, y, dir, frame, moving, soak) {
+  const r = LZ.R['char' + n];
+  const f = dir * 6 + (Math.floor(frame) % 6);
+  const sx = r[0] + f * 32, sy = r[1] + (moving ? 64 : 0);
+  const dx = Math.round(x - 16), dy = Math.round(y - 60);
+  if (soak) {
+    ctx.drawImage(LZ.atlas, sx, sy, 32, 44, dx, dy + 8, 32, 44);
+    ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.fillRect(dx + 6, dy + 50, 20, 2);
+    return;
+  }
+  ctx.fillStyle = 'rgba(0,0,0,.18)';
+  ctx.beginPath(); ctx.ellipse(x, y - 2, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.drawImage(LZ.atlas, sx, sy, 32, 64, dx, dy, 32, 64);
+}
 /** 按摩床上躺著(頭朝左),身上蓋一條毛巾 */
-function drawLying(look, x, y) {
+function drawLying(who, x, y) {
   const cx = Math.round(x), cy = Math.round(y - 13);
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(-Math.PI / 2);
-  ctx.drawImage(sheetOf(look), 0, 0, FW, 28, -FW / 2, -14, FW, 28);      // 轉 -90°:頭(圖的上方)朝左
+  if (isLZ()) {
+    // LimeZu 角色的身體在 32×64 那格的第 20~63 列:轉過來大約 44 寬
+    const r = LZ.R['char' + who.lz];
+    ctx.drawImage(LZ.atlas, r[0] + 18 * 32, r[1] + 20, 32, 44, -16, -22, 32, 44);
+    ctx.restore();
+    ctx.fillStyle = '#2b1f2e'; ctx.fillRect(cx - 1, cy - 11, 22, 22);
+    ctx.fillStyle = '#7fbfb0'; ctx.fillRect(cx, cy - 10, 20, 20);
+    ctx.fillStyle = '#9fd6c8'; ctx.fillRect(cx, cy - 10, 20, 17);
+    ctx.fillStyle = '#c8eee4'; ctx.fillRect(cx, cy - 10, 2, 17);
+    return;
+  }
+  ctx.drawImage(sheetOf(who.look), 0, 0, FW, 28, -FW / 2, -14, FW, 28);      // 轉 -90°:頭(圖的上方)朝左
   ctx.restore();
   ctx.fillStyle = '#2b1f2e'; ctx.fillRect(cx + 1, cy - 9, 15, 18);
   ctx.fillStyle = '#7fbfb0'; ctx.fillRect(cx + 2, cy - 8, 13, 16);
@@ -1391,8 +1475,12 @@ function drawSleepers(f) {
   const ox = f.x * T, oy = f.y * T, n = f.type === 'bigroom' ? 4 : 2;
   zs.slice(0, n).forEach((g, i) => {
     const px = ox + (i >> 1) * 2 * T + (i % 2 ? 46 : 18), py = oy + T + 15;      // 枕頭中心(futon_top 裡的位置)
-    const look = guestLook(g.char);
-    ctx.drawImage(sheetOf(look), 0, 0, FW, 19, px - FW / 2, py - 15, FW, 19);
+    const who = guestWho(g.char);
+    if (isLZ()) {
+      // LimeZu:頭在那格的第 18~44 列
+      const r = LZ.R['char' + who.lz];
+      ctx.drawImage(LZ.atlas, r[0] + 18 * 32, r[1] + 18, 32, 24, px - 16, py - 20, 32, 24);
+    } else ctx.drawImage(sheetOf(who.look), 0, 0, FW, 19, px - FW / 2, py - 15, FW, 19);
     ctx.fillStyle = FUTON_COLOR[f.lv - 1]; ctx.fillRect(px - 12, py + 1, 24, 17);   // 一路接到下面的被子   // 被子蓋到下巴(頭的圖 16 列以下是脖子)
     ctx.fillStyle = FUTON_HI[f.lv - 1]; ctx.fillRect(px - 12, py + 1, 24, 2);        // 被子反摺的亮邊
     ctx.fillStyle = '#2b1f2e'; ctx.fillRect(px - 12, py, 24, 1);
@@ -1410,20 +1498,21 @@ function draw(now) {
   const vis = guests.filter(visible);
   for (const f of [...S.facs].sort((a, b) => a.y - b.y)) {
     drawFac(f, now, 'back');
-    for (const g of vis) if (g.at === f.id && g.under) drawChar(guestLook(g.char), g.x, g.y, g.dir, g.frame, false, false);
+    for (const g of vis) if (g.at === f.id && g.under) drawChar(guestWho(g.char), g.x, g.y, g.dir, g.frame, false, false);
     drawFac(f, now, 'front');
-    for (const g of vis) if (g.at === f.id && g.lie) drawLying(guestLook(g.char), g.x, g.y);
+    for (const g of vis) if (g.at === f.id && g.lie) drawLying(guestWho(g.char), g.x, g.y);
     if (isRoom(f)) drawSleepers(f);
   }
-  drawChar(OKAMI, DESK.staff[0] * T, DESK.staff[1] * T, 3, now / 250, false, false);
-  for (const a of staff) if (a.state === 'desk') drawChar(staffLook(a.c), a.x, a.y, a.dir, now / 250 + 2, false, false);
+  const CH = charH();
+  drawChar(OKAMI_WHO, DESK.staff[0] * T, DESK.staff[1] * T + CH.deskDy, 3, now / 250, false, false);
+  for (const a of staff) if (a.state === 'desk') drawChar(staffWho(a.c), a.x, a.y + CH.deskDy, a.dir, now / 250 + 2, false, false);
   spr('counter', DESK.x * T, DESK.y * T);
 
   // 擺設、客人、員工一起按照 y 排序,才有前後遮擋
   const items = [];
-  for (const d of S.decor) items.push({ y: (d.y + 1) * T, draw: () => sprF(d.type, d.x * T, (d.y + 1) * T - sprH(d.type), d.flip) });
-  for (const g of vis) if (!g.under && !g.lie) items.push({ y: g.y, draw: () => drawChar(guestLook(g.char), g.x, g.y, g.dir, g.frame, g.moving, g.soak) });
-  for (const a of staff) if (a.state !== 'desk') items.push({ y: a.y, draw: () => drawChar(staffLook(a.c), a.x, a.y, a.dir, a.frame, a.moving, false) });
+  for (const d of S.decor) items.push({ y: (d.y + 1) * T, draw: () => sprF(d.type, d.x * T, (d.y + 1) * T - imgH(d.type), d.flip) });
+  for (const g of vis) if (!g.under && !g.lie) items.push({ y: g.y, draw: () => drawChar(guestWho(g.char), g.x, g.y, g.dir, g.frame, g.moving, g.soak) });
+  for (const a of staff) if (a.state !== 'desk') items.push({ y: a.y, draw: () => drawChar(staffWho(a.c), a.x, a.y, a.dir, a.frame, a.moving, false) });
   items.sort((a, b) => a.y - b.y).forEach(i => i.draw());
 
   for (const f of S.facs) {
@@ -1460,11 +1549,11 @@ function draw(now) {
     const r = selected.fac ? facRect(selected.fac) : { x: selected.decor.x, y: selected.decor.y, w: decorW(selected.decor.type), h: 1 };
     ctx.strokeRect(r.x * T + 1, r.y * T + 1, r.w * T - 2, r.h * T - 2);
   }
-  for (const a of [...vis, ...staff]) if (a.bubble) bubbleAt(a.x, a.y - (a.soak ? 24 : a.lie ? 22 : 34), a.bubble.text);
+  for (const a of [...vis, ...staff]) if (a.bubble) bubbleAt(a.x, a.y - (a.soak ? CH.soak : a.lie ? CH.lie : CH.bub), a.bubble.text);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const a of staff) if (!a.bubble) {
     ctx.font = `${Math.round(10 * kz())}px sans-serif`; ctx.fillStyle = '#fff';
-    ctx.fillText(STAFF_ROLES[a.c.role].icon + (a.c.lv > 1 ? a.c.lv : ''), a.x, a.y - 38);
+    ctx.fillText(STAFF_ROLES[a.c.role].icon + (a.c.lv > 1 ? a.c.lv : ''), a.x, a.y - CH.icon);
   }
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const f of fx) {
@@ -1479,7 +1568,7 @@ function draw(now) {
 function drawGhost(now) {
   const p = place, x = p.x * T, y = p.y * T, w = p.w * T, h = p.h * T;
   ctx.globalAlpha = 0.75;
-  if (!isFacPlace(p)) sprF(p.type, x, y + T - sprH(p.type), p.flip);
+  if (!isFacPlace(p)) sprF(p.type, x, y + T - imgH(p.type), p.flip);
   else { tile(ctx, p.obj ? floorOf(p.obj) : FLOOR[p.type], x, y, w, h); drawFac({ type: p.type, x: p.x, y: p.y, lv: p.obj ? p.obj.lv : 1 }, now); }
   ctx.globalAlpha = 1;
   ctx.fillStyle = p.reason ? 'rgba(230,60,60,.35)' : 'rgba(80,220,120,.3)';
@@ -1618,10 +1707,11 @@ function openResearch() {
 const faceCache = {};
 /** 員工名單的大頭照:正面待機那一格 */
 function faceURL(c) {
-  const k = c.id + c.role;
+  const k = (isLZ() ? 'L' : 'P') + c.id + c.role;
   if (!faceCache[k]) {
     const cv2 = document.createElement('canvas'); cv2.width = FW; cv2.height = FH;
-    cv2.getContext('2d').drawImage(sheetOf(staffLook(c)), 0, 0, FW, FH, 0, 0, FW, FH);
+    if (isLZ()) { const r = LZ.R['char' + (c.char || 14)]; cv2.width = 32; cv2.height = 44; cv2.getContext('2d').drawImage(LZ.atlas, r[0] + 18 * 32, r[1] + 6, 32, 44, 0, 0, 32, 44); }
+    else cv2.getContext('2d').drawImage(sheetOf(staffLook(c)), 0, 0, FW, FH, 0, 0, FW, FH);
     faceCache[k] = cv2.toDataURL();
   }
   return faceCache[k];
@@ -2143,7 +2233,7 @@ function tapWorld(wx, wy) {
   if (mode === 'place') { movePlace(wx, wy); tone(500, 0.03, 'square', 0.04); return; }
   if (mode === 'land') { pickLand(wx, wy); return; }
   const all = [...guests.filter(visible), ...staff].sort((a, b) => b.y - a.y);
-  const g = all.find(g => Math.abs(wx - g.x) < 12 && wy < g.y + 2 && wy > g.y - 32);
+  const g = all.find(g => Math.abs(wx - g.x) < (isLZ() ? 13 : 12) && wy < g.y + 2 && wy > g.y - charH().hit);
   if (g) { if (g.type) showGuest(g); else bubble(g, `${g.c.name} ${STAFF_ROLES[g.c.role].icon}Lv${g.c.lv}`, 2); tone(700, 0.05, 'sine', 0.1); return; }
   const tx = Math.floor(wx / T), ty = Math.floor(wy / T);
   const o = occ[ty] && occ[ty][tx];
@@ -2182,6 +2272,7 @@ function loop(now) {
 // ---------- 開始 ----------
 function show(id) { for (const s of ['startScreen', 'gameScreen']) $(s).classList.toggle('on', s === id); }
 async function start(fresh) {
+  if (style === 'limezu') { try { await loadLimeZu(); } catch (e) { style = 'pixel'; } }
   boot(fresh ? freshSave() : ((await loadBest(SAVE_KEY)) || freshSave()));
 }
 /** v2.4 地圖往上加高 OY 格:舊存檔的東西整個往下搬,土地編號 cy + 4 */
@@ -2247,6 +2338,8 @@ async function refreshStart() {
   }
 }
 refreshStart();
+updateStyleBtn();
+$('styleBtn').addEventListener('click', () => setStyle(style === 'pixel' ? 'limezu' : 'pixel'));
 
 // ---------- 存檔碼:備份 / 換裝置 ----------
 let codeMode = 'backup';
@@ -2302,7 +2395,7 @@ if (import.meta.env.DEV) window.ON = {
   train: doTrain, move: sel => startMove(sel), confirm: confirmPlace, place_: () => place,
   toScreen(tx, ty) { const r = cv.getBoundingClientRect(); return [r.left + (tx * T - cam.x) * cam.s, r.top + (ty * T - cam.y) * cam.s]; },
   money(n) { S.money += n; hud(); }, rep(n) { S.rep += n; hud(); }, ideas(n) { S.ideas += n; hud(); }, research: doResearch, hire: doHire, ad: doAd,
-  upgrade(id) { openPanel({ fac: facById(id) }); $('pBtn').click(); closePanel(); }, showEnding, newInn, checkMilestones, encodeSave, decodeSave, refreshStart, save,
+  upgrade(id) { openPanel({ fac: facById(id) }); $('pBtn').click(); closePanel(); }, showEnding, newInn, checkMilestones, setStyle, style: () => style, encodeSave, decodeSave, refreshStart, save,
   inSummary: () => inSummary, inChoice: () => inChoice, next: () => $('sNext').click(), showChoice: id => showChoice(CHOICES.find(c => c.id === id)), checkAch,
   pick: i => document.querySelectorAll('.copt')[i].click(),
 };

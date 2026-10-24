@@ -96,11 +96,22 @@ SS 回報:手機直玩縮到最小上下還有空位;玩法太單一、沒有吸
 
 平衡(自動玩家 3 次,不會用裝潢跟新擺設):5★ 第 46~52 天、結局第 **107 / 121 / 109 天**(v2.3 是 89~105 天;地圖變大、後期地價改線性後稍微慢一點,自己會裝潢、擺招財貓的玩家會比較快),0 錯誤。舊格式存檔(24 列地圖、含睡覺客人)實測自動搬到新座標、能繼續玩。
 
+**v2.5(2026-10-25)兩種畫風:Pixelkit / LimeZu**
+
+SS:「我想要 LimeZu 版跟新版都在裡面」。做法:**同一款遊戲加「畫風」切換**(開始畫面「🎨 畫風」按鈕、遊戲中 🎵 選單裡也能換),存檔、玩法、v2.3/v2.4 所有功能共用,只是換圖。設定存在這台裝置(`sun-onsen-style`),不在存檔裡。不複製一份遊戲的理由:兩份遊戲之後每改一個功能都要改兩次,而且存檔會分成兩邊。
+
+- LimeZu 模式用 `public/onsen/atlas.png` + `atlas.json`(從 git 拿回 v2.1 那份,`tools/onsen_atlas.py` 也拿回來了,素材包換位置設 `LIMEZU` 再跑)+ `games/onsen/proc.js`(當年 LimeZu 沒有的石燈籠、竹叢、行燈、鯉魚旗、機台、鳥居、賽錢箱、煮蛋鍋、按摩床、茶道具)。atlas 只有切到 LimeZu 才下載
+- 名字跟格子大小兩套一樣,佔幾格一律用 Pixelkit 的尺寸算,所以切換不會讓東西擋住路
+- **LimeZu 模式下用 Pixelkit 補的**(LimeZu 素材包的和風/客廳/浴室表裡找不到對應的):v2.4 新擺設 14 種(達摩、狸貓、招財貓、牛奶販賣機、扭蛋機、添水、夾娃娃機、按摩椅、櫻花樹、紅葉樹、水豚泡湯、大水族箱;**漫畫書櫃、金屏風有 LimeZu 版**)、新地板 8 種(深色木、竹蓆、薄荷磁磚、粉紅格子、草地、紅地毯、星空、大理石)、全部牆紙、還沒買的地上的樹
+- 人物:LimeZu 模式用 premade 角色(客人 1~12 號照客人編號輪、老闆娘 13 號、員工用自己的 14~20 號,32×64、6 格動畫);泡湯、按摩床躺著、和室睡覺、櫃台、對話泡泡高度、員工名單大頭照兩套各自算(`charH()`、`drawCharLZ`)
+- 開始畫面的 credit 兩套都寫:「像素美術:Pixelkit(遊戲間自己畫)・LimeZu 畫風:LimeZu — Modern Interiors(limezu.itch.io)」
+- **授權提醒**:LimeZu 只能放裁切後的 atlas 進 repo(han 是 public),原始素材包絕對不進 repo;要加 LimeZu 的圖就在 `tools/onsen_atlas.py` 的 `SPRITES` 加一行重跑
+
 ### 素材與授權
 
-溫泉旅館的圖**全部是 `shared/pixelkit/` 用程式畫的**,沒有外部素材,沒有授權問題,也不需要 credit(開始畫面寫的是「遊戲間自己畫的 Pixelkit」)。LimeZu Modern Interiors 只當過畫風參考,沒有描或複製任何像素。舊版(v2.1 以前)用過的 LimeZu atlas 留在 git 歷史裡。
-
-- 要加新家具:在 `shared/pixelkit/japanese.js` 寫一個繪圖函式、加進 `JP_KIT`,溫泉旅館用同一個名字就拿得到;預覽頁 `games/pixelkit/` 會一起列出來
+- **Pixelkit 畫風**(預設):全部是 `shared/pixelkit/` 用程式畫的,沒有外部素材。加新家具:在 `japanese.js` 寫繪圖函式、加進 `JP_KIT`
+- **LimeZu 畫風**:LimeZu — Modern Interiors(limezu.itch.io),SS 買的完整版。授權允許用在自己的遊戲,但**不能散佈素材本身**,要標 credit(開始畫面有寫)。han 是 public repo,所以原始素材包**絕對不進 repo**(放在 `AIoffice/limezu.itch.io/`),只有 `tools/onsen_atlas.py` 裁出來的 `public/onsen/atlas.png` + `atlas.json` 進 repo
+- **字體**:俐方體 11 號(Cubic 11),`public/fonts/`,免費可散佈(授權檔在旁邊)
 
 ## 做食物系列:章魚燒 / 畫 Pizza / 疊漢堡
 
