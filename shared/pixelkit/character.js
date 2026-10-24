@@ -18,6 +18,7 @@ export const CLOTH_COLORS = ['#ff8fb1', '#6fc3ff', '#ffd25a', '#7fdc8a', '#b98cf
 export const HAIRS = ['short', 'bob', 'long', 'ponytail', 'twintails', 'spiky', 'bun', 'curly'];
 export const HAIR_NAMES = { short: '短髮', bob: '妹妹頭', long: '長髮', ponytail: '馬尾', twintails: '雙馬尾', spiky: '刺刺頭', bun: '包包頭', curly: '捲捲頭' };
 
+const LINE = '#3a3150';                     // 角色外框用柔和的深灰紫,比家具的外框淡一點
 const SHOE = tone('#5a4a5e'), PANTS = tone('#4a5a8a');
 
 /** 這一格的姿勢:bob 身體往下 1px、lA/lB 左右腳抬起、sw 手擺、step 側面跨步 */
@@ -31,7 +32,7 @@ function pose(col) {
 }
 
 // 頭:佔了快一半身高
-const HEAD = { cx: 12, cy: 10, rx: 8.6, ry: 7.6 };
+const HEAD = { cx: 12, cy: 9, rx: 8.6, ry: 7.6 };     // 頭抬高一格,下面露出脖子,才不會像在低頭
 const inHead = (x, y, bob, dx = 0, grow = 0) => {
   const a = (x + 0.5 - HEAD.cx - dx) / (HEAD.rx + grow), b = (y + 0.5 - HEAD.cy - bob) / (HEAD.ry + grow);
   return a * a + b * b <= 1;
@@ -60,7 +61,8 @@ function drawArms(b, dir, p, o, layer) {
   else arm(9 - p.sw * 2, y + Math.abs(p.sw), false);
 }
 function drawHead(b, dir, p, o) {
-  const s = tone(o.skin), dx = dir === 'left' ? -1 : 0;
+  const s = tone(o.skin), dx = 0;                    // 側面頭不要往前偏(偏了會像往前探)
+  b.rect(10, 16 + p.bob, 4, 2, s.lo);                 // 脖子
   b.oval(HEAD.cx + dx, HEAD.cy + p.bob, HEAD.rx, HEAD.ry, s.mid);
   // 下巴右下緣一圈淡陰影(光從左上來)
   for (let y = 0; y < FH; y++) for (let x = 0; x < FW; x++) {
@@ -68,18 +70,12 @@ function drawHead(b, dir, p, o) {
     if (y > HEAD.cy + p.bob + 3 && x > HEAD.cx + dx - 3) b.px(x, y, s.lo);
   }
 }
+// 臉:參考 LimeZu 小孩角色的比例 —— 眼睛小、位置低(靠近下巴)、沒有嘴巴,只留腮紅
 function drawFace(b, dir, p, o) {
   if (dir === 'up') return;
-  const y = 10 + p.bob, eye = x => { if (p.blink) b.hline(x, y + 1, 2, '#2b1f2e'); else { b.rect(x, y, 2, 3, '#2b1f2e'); b.px(x, y, '#ffffff'); } };
-  const blush = '#ff9fae', mouth = mix(o.skin, -0.38);
-  if (dir === 'down') {
-    eye(7); eye(15);
-    b.hline(5, y + 4, 2, blush); b.hline(17, y + 4, 2, blush);
-    b.hline(11, y + 4, 2, mouth);
-  } else {
-    eye(5);
-    b.hline(4, y + 4, 2, blush); b.px(4, y + 3, mix(o.skin, -0.12));
-  }
+  const y = 11 + p.bob, eye = x => { if (p.blink) { b.hline(x, y + 1, 2, LINE); return; } b.rect(x, y, 2, 2, '#3b2c4a'); b.px(x, y, '#ffffff'); };
+  if (dir === 'down') { eye(7); eye(15); b.hline(5, y + 2, 2, '#ffa3b5'); b.hline(17, y + 2, 2, '#ffa3b5'); }
+  else { eye(5); b.hline(4, y + 2, 2, '#ffa3b5'); }
 }
 
 /** 頭髮。layer 'back' 畫在身體後面(長髮、馬尾、雙馬尾) */
@@ -121,9 +117,9 @@ function drawHair(b, dir, p, o, layer) {
     const grow = st === 'curly' ? 1.3 : 0.5;
     const end = { short: 2, bob: 6, long: 6, ponytail: 2, twintails: 3, spiky: 1, bun: 2, curly: 5 }[st];
     fill((u, v, x, y) => {
-      if (!inHead(x, y, dy, side ? -1 : 0, grow)) return false;
+      if (!inHead(x, y, dy, 0, grow)) return false;
       if (up) return v <= Math.max(5, end) - Math.max(0, 2 - Math.abs(u)) * 0.6;
-      const fringe = -3 + ((st === 'spiky' || st === 'curly') && (x % 3 === 0) ? 1 : 0);
+      const fringe = -2 + ((st === 'spiky' || st === 'curly') && (x % 3 === 0) ? 1 : 0);
       if (side) return v <= fringe || (u >= 4 + Math.max(0, v) * 0.18 && v <= end);
       return v <= fringe - (st === 'long' && Math.abs(u) < 2 ? 1 : 0) || (Math.abs(u) >= 7 && v <= end);
     });
@@ -133,8 +129,9 @@ function drawHair(b, dir, p, o, layer) {
     }
     if (st === 'spiky') fill((u, v, x) => v >= -9 && v <= -6 && Math.abs(u) < 7 && x % 3 <= v + 9);
     if (st === 'bun') {
-      h.oval(side ? 17 : 12, 3 + dy, 3.5, 2.7, t.mid);
-      h.hline(side ? 15 : 10, 5 + dy, 4, t.lo);
+      // 髮髻放頭頂偏右:頭抬高後正上方沒空間,放正中間會被頭頂蓋掉
+      h.oval(side ? 18 : 16.5, 2.9 + dy, 3, 2.5, t.mid);
+      h.hline(side ? 16 : 15, 5 + dy, 3, t.lo);
     }
     // 後腦底下留一小段脖子；綁髮在後腦上方也能辨認。
     if (up) {
@@ -180,7 +177,7 @@ function frame(dir, col, o) {
   drawHead(b, d, p, o);
   drawFace(b, d, p, o);
   drawHair(b, d, p, o, 'front');
-  outline(b);
+  outline(b, LINE);
   let out = b;
   if (dir === 'right') { out = new Bmp(FW, FH); out.blit(b, 0, 0, true); }
   const sh = new Bmp(FW, FH); sh.oval(12, 30.4, 6, 1.5, '#00000040'); sh.blit(out, 0, 0);    // 腳底影子(不描邊)
