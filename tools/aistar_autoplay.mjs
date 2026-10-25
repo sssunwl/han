@@ -38,6 +38,10 @@ export function botWeek(S, style = 'mix') {
     const g = S.groups[0], types = (g && !S.ops.some(o => o.groupId === g.id && o.project) ? ['group_album'] : []).concat(['own_album', 'own_drama', 'own_show']);
     if (!types.some(t => !E.startProject(S, t, budget, g && g.id))) break;
   }
+  for(const o of S.offers.slice()) {
+    const ready=E.debuted(S).filter(st=>E.isFree(st,o.op)&&(o.type!=='loan'||st.skills[o.op.loanSkill]>=5));
+    if(ready.length>=o.op.slots.length)E.acceptOffer(S,o.id);
+  }
   const fair = style === 'fair' || (style === 'mix' && S.week % 2 === 0);
   // 2. 機會:巨蛋優先,其他照酬勞大的先
   const ops = S.ops.filter(o => o.status === 'open').sort((a, b) => (b.type === 'dome') - (a.type === 'dome') || b.pay - a.pay);
@@ -54,7 +58,7 @@ export function botWeek(S, style = 'mix') {
     if (op.type === 'dome') continue;
     for (let i = 0; i < op.slots.length; i++) {
       if (op.slots[i].who) continue;
-      const free = E.team(S).filter(st => E.isFree(st, op) && st.energy >= 25 && !(dome && op.weeks > 1 && (S._domePlan || []).includes(st.id)));
+      const free = E.team(S).filter(st => E.isFree(st, op) && (op.offerType!=='loan'||st.skills[op.loanSkill]>=5) && st.energy >= 25 && !(dome && op.weeks > 1 && (S._domePlan || []).includes(st.id)));
       if (!free.length) break;
       const score = st => {
         const g = E.estimate(S, st, op, i), base = { S: 4, A: 3, B: 2, C: 0 }[g.g] * 10 + E.perf(S, st, op, i, false) / 10;
@@ -93,11 +97,11 @@ export function botWeek(S, style = 'mix') {
   }
   const nx = D.LEVELS[S.lv + 1];
   const reserve = nx ? nx.cost * 0.6 : 0;
-  for(const type of ['style','scout','sing','act','talk','production','sns','lounge']) if(!E.roomLv(S,type)) {
+  for(const type of ['sing','meeting','style','scout','production','sns','act','talk','lounge']) if(!E.roomLv(S,type)) {
     if(S.money>E.floorCost(S,type)+reserve+2000) E.buildFloor(S,type);
     break;
   }
-  for(const type of ['dance','sing','act','talk','style','scout','production','sns','cafe','dorm','studio']) {
+  for(const type of ['dance','sing','act','talk','style','scout','production','sns','meeting','cafe','dorm','studio']) {
     const i=S.floors.findIndex(f=>f.type===type && f.lv<3);
     if(i>=0 && S.money>E.upgradeCost(S,i)+reserve+2000) E.upgradeFloor(S,i);
   }
@@ -127,7 +131,7 @@ export function run(seed, style = 'mix', maxWeeks = 200, log = false) {
   } catch (e) { out.errors.push(e.stack.split('\n').slice(0, 3).join(' | ')); }
   out.goals = S.goalWeek || {};
   out.week = S.week; out.fans = E.totalFans(S); out.left = S.stats.left; out.team = E.team(S).length; out.saveSize = JSON.stringify(S).length;
-  out.projects=S.releases.length;out.groups=S.groups.length;out.chartWins=S.stats.chartWins||0;out.awards=S.stats.awards||0;
+  out.cooperations=S.stats.cooperations||{collab:0,loan:0,joint:0};out.relations=S.rivals.map(r=>r.rel);out.projects=S.releases.length;out.groups=S.groups.length;out.chartWins=S.stats.chartWins||0;out.awards=S.stats.awards||0;
   out.careers=E.debuted(S).filter(st=>st.careerStep===3).length;out.debuted=E.debuted(S).length;out.newDebuts=S.stars.filter(st=>st.debutWeek).length;
   out.S = S;
   return out;
@@ -162,10 +166,12 @@ function compare(seeds) {
 }
 
 function migrateTest() {
- for(const v of [1,2,3]) {
+ for(const v of [1,2,3,4]) {
   const S=E.newGame({seed:222});botWeek(S);S.v=v;
+  delete S.offers;for(const r of S.rivals){delete r.stars;delete r.rel;delete r.collabs;}
+  if(v===4){E.migrate(S);if(S.v!==5||S.rivals.some(r=>r.stars.length!==3))throw Error('v4 遷移失敗');for(let w=0;w<10;w++){botWeek(S);if(!E.endWeek(S))throw Error('遷移後結算失敗');}console.log('v4 → v5 遷移後 10 週：0 錯誤');continue;}
   for(const k of ['releases','groups','chart','posts','sns','actLog']) delete S[k];
-  if(v===3){E.migrate(S);if(S.v!==4||!Array.isArray(S.groups)||!S.sns)throw Error('遷移失敗');for(let w=0;w<10;w++){botWeek(S);if(!E.endWeek(S))throw Error('遷移後結算失敗');}console.log('v3 → v4 遷移後 10 週：0 錯誤');continue;}
+  if(v===3){E.migrate(S);if(S.v!==5||!Array.isArray(S.groups)||!S.sns)throw Error('遷移失敗');for(let w=0;w<10;w++){botWeek(S);if(!E.endWeek(S))throw Error('遷移後結算失敗');}console.log('v3 → v5 遷移後 10 週：0 錯誤');continue;}
   delete S.staff;delete S.scouted;
   for(const st of [...S.stars,...(S.audition||[])]) {delete st.skills.charm;delete st.career;delete st.careerStep;delete st.pot;delete st.trainee;delete st.stat.byType;delete st.stat.roles;}
   if(v===1) {
@@ -174,9 +180,9 @@ function migrateTest() {
    for(const op of S.ops){delete op.days;delete op.log;op.weeks=3;op.left=3;}
   }
   E.migrate(S);
-  if(S.v!==4||!Array.isArray(S.groups)||S.fac||S.stars.some(st=>st.sched.length!==7||!st.skills.charm||!st.career))throw Error('遷移失敗');
+  if(S.v!==5||!Array.isArray(S.groups)||S.fac||S.stars.some(st=>st.sched.length!==7||!st.skills.charm||!st.career))throw Error('遷移失敗');
   for(let w=0;w<10;w++){botWeek(S);const r=E.endWeek(S);if(!r||r.timeline.length!==7)throw Error('遷移後結算失敗');}
-  console.log(`v${v} → v4 遷移後 10 週：0 錯誤`);
+  console.log(`v${v} → v5 遷移後 10 週：0 錯誤`);
  }
 }
 
@@ -187,7 +193,7 @@ if (typeof process !== 'undefined' && process.argv[1] && process.argv[1].endsWit
     const N = Number(process.argv[2] || 3), style = process.argv[3] || 'mix', MAX = Number(process.argv[4] || 200);
     for (let i = 0; i < N; i++) {
       const r = run(1000 + i * 7919, style, MAX, process.env.LOG === '1');
-      console.log(`種子 ${r.seed} [${style}] 結局:${r.ending ? r.ending.icon + r.ending.name + ' 第 ' + r.ending.week + ' 週' : '沒到(停在第 ' + r.week + ' 週)'}  目標週:${Object.entries(r.goals).map(([k, v]) => k + '=' + v).join(' ')}  粉絲 ${fmt(r.fans)}  最低存款 $${fmt(r.minMoney)}  離開 ${r.left} 人  剩 ${r.team} 人  大目標 ${r.careers}/${r.debuted}  練習生出道 ${r.newDebuts}  企劃 ${r.projects} 團體 ${r.groups} 一位 ${r.chartWins} 得獎 ${r.awards}  存檔 ${(r.saveSize / 1024).toFixed(1)}KB  錯誤 ${r.errors.length}${r.errors.length ? ' ' + r.errors.slice(0, 3).join(' / ') : ''}`);
+      console.log(`種子 ${r.seed} [${style}] 結局:${r.ending ? r.ending.icon + r.ending.name + ' 第 ' + r.ending.week + ' 週' : '沒到(停在第 ' + r.week + ' 週)'}  目標週:${Object.entries(r.goals).map(([k, v]) => k + '=' + v).join(' ')}  粉絲 ${fmt(r.fans)}  最低存款 $${fmt(r.minMoney)}  離開 ${r.left} 人  剩 ${r.team} 人  大目標 ${r.careers}/${r.debuted}  練習生出道 ${r.newDebuts}  企劃 ${r.projects} 團體 ${r.groups} 一位 ${r.chartWins} 得獎 ${r.awards}  存檔 ${(r.saveSize / 1024).toFixed(1)}KB  錯誤 ${r.errors.length}${r.errors.length ? ' ' + r.errors.slice(0, 3).join(' / ') : ''}  合作 ${Object.values(r.cooperations).join('/')}  友好度 ${r.relations.join('/')} `);
     }
   }
 }

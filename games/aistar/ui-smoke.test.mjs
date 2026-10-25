@@ -50,3 +50,10 @@ S.week=4;candidate.joined=1;const evaluation={week:4,items:[]};E.evaluate(S,eval
 console.log('第二階段假 DOM：星探、員工、明星分區、魅力訓練師及評鑑視窗可 render');
 
 botWeek(S);const workersReport=E.endWeek(S);AS.play(workersReport);AS.tick(27);AS.skip();console.log('員工白天、中午、下班與隔日移動：假 DOM 執行通過');
+
+AS.boot(E.newGame({seed:998}));assert.match(AS.renderPartners(),/蓋 🤝 會議室/);
+AS.S.money=100000;AS.S.lv=4;E.buildFloor(AS.S,'meeting');AS.S.floors.at(-1).lv=3;E.offerWeek(AS.S);
+assert.match(AS.renderPartners(),/接受/);assert.match(AS.renderPartners(),/友好度/);
+AS.openVisit(0);assert.match(document.getElementById('roomBody').innerHTML,/visitCanvas/);assert.match(document.getElementById('roomBody').innerHTML,/已合作/);
+AS.openNpc(AS.S.rivals[0].stars[0].id);assert.match(document.getElementById('roomBody').innerHTML,/舞蹈/);AS.tick(1);
+console.log('第四階段假 DOM:合作公司/邀請卡、參觀 canvas、NPC 資料可 render');

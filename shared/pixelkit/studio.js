@@ -572,3 +572,13 @@ export const KIT = {
   robot: { w: 24, h: 32, tags: ['攝影棚', '裝飾'], make: robot },
 };
 export { floor, wall, camera, ringLight, greenScreen, micStand, podcastDesk, streamDesk, danceMirror, stage, sofa, bigScreen, trophyCase, neonSign, scheduleBoard, plant, spotlight, robot, star };
+
+// 合作與會議室:與攝影棚共用箱體、高光及外框。
+for(const [key,w,h] of [['meeting_table',96,40],['projector_screen',64,48],['handshake_sign',32,32],['visitor_badge',12,12]]) KIT[key]={w,h,tags:['會議室'],make:()=>{
+ const b=new Bmp(w,h);
+ if(key==='meeting_table'){for(const x of [8,35,62,82])box(b,x,2,10,18,3,DARK);box(b,3,13,90,16,5,WOOD);b.rect(10,29,5,9,DARK.lo);b.rect(80,29,5,9,DARK.lo);}
+ else if(key==='projector_screen'){box(b,2,1,60,4,2,DARK);b.rect(5,5,54,34,WHITE.mid);for(let i=0;i<4;i++)b.rect(13+i*10,31-i*5,6,5+i*5,CYAN.mid);b.rect(30,39,3,8,DARK.mid);}
+ else if(key==='handshake_sign'){box(b,2,2,28,25,3,PURPLE);b.rect(7,12,10,6,WHITE.mid);b.rect(15,10,10,6,GOLD.mid);b.rect(13,15,8,5,GOLD.hi);b.rect(14,27,4,4,DARK.mid);}
+ else {b.rect(4,0,4,4,CYAN.mid);box(b,1,3,10,8,2,WHITE);b.rect(3,6,3,3,PURPLE.mid);b.hline(7,7,3,CYAN.mid);}
+ return outline(b);
+}};

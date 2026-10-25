@@ -13,7 +13,7 @@ function opportunity(S,type,id='test') {
 }
 {
   const S=fresh(), st=S.stars[0];S.ops=[];
-  assert.equal(S.v,4);assert.equal(S.floors.length,5);assert.equal(st.sched.length,7);assert.equal(st.sched[6],'rest');
+  assert.equal(S.v,5);assert.equal(S.floors.length,5);assert.equal(st.sched.length,7);assert.equal(st.sched[6],'rest');
   const one=opportunity(S,'short'), two=opportunity(S,'voice','test2');
   assert.equal(E.assign(S,one.id,0,st.id),null);assert.equal(E.assign(S,two.id,0,st.id),null);
   assert.deepEqual(st.jobs,['test','test2']);assert.equal(E.freeDays(st),4);assert.equal(st.sched[6],'rest');
@@ -61,7 +61,7 @@ function opportunity(S,type,id='test') {
   S.ops=[];const op=opportunity(S,'dome');op.weeks=op.left=3;
   for(const [i,st] of S.stars.entries()){st.job=i===0?op.id:null;st.plan='train:talk';delete st.jobs;delete st.sched;delete st.trust;delete st.done;}
   op.slots[0].who=S.stars[0].id;op.status='run';
-  E.migrate(S);assert.equal(S.v,4);assert.equal(S.floors.length,9);assert.equal(op.left,2);assert.equal(op.days,5);
+  E.migrate(S);assert.equal(S.v,5);assert.equal(S.floors.length,9);assert.equal(op.left,2);assert.equal(op.days,5);
   assert.equal(S.stars[0].sched.filter(v=>v==='job:test').length,5);assert.equal(S.floors[1].lv,3);assert.equal(E.roomLv(S,'dance'),3);
   assert.ok(E.ACT_NAMES[S.stars[1].sched[0]]);assert.equal(S.stars[1].sched[6],'rest');assert.equal(S.fac,undefined);
   const same=JSON.stringify(S);E.migrate(S);assert.equal(JSON.stringify(S),same);
@@ -219,7 +219,61 @@ console.log('第二階段：魅力、角色里程碑、練習生限制、評鑑�
 {
   // v3 → v4 遷移
   const S = fresh(903); S.v = 3; delete S.releases; delete S.groups; delete S.chart; delete S.posts; delete S.sns; delete S.actLog;
-  E.migrate(S); assert.equal(S.v, 4); assert.deepEqual(S.groups, []); assert.equal(S.sns.strategy, 'vlog');
+  E.migrate(S); assert.equal(S.v, 5); assert.deepEqual(S.groups, []); assert.equal(S.sns.strategy, 'vlog');
   for (const k of ['mixing_console', 'monitor_wall', 'sns_wall', 'heart_sign', 'red_carpet', 'award_trophy', 'confetti', 'album_cover']) { const it = KIT[k], b = it.make(); assert.equal(b.w, it.w); assert.equal(b.h, it.h); }
 }
 console.log('第三階段:製作部企劃/取消/不被接走/分潤遞減、排行、打歌、SNS、團體/C 位/默契、頒獎、遷移、新素材:通過');
+
+// 第 4 階段:邀請、結算與 NPC 不佔玩家名額。
+{
+ const S=fresh(44);assert.equal(S.v,5);assert.equal(S.offers.length,0);
+ const names=[...S.stars,...S.rivals.flatMap(r=>r.stars)].map(st=>st.name);assert.equal(new Set(names).size,names.length);
+ for(const r of S.rivals){assert.equal(r.rel,30);assert.equal(r.stars.length,3);for(const st of r.stars)assert.ok(D.SKILL_IDS.every(k=>st.skills[k]>=3&&st.skills[k]<=7));}
+ S.money=100000;S.lv=4;E.buildFloor(S,'meeting');S.floors.at(-1).lv=2;
+ E.offerWeek(S);assert.equal(S.offers.length,1);let o=S.offers[0];let r=S.rivals[o.partner];const rel=r.rel;E.declineOffer(S,o.id);assert.equal(r.rel,rel-3);
+ E.offerWeek(S);o=S.offers[0];r=S.rivals[o.partner];const before=r.rel;S.week++;E.offerWeek(S);assert.equal(r.rel,before-2);assert.ok(S.feed.some(f=>f.text.includes('等不到回覆')));
+ o=S.offers[0];assert.equal(E.acceptOffer(S,o.id),null);assert.ok(S.ops.includes(o.op));assert.equal(S.offers.length,0);assert.equal(o.op.own,true);
+ const op=o.op;const npc=E.partnerStars(S,op)[0];if(npc)assert.equal(E.npcPerf(S,npc,op),Object.entries(op.w).reduce((n,[k,w])=>n+npc.skills[k]*w,0)*7.4+20+S.rivals[op.partner].rel*0.05);
+}
+for(const type of ['collab','loan','joint']) {
+ const S=fresh(72);S.ops=[];S.event=null;S.lv=4;S.money=100000;S.floors.push({type:'meeting',lv:3});for(const r of S.rivals)r.rel=80;
+ let offer;for(let i=0;i<100&&!offer;i++){S.offers=[];E.offerWeek(S);offer=S.offers.find(o=>o.type===type);}assert.ok(offer,type);
+ S.offers=[offer];const r=S.rivals[offer.partner],op=offer.op;E.acceptOffer(S,offer.id);
+ assert.equal(op.slots.length,type==='joint'?2:1);assert.equal(op.npc.length,type==='loan'?0:type==='joint'?2:1);
+ for(let i=0;i<op.slots.length;i++){const st=S.stars[i];for(const k of D.SKILL_IDS)st.skills[k]=8;assert.equal(E.assign(S,op.id,i,st.id),null);}
+ if(type==='loan')assert.equal(E.floorFor(S,'job:'+op.id),-1);
+ const money=S.money,fans=S.stars[0].fans;let R=settle(S);if(type==='joint')R=settle(S);
+ assert.equal(S.stats.cooperations[type],1);assert.equal(r.collabs,1);assert.ok(S.money>money-10000);assert.ok(S.stars[0].fans>fans);
+ assert.ok(S.feed.some(f=>f.text.includes(op.title)&&f.text.includes('粉絲 +')));
+ if(type==='joint')assert.ok(S.trophies.some(t=>t.id==='joint'));
+ assert.ok(R.items.some(it=>it.op===op.id));
+}
+{
+ const S=fresh(81);for(const r of S.rivals)r.rel=70;
+ for(let i=0;i<40;i++){const op=opportunity(S,'short','unused'+i);op.bids=[{id:S.stars[0].id}];}
+ settle(S);assert.ok(S.feed.some(f=>f.text.includes('被其他小公司接走了')));assert.ok(!S.feed.some(f=>S.rivals.some(r=>f.text.includes('被'+r.name+'接走了'))));
+ const old=fresh();old.v=4;delete old.offers;for(const r of old.rivals){delete r.stars;delete r.rel;delete r.collabs;}E.migrate(old);assert.equal(old.v,5);assert.equal(old.rivals[0].stars.length,3);assert.deepEqual(old.offers,[]);
+ for(const [key,w,h] of [['meeting_table',96,40],['projector_screen',64,48],['handshake_sign',32,32],['visitor_badge',12,12]]){assert.equal(KIT[key].w,w);assert.equal(KIT[key].h,h);const b=KIT[key].make();assert.equal(b.w,w);assert.equal(b.h,h);}
+}
+console.log('第四階段:邀請產生/過期/接受/拒絕、NPC 分數與位置、三種合作、友好保護、v5 遷移及四項素材通過');
+{
+ const S=fresh(333);E.offerWeek(S);assert.equal(S.offers.length,0);
+ S.floors.push({type:'meeting',lv:1});let total=0;
+ for(let n=0;n<400;n++){S.offers=[];E.offerWeek(S);total+=S.offers.length;assert.ok(S.offers.every(o=>o.type!=='joint'));}
+ assert.ok(total>160&&total<240,'Lv1 邀請機率約一半');
+ S.floors.at(-1).lv=3;total=0;
+ for(let n=0;n<200;n++){S.offers=[];E.offerWeek(S);assert.ok(S.offers.length>=1&&S.offers.length<=2);total+=S.offers.length;}
+ assert.ok(total>270&&total<330,'Lv3 保證一個，約一半再一個');
+ S.offers=[];E.offerWeek(S);E.offerWeek(S);assert.ok(S.offers.length<=3);
+ for(const t of D.TRAIT_IDS){assert.ok(L.REASON.partner[t].length>=2);assert.ok(L.LOAN_GO[t].length>=2);assert.ok(L.LOAN_BACK[t].length>=2);}assert.equal(L.PARTNER_REP.length,8);
+ const st=S.stars[0],op={days:5,type:'live',offerType:'loan',loanSkill:'sing',id:'loan-test'};st.skills.sing=4.9;assert.equal(E.isFree(st,op),false);st.skills.sing=5;assert.equal(E.isFree(st,op),true);
+}
+{
+ const { decodeSave } = await import('./store.js');
+ for(const v of [1,2,3,4,5]) {
+  const S=fresh(987);S.v=v;
+  const code='AISTAR1P:'+Buffer.from(JSON.stringify(S)).toString('base64');
+  const saved=await decodeSave(code);assert.equal(saved.v,5);assert.equal(saved.rivals[0].stars.length,3);
+ }
+}
+console.log('邀請頻率/上限、聯演門檻、12 種性格台詞、借將技能門檻與 v1–v5 存檔碼通過');

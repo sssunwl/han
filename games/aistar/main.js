@@ -82,6 +82,7 @@ const floorY = i => 128 + (S.floors.length-1-i)*96;
 const roomIndex = type => S.floors.findIndex(f=>f.type===type);
 // 每種房間都有四個可用站位；家具按等級累加。
 const ROOMS = {
+ meeting:{color:'#a29aba',kind:'wood',furniture:[['meeting_table',94,45,1],['schedule_board',16,10,1],['plant_studio',239,25,2],['projector_screen',120,2,3],['handshake_sign',205,12,1]],spots:[[80,78],[115,80],[175,78],[220,80]]},
  style:{color:'#bc93af',kind:'wood',furniture:[['vanity',16,25,1],['clothes_rack',90,27,1],['full_mirror',205,7,2],['runway',101,70,3],['spotlight',250,18,3]],spots:[[45,78],[95,80],[164,78],[224,80]]},
  scout:{color:'#8fa9b2',kind:'wood',furniture:[['desk_pc',24,26,1],['whiteboard_map',125,14,1],['desk_pc',204,28,2],['phone_desk',92,44,3]],spots:[[48,77],[102,80],[165,79],[231,78]]},
  lobby:{color:'#7889b2',kind:'studio', furniture:[['reception',18,30,1],['sofa',112,44,1],['plant_studio',236,24,2],['trophy_case',204,12,3]], spots:[[94,76],[160,78],[202,76],[238,80]]},
@@ -200,6 +201,8 @@ function draw(now) {
   S.floors.forEach((f,i)=>{for(const [k,x,y,lv] of ROOMS[f.type].furniture) if(k==='camera' && f.lv>=lv){ctx.fillStyle=Math.floor(sceneTime*3)%2?'#ff5969':'#542d45';ctx.fillRect(x+8,floorY(i)+y+15,3,3);}});
   for(const [id,a] of [...actors].sort((a,b)=>a[1].y-b[1].y)) {const st=E.starById(S,id)||S.staff.find(st=>st.id===id);if(st && !a.hide)drawActor(st,a,now);}
   if(S.scouted.length){const st=S.scouted[0];ctx.drawImage(portrait(st).canvas,66,floorY(0)+48);ctx.drawImage(spr('visitor_sign'),70,floorY(0)+30);}
+  if(S.offers.length&&!night){const r=S.rivals[S.offers[0].partner];ctx.drawImage(portrait(r.stars[0]).canvas,194,floorY(0)+48);ctx.drawImage(spr('visitor_badge'),209,floorY(0)+68);ctx.font='14px sans-serif';ctx.fillText(r.icon,205,floorY(0)+37);if(Math.floor(sceneTime)%7<4){ctx.fillStyle='#fffdf5';ctx.fillRect(32,floorY(0)-18,235,29);ctx.fillStyle='#554466';ctx.font='10px sans-serif';ctx.textAlign='left';const text=S.offers[0].greeting||'期待一起合作!';ctx.fillText(text.slice(0,21),38,floorY(0)-6);ctx.fillText(text.slice(21),38,floorY(0)+5);}}
+  if(!night)for(const v of (playback?.R.visitors||[])){const day=currentDay();if(!day?.acts[v.our]?.includes(v.op))continue;const fi=day.floorOf[v.our];if(fi==null||fi<0)continue;/* 跟我們的明星同一層 */v.npc.forEach((st,i)=>ctx.drawImage(portrait(st,'down',Math.floor(sceneTime*2)%2?'idle0':'walk1').canvas,210+i*28,floorY(fi)+48));}
   ctx.globalAlpha=1;
 }
 function drawActor(st,a) {
@@ -251,6 +254,7 @@ $('speedBtn').onclick=()=>{speed=speed===4?1:speed*2;$('speedBtn').textContent=`
 $('skipBtn').onclick=skip;
 bindPointer(cv,cam,{blocked:()=>!S,onTap:(x,y)=>{
   if(playback)return;
+  if(S.offers.length&&Math.abs(x-206)<22&&Math.abs(y-floorY(0)-65)<35){openCompany('partners');toast(S.offers[0].greeting||'歡迎合作!');return;}
   if(S.scouted.length&&Math.abs(x-78)<20&&Math.abs(y-floorY(0)-65)<35){openCompany('scouted');return;}
   for(const [id,a] of actors)if(!a.hide&&Math.abs(a.x-x)<17&&Math.abs(a.y-16-y)<21){if(E.starById(S,id))openInteract(id);else openCompany();return;}
   if(y<96 && S.floors.length<D.LEVELS[S.lv].floors){openBuild();return;}
@@ -360,6 +364,7 @@ function opTags(op) {
   if (E.isHot(S, op)) t.push('<span class="tag hot">🔥 熱門 ×1.5</span>');
   if (E.isTopic(S, op)) t.push(`<span class="tag topic">#${D.topicById(op.topic).name} ×1.2</span>`);
   if (op.big && op.type !== 'dome') t.push('<span class="tag big">大場面</span>');
+  if(op.partner!=null)t.push(`<span class="tag self">🤝 ${D.OFFERS[op.offerType].name}</span>`);
   if (op.self) t.push('<span class="tag self">自己提的企劃</span>');
   if (D.MEDIA[op.type].temp) t.push('<span class="tag hot">🌐 限時平台</span>');
   if (op.project) t.push('<span class="tag self">🎛 自家企劃</span>');
@@ -370,7 +375,7 @@ function opMeta(op) {
   const m = D.MEDIA[op.type];
   const sk = op.sw ? op.slots.map((s, i) => `${s.role}看${Object.keys(op.sw[i]).filter(k => op.sw[i][k] >= 0.5).map(k => D.SKILLS[k].icon).join('')}`).join('、')
     : Object.keys(op.w).map(k => D.SKILLS[k].icon + D.SKILLS[k].name).join(' ');
-  return `${m.name} · ${m.pf} · ${op.weeks} 週，每週 ${op.days} 天 · ${sk}`;
+  return `${op.partner!=null?D.OFFERS[op.offerType].name:m.name} · ${op.partner!=null?esc(S.rivals[op.partner].name):m.pf} · ${op.weeks} 週，每週 ${op.days} 天 · ${sk}`;
 }
 function opsHTML() {
   const open = S.ops.filter(o => o.status === 'open' && !o.project), run = S.ops.filter(o => o.status === 'run' && !o.project);
@@ -388,14 +393,15 @@ function opsHTML() {
 function runCard(op) {
   const ids = op.slots.map(s => s.who).filter(Boolean);
   return `<div class="card2 run"><h3>${D.MEDIA[op.type].icon} ${esc(op.title)}</h3><div class="meta">還有 ${op.left} 週 · ${ids.map(id => esc(E.starById(S, id)?.name || '')).join('、')}</div>
-    <div class="slots">${op.slots.map(s => `<span class="slot">${ptImg(E.starById(S, s.who))}${s.role}${s.who ? '' : ':—'}</span>`).join('')}</div></div>`;
+    <div class="slots">${op.slots.map(s => `<span class="slot">${ptImg(E.starById(S, s.who))}${s.role}${s.who ? '' : ':—'}</span>`).join('')}${E.partnerStars(S,op).map(st=>`<span class="slot">${ptImg(st)}${esc(st.name)} ✅ 已就位</span>`).join('')}</div></div>`;
 }
 function opCard(op, extra = '') {
   const m = D.MEDIA[op.type], empty = op.slots.findIndex(s => !s.who);
   const mult = E.trendMult(S, op);
   let h = `<div class="card2"><h3>${m.icon} ${esc(op.title)} ${opTags(op)}</h3>
     <div class="meta">${opMeta(op)}</div>
-    ${op.project ? `<div class="rew"><span>💿 上架後 8 週每週分潤</span><span class="muted">${D.BUDGETS[op.budget].name}預算</span></div>` : `<div class="rew"><span>💰 $${fmt(op.pay * mult)}</span><span>👥 +${fmt(op.fans * mult)}</span><span class="muted">(B 評價時)</span></div>`}`;
+    ${op.partner!=null?`<div class="rew"><span>💰 約 $${fmt(E.cooperationPreview(S,op).money)}</span><span>👥 約 +${fmt(E.cooperationPreview(S,op).fans)}</span><span class="muted">${op.offerType==='loan'?'技能至少 5，酬勞全給公司':'B 評價預估'}</span></div>`:op.project ? `<div class="rew"><span>💿 上架後 8 週每週分潤</span><span class="muted">${D.BUDGETS[op.budget].name}預算</span></div>` : `<div class="rew"><span>💰 $${fmt(op.pay * mult)}</span><span>👥 +${fmt(op.fans * mult)}</span><span class="muted">(B 評價時)</span></div>`}`;
+  if(op.npc?.length)h+=`<div class="slots">${E.partnerStars(S,op).map(st=>`<span class="slot">${ptImg(st)}${esc(st.name)} ✅ 已就位</span>`).join('')}</div>`;
   if (op.slots.length > 1) h += `<div class="slots">${op.slots.map(s => `<span class="slot">${ptImg(E.starById(S, s.who))}${s.role}${s.who ? ':' + esc(E.starById(S, s.who).name) : ':—'}</span>`).join('')}</div>`;
   const bids = op.bids.filter(b => { const st = E.starById(S, b.id); return st && !st.gone; });
   if (bids.length) {
@@ -541,6 +547,7 @@ function coHTML() {
   } else h += `<div class="meta">${E.debuted(S).length >= lv.max ? '名額滿了,升級公司才能找新人。' : S.auditionIn > 0 ? `${S.auditionIn} 週後可以再辦試鏡。` : '可以辦試鏡了!'}</div>${E.debuted(S).length < lv.max && S.auditionIn <= 0 ? '<button class="sbtn" data-aud="1">辦試鏡</button>' : ''}`;
   h += '</div>';
   // 排行
+  h += renderPartners();
   h += `<div class="card2"><b>📊 公司排行(粉絲數)</b><ul class="rank">${E.ranking(S).map((r, i) => `<li class="${r.me ? 'me' : ''}">${i + 1}. ${r.icon} ${esc(r.name)}<span class="f">${fmt(r.fans)}</span></li>`).join('')}</ul><div class="meta">每 12 週公布「季度星光榜」,前幾名有獎金。</div></div>`;
   // 目標、獎盃
   h += `<div class="card2"><b>🎯 目標</b>${D.GOALS.map(g => `<div class="meta">${S.goals.includes(g.id) ? '✅' : '⬜'} ${g.icon} <b>${g.name}</b>:${g.desc}${S.goalWeek && S.goalWeek[g.id] ? `(第 ${S.goalWeek[g.id]} 週)` : ''}</div>`).join('')}
@@ -552,11 +559,15 @@ function coHTML() {
 
 // 分頁裡的按鈕(事件委派)
 $('panel').addEventListener('click', e => {
-  const b = e.target.closest('[data-proj-new],[data-proj-cancel],[data-grp-new],[data-grp-album],[data-grp-disband],[data-sns],[data-gotobuild],[data-hire],[data-fire],[data-scout-sign],[data-scout-no],[data-debut],[data-assign],[data-pick],[data-plan],[data-talk],[data-outfit],[data-meet],[data-up],[data-floor],[data-build],[data-day],[data-auto],[data-schedule],[data-sign],[data-skipaud],[data-aud],[data-ng],[data-backup],[data-open],[data-ev]');
+  const b = e.target.closest('[data-visit],[data-npc],[data-offer-yes],[data-offer-no],[data-proj-new],[data-proj-cancel],[data-grp-new],[data-grp-album],[data-grp-disband],[data-sns],[data-gotobuild],[data-hire],[data-fire],[data-scout-sign],[data-scout-no],[data-debut],[data-assign],[data-pick],[data-plan],[data-talk],[data-outfit],[data-meet],[data-up],[data-floor],[data-build],[data-day],[data-auto],[data-schedule],[data-sign],[data-skipaud],[data-aud],[data-ng],[data-backup],[data-open],[data-ev]');
   if (!b || !S || playback) return;
   const d = b.dataset;
   let err = null;
-  if(d.projNew) {openProjectWizard();return;}
+  if(d.visit) {openVisit(+d.visit-1);return;}
+  else if(d.npc) {openNpc(d.npc);return;}
+  else if(d.offerYes) err=E.acceptOffer(S,d.offerYes);
+  else if(d.offerNo) err=E.declineOffer(S,d.offerNo);
+  else if(d.projNew) {openProjectWizard();return;}
   else if(d.projCancel) {if(confirm('取消這個企劃?會退一半預算。'))err=E.cancelProject(S,d.projCancel);}
   else if(d.grpNew) {openGroupWizard();return;}
   else if(d.grpAlbum) {openProjectWizard('group_album',d.grpAlbum);return;}
@@ -869,7 +880,7 @@ requestAnimationFrame(frame);
 
 // 開發用:自動玩家、快轉
 if (import.meta.env?.DEV !== false) window.AS = {   // 開發用(正式版沒有;Node 假 DOM 測試也要用)
-  get S() { return S; }, openEvaluation, openTrainer, openAwards, openProjectWizard, openGroupWizard, actors, cam, view, E, D, play, skip, render, save, boot, showEnding, openEvent, refreshStart, loadBest: () => loadBest(SAVE_KEY),
+  get S() { return S; }, openVisit, openNpc, renderPartners, openEvaluation, openTrainer, openAwards, openProjectWizard, openGroupWizard, actors, cam, view, E, D, play, skip, render, save, boot, showEnding, openEvent, refreshStart, loadBest: () => loadBest(SAVE_KEY),
   next() { $('nextBtn').click(); }, closeReport() { $('repGo').click(); },
   // 窗格在背景時 requestAnimationFrame 不跑:手動推進 sec 秒的畫格
   tick(sec = 1) { const t0 = performance.now(); for (let t = 0; t < sec; t += 0.05) { step(0.05); updateBubbles(t0 + t * 1000); } draw(t0 + sec * 1000); updateBubbles(t0 + sec * 1000); },
@@ -1053,3 +1064,20 @@ $('awardGo').addEventListener('click', () => {
 });
 $('awardSkip').addEventListener('click', closeAwards);
 function closeAwards() { $('awardBox').classList.remove('on'); award = null; render(); postReport('awards'); }
+
+function renderPartners(){
+ let h='<div class="card2" id="partners"><b>🤝 合作</b>';
+ if(!E.roomLv(S,'meeting'))h+='<p>蓋 🤝 會議室，別家公司就會來找你合作</p><button class="sbtn" data-gotobuild="1">去蓋樓</button>';
+ h+=S.rivals.map((r,i)=>`<div class="card2"><b>${r.icon} ${esc(r.name)}</b><div>粉絲 ${fmt(r.fans)} · 友好度 ${r.rel}/100</div><progress max="100" value="${r.rel}" style="width:100%"></progress><div>${r.stars.map(st=>`<button class="sbtn ghost" data-npc="${st.id}" aria-label="${esc(st.name)}">${ptImg(st)}</button>`).join('')}<button class="sbtn" data-visit="${i+1}">👀 參觀</button></div></div>`).join('');
+ h+=S.offers.map(o=>`<div class="card2"><b>${esc(S.rivals[o.partner].name)} · ${D.OFFERS[o.type].name}</b><p>派 ${o.op.slots.length} 人 · 每週 ${o.op.days} 天、${o.op.weeks} 週${o.type==='loan'?` · ${D.SKILLS[o.op.loanSkill].name} ≥ 5`:''}</p><div>預估酬勞 $${fmt(E.cooperationPreview(S,o.op).money)} · 粉絲 +${fmt(E.cooperationPreview(S,o.op).fans)}</div><div class="muted">本週內回覆，實際成果依演出評價。</div><button class="sbtn" data-offer-yes="${o.id}">接受</button> <button class="sbtn ghost" data-offer-no="${o.id}">婉拒</button></div>`).join('');
+ return h+'</div>';
+}
+function openNpc(id){const st=S.rivals.flatMap(r=>r.stars).find(st=>st.id===id);if(!st)return;$('roomTitle').textContent=st.name;$('roomBody').innerHTML=ptImg(st)+`<p>${st.traits.map(t=>D.TRAITS[t].name).join('、')}</p><p>${D.SKILL_IDS.map(k=>D.SKILLS[k].name+' '+st.skills[k].toFixed(1)).join(' · ')}</p>`;$('roomBox').classList.add('on');}
+function openVisit(i){
+ const r=S.rivals[i];$('roomTitle').textContent=`👀 ${r.icon} ${r.name}`;
+ $('roomBody').innerHTML=`<canvas id="visitCanvas" style="width:100%;max-width:320px;image-rendering:pixelated"></canvas><p>${r.intro}</p><p>友好度 ${r.rel}/100 · 已合作 ${r.collabs} 次</p>`;
+ const c=$('visitCanvas');c.width=320;c.height=r.rooms.length*96;const g=c.getContext('2d');g.imageSmoothingEnabled=false;
+ r.rooms.forEach((type,idx)=>{const y=(r.rooms.length-1-idx)*96,room=ROOMS[type],wall=toCanvas(stWall({color:r.color}));for(let x=0;x<320;x+=32){g.drawImage(wall,x,y);for(let yy=48;yy<96;yy+=32)g.drawImage(spr('floor_'+room.kind),x,y+yy,32,Math.min(32,96-yy));}for(const [k,x,yy,lv] of room.furniture)if(lv<=2)g.drawImage(spr(k),x,y+yy);g.fillStyle='#fff';g.font='10px sans-serif';g.fillText(`${idx+1}F ${D.FLOORS[type].name}`,4,y+12);});
+ const base=document.createElement('canvas');base.width=c.width;base.height=c.height;base.getContext('2d').drawImage(c,0,0);
+ const animate=()=>{if(!$('roomBox').classList.contains('on')||$('visitCanvas')!==c)return;g.drawImage(base,0,0);r.stars.forEach((st,j)=>g.drawImage(portrait(st,'down',Math.floor(performance.now()/600)%2?'idle0':'walk1').canvas,90+j*45,(r.rooms.length-2-j)*96+48));requestAnimationFrame(animate);};$('roomBox').classList.add('on');animate();
+}

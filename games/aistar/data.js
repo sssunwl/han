@@ -103,7 +103,7 @@ export const LEVELS = [null,
   { name: '小工作室', max: 4, floors: 5, ops: 3, rent: 150, cost: 0, fans: 0 },
   { name: '攝影棚', max: 6, floors: 7, ops: 4, rent: 350, cost: 4000, fans: 5000 },
   { name: '媒體大樓', max: 8, floors: 9, ops: 5, rent: 700, cost: 15000, fans: 25000 },
-  { name: '星光塔', max: 10, floors: 12, ops: 6, rent: 1200, cost: 40000, fans: 80000 },
+  { name: '星光塔', max: 10, floors: 13, ops: 6, rent: 1200, cost: 40000, fans: 80000 },
 ];
 export const FLOORS = {
   style:{name:'造型室',icon:'💄',build:1800,cost:[1200,3000],desc:'魅力練習 ×1/1.2/1.4，容納 2/3/4 人'},
@@ -202,6 +202,9 @@ export const GROUP_PREFIX = ['星星', '彩虹', '泡泡', '閃光', 'Pixel', 'S
 export const GROUP_SUFFIX = ['糖', '小隊', 'Pop', 'Wave', 'Five', '少年團', '少女隊', '樂團', 'Stars', '探險隊'];
 export const GROUP_COST = 3000;
 export const NPC_SONGS = ['「月亮汽水」', '「跳跳糖」', '「晴天列車」', '「彩色雨傘」', '「小小宇宙」', '「草莓地圖」', '「藍色鯨魚」', '「夏日冰塊」', '「星空電話」', '「好朋友進行曲」'];
+// 別家公司的明星用自己的名字庫(不跟我們的明星搶名字,長期存檔也不會用光)
+export const PARTNER_NAMES = ['晴晴', '阿岳', '米露', '凱文', '小艾', '豆花', '蘇菲', '小宇', '可樂', '阿蘭', '海海', '小澤', '娜娜', '布魯', '星星', '小柏',
+  '琳琳', '阿翔', '甜甜', '小風', '莓莓', '阿樂', '冬冬', '小晨', '蜜蜜', '阿寶', '雪莉', '小潔', '旺旺', '阿圓'];
 export const NPC_NAMES = ['小晴', '阿森', '米米', '雷歐', '蘋蘋', '凱凱', '莎莎', '豆豆'];
 export const AWARDS = [
   { cat:'rookie', icon:'🌱', name:'年度新人' },
@@ -211,3 +214,6 @@ export const AWARDS = [
   { cat:'popular', icon:'⭐', name:'人氣獎' },
 ];
 export const staffSalary = st => 80+40*(st.lv-1);
+
+FLOORS.meeting={name:'會議室',icon:'🤝',build:3500,cost:[3000,7000],desc:'別家公司會來談合作(Lv 越高邀請越多)'};
+export const OFFERS={collab:{name:'聯名企劃'},loan:{name:'借將'},joint:{name:'聯合演唱會'}};
