@@ -549,6 +549,7 @@ $('evChoices').addEventListener('click', e => {
 // ---------- 下一週 ----------
 $('nextBtn').addEventListener('click', () => {
   if (!S) return;
+  if ($('repBox').classList.contains('on')) { $('repGo').click(); return; }   // 週報還開著:先收起來
   if (S.event) { openEvent(); return; }
   const unassigned = S.ops.filter(o => o.status === 'open' && !o.slots[0].who && o.type !== 'dome').length;
   const idleBidders = E.team(S).filter(st => E.isFree(st) && S.ops.some(o => o.status === 'open' && o.bids.some(b => b.id === st.id)));
@@ -559,16 +560,22 @@ $('nextBtn').addEventListener('click', () => {
   showReport(R);
 });
 function showReport(R) {
-  $('repTitle').textContent = `第 ${R.week} 週 結算`;
+  $('repTitle').textContent = `第 ${R.week} 週`;
   const dm = R.money1 - R.money0, df = R.fans1 - R.fans0;
-  $('repSum').innerHTML = `<span>💰 ${dm >= 0 ? '+' : '-'}$${fmt(Math.abs(dm))}</span><span>👥 ${df >= 0 ? '+' : ''}${fmt(df)}</span>`;
+  $('repSum').textContent = `💰${dm >= 0 ? '+' : '-'}$${fmt(Math.abs(dm))}  👥${df >= 0 ? '+' : ''}${fmt(df)}`;
+  // 只列重點(作品評價、目標、排行);練習、房租這些收在「看全部」
+  const minor = R.items.filter(it => !it.big).length;
+  $('repList').className = 'rep';
   $('repList').innerHTML = R.items.map(it => {
     const g = it.grade && D.GRADES.find(x => x.g === it.grade);
-    return `<li class="${it.big ? 'big' : ''}">${g ? gradeChip(g) : ''}${esc(it.text)}</li>`;
-  }).join('') || '<li>平靜的一週。</li>';
+    return `<li class="${it.big ? '' : 'minor'}">${g ? gradeChip(g) : ''}${esc(it.text)}</li>`;
+  }).join('');
+  $('repMore').style.display = minor ? '' : 'none';
+  $('repMore').textContent = `看全部(還有 ${minor} 項)▾`;
   $('repBox').classList.add('on');
   if (R.grades.includes('S') || R.items.some(i => i.goal)) fanfare(); else if (R.grades.length) sfx.coin();
 }
+$('repMore').addEventListener('click', () => { $('repList').classList.add('all'); $('repMore').style.display = 'none'; });
 $('repGo').addEventListener('click', () => {
   $('repBox').classList.remove('on'); sfx.tap();
   render();
