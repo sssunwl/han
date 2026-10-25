@@ -826,7 +826,7 @@ $('codeGo').addEventListener('click', async () => {
 requestAnimationFrame(frame);
 
 // 開發用:自動玩家、快轉
-window.AS = {
+if (import.meta.env?.DEV !== false) window.AS = {   // 開發用(正式版沒有;Node 假 DOM 測試也要用)
   get S() { return S; }, actors, cam, view, E, D, play, skip, render, save, boot, showEnding, openEvent, refreshStart, loadBest: () => loadBest(SAVE_KEY),
   next() { $('nextBtn').click(); }, closeReport() { $('repGo').click(); },
   // 窗格在背景時 requestAnimationFrame 不跑:手動推進 sec 秒的畫格

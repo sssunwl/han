@@ -31,7 +31,7 @@ const sandbox={E,D,Bmp,toCanvas,makeFrame,FW,FH,ST,makeAccessory,stWall,Camera,b
   audioPrefs:{sfx:false,music:'off'},saveAudioPrefs:noop,TRACKS:{},playMusic:noop,stopMusic:noop,nowPlaying:()=>null,
   loadBest:async()=>null,saveBoth:()=>({ls:true,idb:Promise.resolve(true)}),encodeSave:async()=>'',decodeSave:async()=>null,
   confirm:()=>true,window:{},navigator:{}};
-const code=readFileSync(new URL('./main.js',import.meta.url),'utf8').replace(/^import .+;\n/gm,'');
+const code=readFileSync(new URL('./main.js',import.meta.url),'utf8').replace(/^import .+;\n/gm,'').replace('import.meta.env?.DEV !== false','true');
 vm.createContext(sandbox);vm.runInContext(code,sandbox,{filename:'main.js'});
 const AS=sandbox.window.AS, S=E.newGame({seed:1234});AS.boot(S);
 for(const b of document.getElementById('tabs').children) document.getElementById('tabs').fire('click',{target:{closest:()=>b}});
