@@ -11,6 +11,10 @@ import { randomLook, CLOTH_COLORS } from '../../shared/pixelkit/character.js';
 import { ACCESSORIES } from '../../shared/pixelkit/studio.js';
 
 const { MEDIA, TOPICS, TRAITS, LEVELS } = D;
+// 七天制的進步速度可獨立校準，不改目標與評價門檻。
+export const LEARNING = Object.freeze({ training: 0.12, work: 0.035 });
+// 七天制一個人一週能接好幾個小案子,作品的粉絲/酬勞要打折,節奏才跟 v1 差不多(結局約第 30~60 週)
+export const OUTPUT = Object.freeze({ fans: 0.36, pay: 0.45 });
 
 // ---------- 亂數(mulberry32,狀態存在 S.rs) ----------
 export function rnd(S) {
@@ -36,7 +40,8 @@ export const voice = st => st.traits[0];
 export const starById = (S, id) => S.stars.find(s => s.id === id);
 export const team = S => S.stars.filter(s => !s.gone);
 export const totalFans = S => team(S).reduce((a, s) => a + s.fans, 0);
-export const isFree = st => !st.gone && !st.job;
+export const freeDays = st => (st.sched || []).filter(v => !v.startsWith('job:')).length;
+export const isFree = (st, op = null) => !st.gone && freeDays(st) - (st.sickDays || []).filter(d=>!st.sched[d].startsWith('job:')).length >= (op?.days || 1) && (!op || !(st.jobs || []).includes(op.id));
 export const opById = (S, id) => S.ops.find(o => o.id === id);
 const nameOf = (S, id) => (starById(S, id) || {}).name || '';
 const topicName = id => TOPICS.find(t => t.id === id).name;
@@ -112,7 +117,7 @@ function makeStar(S) {
     traits: [t1, t2], skills, spec,
     topic: pick(S, TOPICS).id, dream: pick(S, ['drama', 'concert', 'contest', 'short', 'podcast', 'voice', 'live', 'ad']),
     mood: 65, energy: 90, loyalty: 72, fans: ri(S, 60, 260),
-    wish: null, wishIn: ri(S, 2, 5), lost: 0, sulk: 0, motivated: 0, job: null, plan: 'rest',
+    wish: null, wishIn: ri(S, 2, 5), lost: 0, sulk: 0, motivated: 0, jobs: [], sched: null, trust: 40, done: {},
     trained: {}, talked: 0, joined: S.week, stat: { ops: 0, S: 0, best: null },
   };
 }
@@ -121,7 +126,7 @@ export const bestSkill = st => D.SKILL_IDS.reduce((a, k) => (st.skills[k] > st.s
 // ---------- 開新局 ----------
 export function newGame({ seed = (Date.now() % 2147483647) | 0, company = '星光 AI 娛樂', ng = 0, mentor = null, trophies = [] } = {}) {
   const S = {
-    v: 1, seed, rs: seed, week: 1, ng, company, lv: 1, fac: { gym: 0, lounge: 0, edit: 0 }, money: 2500,
+    v: 2, seed, rs: seed, week: 1, ng, company, lv: 1, floors: initialFloors(), money: 2500,
     stars: [], rel: {}, everRival: [], ops: [], nextId: 1, feed: [], seq: 0, trend: null, nextTrend: null,
     rivals: D.RIVALS.map(r => ({ ...r, fans: Math.round(r.fans * (1 + 0.6 * ng)), g: r.g * (1 + 0.12 * ng) })),
     goals: [], trophies: trophies.slice(), mentor, teamups: [], temp: [], flags: {}, event: null,
@@ -163,10 +168,10 @@ function makeOp(S, type, extra = {}) {
   const t = TOPICS.find(x => x.id === topic);
   let w = m.w;
   if (!w) { const k = pick(S, D.SKILL_IDS); w = { [k]: 1 }; }     // 選秀:這次比哪一項
-  const ed = 1 + 0.1 * S.fac.edit;
+  const ed = ['drama','voice','ad','game','live','podcast'].includes(type) ? 1 + 0.1 * Math.max(0, roomLv(S, 'studio') - 1) : 1;
   return {
     id: 'o' + S.nextId++, type, topic, title: fill(pick(S, D.TITLES[type]), { t: t.name }), w,
-    slots: m.slots.map(role => ({ role, who: null })), weeks: m.weeks, left: m.weeks,
+    slots: m.slots.map(role => ({ role, who: null })), days: m.days, weeks: m.weeks, left: m.weeks, log: {},
     pay: Math.round(m.pay * payScale(S) * ed * (0.85 + rnd(S) * 0.3) / 10) * 10,
     fans: Math.round(m.fans * fansScale(S) * ed * (0.85 + rnd(S) * 0.3) / 10) * 10, sw: m.sw || null,
     big: !!m.big, status: 'open', bids: [], yields: [], born: S.week, ...extra,
@@ -219,7 +224,7 @@ export function interest(S, st, op) {
 }
 
 function computeBids(S, op) {
-  const cands = team(S).filter(isFree).map(st => ({ st, ...interest(S, st, op) })).filter(c => c.v > 55).sort((a, b) => b.v - a.v).slice(0, 4);
+  const cands = team(S).filter(st => isFree(st, op)).map(st => ({ st, ...interest(S, st, op) })).filter(c => c.v > 55).sort((a, b) => b.v - a.v).slice(0, 4);
   // 對手也在搶 → 好勝、愛吃醋的加碼,理由變成「不能讓對手搶走」
   for (let i = 1; i < cands.length; i++) {
     const c = cands[i], r = cands.slice(0, i).find(p => isRival(S, p.st.id, c.st.id));
@@ -260,10 +265,11 @@ function computeBids(S, op) {
 /** 演出分數(0~100 左右)。noise=false 給畫面上的「預估評價」用 */
 export function perf(S, st, op, slot = 0, noise = true, mates = null) {
   const others = (mates || op.slots.map(s => s.who)).filter(id => id && id !== st.id);
-  let v = 20 + skillFit(st, op, slot) * 7.4 + (st.mood - 55) * 0.2;
-  if (st.energy < 25) v -= 14;
+  const log = op.log?.[st.id], mood = log?.n ? log.m / log.n : st.mood, energy = log?.n ? log.e / log.n : st.energy;
+  let v = 20 + skillFit(st, op, slot) * 7.4 + (mood - 55) * 0.2;
+  if (energy < 25) v -= 14;
   const friendIn = others.some(id => isFriend(S, st.id, id)), rivalIn = others.some(id => isRival(S, st.id, id));
-  if (has(st, 'shy') && op.big && !friendIn && st.mood < 75) v -= 12;
+  if (has(st, 'shy') && op.big && !friendIn && mood < 75) v -= 12;
   if (has(st, 'perf') && st.trained[mainSkill(op)] >= S.week - 2) v += 7;
   if (has(st, 'hot')) v += 3;
   if (has(st, 'solo')) v += op.slots.length > 1 ? -6 : 5;
@@ -275,7 +281,7 @@ export function perf(S, st, op, slot = 0, noise = true, mates = null) {
   if (st.topic === op.topic) v += 4;
   if (st.motivated) v += 3;
   if (S.mentor) v += 3;
-  if (op.type === 'dome') v += Math.min(8, (team(S).length - 3) * 1.5) - 4;   // 超大場面比較難,但全公司在台下應援
+  if (op.type === 'dome') v += Math.min(8, (team(S).length - 3) * 1.5) - 10;   // 超大場面比較難,但全公司在台下應援
   if (noise) v += (rnd(S) - 0.5) * 18;
   return v;
 }
@@ -291,7 +297,7 @@ export function beginWeek(S) {
   S.flags.down = false; S.flags.rain = false; S.flags.power = false;
 
   // 新機會
-  const types = availMedia(S), n = LEVELS[S.lv].ops;
+  const types = availMedia(S), n = LEVELS[S.lv].ops + (roomLv(S, 'lobby') >= 3 ? 1 : 0);
   for (let i = 0; i < n; i++) {
     const t = weighted(S, types.map(k => [k, (k === S.trend.hot ? 2.6 : 1) * (MEDIA[k].temp ? 2 : 1) * (k === 'concert' ? 0.7 : 1)]));
     S.ops.push(makeOp(S, t));
@@ -312,10 +318,15 @@ export function beginWeek(S) {
   if (S.domeWait > 0) S.domeWait--;
 
   for (const st of team(S)) {
-    st.talkedThisWeek = false;
+    st.talkedThisWeek = false; st.done = {};
+    if (!st.sched) autoArrange(S, st.id);
+    else st.sched = st.sched.map(v => v.startsWith('job:') ? 'train:' + bestSkill(st) : v);
+    st.jobs = [];
+    if (st.cold) { st.sched[0] = st.sched[1] = 'rest'; st.cold = false; st.sickDays = [0,1]; say(S, st, L.TIRED, {}, 'sad'); }
+    else st.sickDays = [];
+    for (const op of S.ops) if (op.slots.some(s => s.who === st.id)) { st.jobs.push(op.id); scheduleJob(st, op); }
+
     if (st.motivated) st.motivated--;
-    if (!st.job && st.plan === 'op') st.plan = 'rest';
-    if (!st.job && st.energy < 30 && st.plan !== 'rest') { st.plan = 'rest'; }
     if (!st.wish && --st.wishIn <= 0) newWish(S, st);
   }
   for (const op of S.ops) if (op.status === 'open' && (op.born === S.week || op.type === 'dome')) computeBids(S, op);
@@ -379,10 +390,12 @@ function wishDone(S, st) {
 export function assign(S, opId, slotIdx, starId) {
   const op = opById(S, opId), st = starById(S, starId);
   if (!op || op.status !== 'open') return '這個機會已經開始了';
-  if (!st || !isFree(st)) return `${st ? st.name : '他'}這週已經有工作了`;
+  if (!st || st.gone) return '找不到這位明星';
+  if(st.jobs.includes(op.id)) return '已經參加這個機會了';
+  if(!isFree(st,op)) return `${st.name}這週排不下，要留 ${op.days} 天空檔`;
   const slot = op.slots[slotIdx];
   if (!slot || slot.who) return '這個角色已經有人了';
-  slot.who = st.id; st.job = op.id; st.plan = 'op';
+  slot.who = st.id; st.jobs.push(op.id); scheduleJob(st, op);
   const bid = op.bids.find(b => b.id === st.id);
   const isLead = slotIdx === 0 && op.slots.length > 1 && D.LEAD_ROLES.includes(slot.role);
   if (bid && !(has(st, 'proud') && hasLead(op) && !isLead)) {
@@ -406,7 +419,7 @@ function lockOp(S, op) {
   const ids = op.slots.map(s => s.who).filter(Boolean), winner = starById(S, ids[0]);
   for (const b of op.bids) {
     const st = starById(S, b.id);
-    if (!st || st.gone || ids.includes(st.id) || st.job) continue;
+    if (!st || st.gone || ids.includes(st.id)) continue;
     loseReaction(S, st, op, winner);
   }
   for (const y of op.yields) { const st = starById(S, y.id); if (st && ids.includes(y.friend)) { addRel(S, st.id, y.friend, 6); st.loyalty = clamp(st.loyalty + 2, 0, 100); } }
@@ -424,7 +437,7 @@ function loseReaction(S, st, op, winner) {
   if (T('perf')) { mood -= 4; if (!st.wish) { st.wish = { type: 'train', skill: mainSkill(op), left: 5 }; } }
   if (T('funny')) { mood += 1; if (chance(S, 0.3)) { st.fans += 80; feed(S, st.id, `😂 ${st.name} 把「沒選上」拍成搞笑影片,粉絲 +80`, 'good'); } }
   if (T('jeal')) { mood -= 10; if (winner) addRel(S, st.id, winner.id, -8); if (st.lost >= 3) { st.sulk = 1; say(S, st, L.SULK, {}, 'sulk'); } }
-  if (T('hot')) { st.plan = 'train:' + mainSkill(op); st.motivated = Math.max(st.motivated, 1); }
+  if (T('hot')) { for(let d=0;d<7;d++) if(st.sched[d].startsWith('train:')) setDay(S,st.id,d,'train:'+mainSkill(op)); st.motivated = Math.max(st.motivated, 1); }
   if (T('chill')) { mood += 1; loyal += 1; }
   if (T('curious') && chance(S, 0.4)) {
     const mate = shuffle(S, team(S).filter(o => o.id !== st.id && !isRival(S, o.id, st.id)))[0];
@@ -438,12 +451,83 @@ function loseReaction(S, st, op, winner) {
   st.mood = clamp(st.mood + mood, 0, 100); st.loyalty = clamp(st.loyalty + loyal, 0, 100);
 }
 
-export function setPlan(S, starId, plan) {
-  const st = starById(S, starId);
-  if (!st || st.job) return '有工作的時候不能改';
-  st.plan = plan; return null;
+export const DAY_NAMES = ['一','二','三','四','五','六','日'];
+export const ACT_NAMES = { rest:'🛏 休息', off:'🎉 放假', live:'🔴 直播', 'train:sing':'🎤 練唱', 'train:dance':'💃 練舞', 'train:act':'🎭 練演技', 'train:talk':'🎙 練口才' };
+export const PLAN_NAMES = ACT_NAMES;
+const initialFloors = () => ['lobby','studio','dance','cafe','dorm'].map(type => ({type,lv:1}));
+export const roomLv = (S, type) => Math.max(0, ...S.floors.filter(f => f.type === type).map(f => f.lv));
+function scheduleJob(st, op) {
+  let n = op.days;
+  for (const d of [0,1,2,3,4,5,6]) if (n && !st.sched[d].startsWith('job:') && !st.sickDays?.includes(d)) { st.sched[d] = 'job:' + op.id; n--; }
 }
-export const PLAN_NAMES = { rest: '💤 休息', live: '🔴 自己直播', 'train:sing': '🎤 練歌唱', 'train:dance': '💃 練舞蹈', 'train:act': '🎭 練演技', 'train:talk': '🎙 練口才' };
+export function setDay(S, id, d, value) {
+  const st = starById(S,id);
+  if (!st || st.gone || !Number.isInteger(d) || d < 0 || d > 6) return '找不到這天行程';
+  if (st.sched[d].startsWith('job:')) return '這天要工作';
+  if (st.sickDays?.includes(d)) return '感冒了，這天要休息';
+  if (!ACT_NAMES[value]) return '不能排這種行程';
+  st.sched[d] = value; return null;
+}
+// 保留舊呼叫介面，事件與外部自動玩家也能使用。
+export function setPlan(S,id,value) {
+  const st = starById(S,id); if (!st || !ACT_NAMES[value]) return '行程不正確';
+  for (let d=0; d<7; d++) if (!st.sched[d].startsWith('job:')) setDay(S,id,d,value);
+  return null;
+}
+export function autoArrange(S,id) {
+  const st = starById(S,id); if (!st || st.gone) return;
+  st.sched ||= Array(7).fill('rest');
+  const ks = D.SKILL_IDS.slice().sort((a,b)=>st.skills[b]-st.skills[a]);
+  const free = [6,0,1,2,3,4,5].filter(d=>!st.sched[d].startsWith('job:'));
+  let n=0;
+  for (const d of free) st.sched[d] = 'train:' + (st.wish?.type === 'train' ? st.wish.skill : ks[n++ % 2]);
+  if (free.length) st.sched[free[0]] = st.wish?.type === 'rest' ? 'off' : 'rest';
+  if (st.energy < 40) for (const d of free.filter(d=>d!==6).slice(0,2)) st.sched[d]='rest';
+  for (const d of st.sickDays || []) if (!st.sched[d].startsWith('job:')) st.sched[d]='rest';
+}
+export function autoArrangeAll(S) { for (const st of team(S)) autoArrange(S,st.id); }
+export function floorFor(S, value, op = null) {
+  if (value === 'off') return -1;
+  let type = value === 'rest' ? 'dorm' : value === 'live' ? 'studio' : value.startsWith('train:') ? value.slice(6) : 'studio';
+  if (value.startsWith('job:')) {
+    op ||= opById(S,value.slice(4));
+    if (['concert','contest','dome'].includes(op?.type)) return -1;
+    if (['short','duo','holo'].includes(op?.type)) type='dance';
+  }
+  let i = S.floors.findIndex(f=>f.type===type);
+  return i < 0 ? Math.max(0,S.floors.findIndex(f=>f.type==='studio')) : i;
+}
+export function floorCost(S,type) { const f=D.FLOORS[type]; return f?.build ? Math.round(f.build*(1+0.25*(S.floors.length-5))/10)*10 : 0; }
+export function upgradeCost(S,i) { const f=S.floors[i]; return f ? D.FLOORS[f.type].cost[f.lv-1] || 0 : 0; }
+export function buildFloor(S,type) {
+  if (!D.FLOORS[type]?.build) return '不能加蓋這種樓層';
+  if (S.floors.length >= LEVELS[S.lv].floors) return '公司要升級才能再往上蓋';
+  const cost=floorCost(S,type); if (S.money<cost) return `要 $${fmt(cost)}`;
+  S.money-=cost; S.floors.push({type,lv:1}); feed(S,null,`🏗 蓋好了${D.FLOORS[type].name}！`,'good'); return null;
+}
+export function upgradeFloor(S,i) {
+  const f=S.floors[i]; if (!f) return '找不到樓層'; if (f.lv>=3) return '已經最高級';
+  const cost=upgradeCost(S,i); if (S.money<cost) return `要 $${fmt(cost)}`;
+  S.money-=cost; f.lv++; feed(S,null,`${D.FLOORS[f.type].icon} ${i+1}F 升到 Lv${f.lv}！`,'good'); return null;
+}
+export function migrate(S) {
+  if (S.v !== 1) return S;
+  const fac=S.fac || {}; S.floors=initialFloors();
+  if(S.lv>=2) S.floors.push({type:'sing',lv:1});
+  if(S.lv>=3) S.floors.push({type:'act',lv:1},{type:'talk',lv:1});
+  for(const f of S.floors) if(D.SKILL_IDS.includes(f.type)) f.lv=clamp(fac.gym||1,1,3);
+  if(fac.lounge) S.floors.push({type:'lounge',lv:clamp(fac.lounge,1,3)});
+  S.floors[1].lv=Math.min(3,1+(fac.edit||0)); delete S.fac;
+  for(const op of S.ops) { op.days=MEDIA[op.type].days; op.weeks=MEDIA[op.type].weeks; op.left=Math.min(op.left,op.weeks); op.log={}; }
+  for(const st of [...S.stars,...(S.audition||[])]) {
+    st.jobs=st.job?[st.job]:[]; st.trust=40; st.done={};
+    st.sched=null; st.sickDays=[];
+    autoArrange(S,st.id);                              // 沒工作的人照專長排練習、週日休息
+    if(st.job) { const op=opById(S,st.job); if(op) scheduleJob(st,op); }
+    delete st.job; delete st.plan;
+  }
+  S.v=2; return S;
+}
 
 // ---------- 購買 ----------
 export function canUpgrade(S) {
@@ -458,14 +542,6 @@ export function upgradeCompany(S) {
   feed(S, null, `🏢 公司升級成 Lv${S.lv}「${LEVELS[S.lv].name}」!明星名額 ${LEVELS[S.lv].max} 位、每週 ${LEVELS[S.lv].ops} 個機會。`, 'good');
   for (const st of team(S)) st.mood = clamp(st.mood + 8, 0, 100);
   checkGoals(S);
-  return null;
-}
-export function upgradeFac(S, k) {
-  const f = D.FACILITIES[k], lv = S.fac[k];
-  if (lv >= 3) return '已經最高級';
-  if (S.money < f.cost[lv]) return `要 $${fmt(f.cost[lv])}`;
-  S.money -= f.cost[lv]; S.fac[k]++;
-  feed(S, null, `${f.icon} ${f.name}升到 Lv${S.fac[k]}!${f.desc}`, 'good');
   return null;
 }
 export function buyOutfit(S, id) {
@@ -493,11 +569,23 @@ export function talk(S, id) {
   const st = starById(S, id);
   if (st.talkedThisWeek) return '這週已經談過了';
   if (S.money < D.TALK_COST) return `要 $${D.TALK_COST}(請喝飲料)`;
-  S.money -= D.TALK_COST; st.talkedThisWeek = true;
+  S.money -= D.TALK_COST; st.talkedThisWeek = true; st.done.talk = true;
   st.mood = clamp(st.mood + 12, 0, 100); st.loyalty = clamp(st.loyalty + 7, 0, 100);
   if (st.sulk) { st.sulk = 0; st.lost = 0; }
   say(S, st, L.COMFORT, {}, 'good');
   return null;
+}
+export function interact(S,id,kind) {
+  const st=starById(S,id); if(!st || st.gone) return '找不到這位明星';
+  if(!['chat','snack','cheer','talk'].includes(kind)) return '沒有這種互動';
+  if(st.done[kind]) return '這週已經做過了';
+  if(kind==='talk') return talk(S,id);
+  if(kind==='snack' && S.money<60) return '點心要 $60';
+  st.done[kind]=true;
+  if(kind==='chat') { st.mood=clamp(st.mood+4,0,100); st.trust=clamp(st.trust+3,0,100); return say(S,st,L.CHAT_BOSS,{friend:friendsOf(S,st)[0]?.name||'大家',rival:rivalsOf(S,st)[0]?.name||'其他夥伴',wish:wishText(S,st)||'找到新目標'},'chat'); }
+  if(kind==='snack') { S.money-=60; st.energy=clamp(st.energy+10,0,100); }
+  if(kind==='cheer') { st.mood=clamp(st.mood+6,0,100); st.trust=clamp(st.trust+2,0,100); }
+  feed(S,id,kind==='snack'?'🍪 謝謝點心！充滿活力了！':'👏 謝謝鼓勵，我會加油！','good'); return null;
 }
 function openAudition(S) {
   const c = [makeStar(S), makeStar(S), makeStar(S)];
@@ -513,7 +601,7 @@ export function sign(S, i) {
   if (S.money < cost) return `簽約金要 $${fmt(cost)}`;
   S.money -= cost; delete st.intro; st.joined = S.week;
   for (const o of team(S)) S.rel[relKey(o.id, st.id)] = ri(S, -10, 20);
-  S.stars.push(st); S.audition = null;
+  S.stars.push(st); autoArrange(S, st.id); S.audition = null;
   feed(S, st.id, `🎉 ${st.name} 加入公司!`, 'good');
   return null;
 }
@@ -558,10 +646,10 @@ const EVENTS = [
       { label: '🔴 趁勝追擊開直播', go: S => { const g = Math.round(400 + st.fans * 0.25); st.fans += g; st.energy -= 20; return `直播超多人看!粉絲 +${fmt(g)},不過有點累。`; } },
       { label: '😌 讓他好好享受', go: S => { const g = Math.round(200 + st.fans * 0.12); st.fans += g; st.mood += 10; return `粉絲 +${fmt(g)},${st.name}心情很好。`; } },
     ] },
-  { id: 'cold', w: 0.8, when: S => pick(S, team(S).filter(s => !s.job)), title: st => `${st.name} 感冒了`, text: st => '一直打噴嚏,聲音也啞了……',
+  { id: 'cold', w: 0.8, when: S => pick(S, team(S).filter(s => !(s.jobs || []).length)), title: st => `${st.name} 感冒了`, text: st => '一直打噴嚏,聲音也啞了……',
     choices: st => [
-      { label: '🏥 帶去看醫生($200)', cost: 200, go: S => { st.energy = Math.max(st.energy, 60); st.plan = 'rest'; return `看完醫生好多了,這週先休息。`; } },
-      { label: '🛌 在家休息', go: S => { st.energy = Math.min(st.energy, 30); st.plan = 'rest'; st.mood -= 4; return `${st.name}在家休息,體力恢復得比較慢。`; } },
+      { label: '🏥 帶去看醫生($200)', cost: 200, go: S => { st.energy = Math.max(st.energy, 60); setPlan(S, st.id, 'rest'); return `看完醫生好多了,這週先休息。`; } },
+      { label: '🛌 在家休息', go: S => { st.energy = Math.min(st.energy, 30); setPlan(S, st.id, 'rest'); st.mood -= 4; return `${st.name}在家休息,體力恢復得比較慢。`; } },
     ] },
   { id: 'down', w: 0.7, when: S => true, title: () => '直播島伺服器當機!', text: () => '這週直播和 Podcast 都沒辦法播。',
     choices: () => [{ label: '😮 好吧', go: S => { S.flags.down = true; return '這週直播、Podcast 收入是 0,自己直播也不行。'; } }] },
@@ -578,14 +666,14 @@ const EVENTS = [
     choices: () => [{ label: '📉 知道了', go: S => { S.flags.cool = { type: S.trend.hot, weeks: 2 }; S.trend.hot = pick(S, availMedia(S).filter(k => k !== S.flags.cool.type)); return `改成推 ${MEDIA[S.trend.hot].icon}${MEDIA[S.trend.hot].name}!`; } }] },
   { id: 'teacher', w: 1, when: S => true, title: () => 'AI 老師來上課', text: () => '有一位很會教的 AI 老師,可以幫全公司上一堂課。要上哪一科?',
     choices: () => D.SKILL_IDS.slice(0, 3).map(k => ({ label: `${D.SKILLS[k].icon} ${D.SKILLS[k].name}課($600)`, cost: 600, go: S => { for (const o of team(S)) o.skills[k] = Math.min(10, o.skills[k] + 0.4); return `全員${D.SKILLS[k].name} +0.4!`; } })).concat([{ label: '不用了', go: () => '這次先不上課。' }]) },
-  { id: 'charity', w: 0.8, when: S => pick(S, team(S).filter(s => !s.job)), title: st => '公益活動邀請', text: st => `動物之家想請 ${st.name} 幫忙拍影片,讓更多人來認養小貓小狗。沒有酬勞喔。`,
+  { id: 'charity', w: 0.8, when: S => pick(S, team(S).filter(s => !(s.jobs || []).length)), title: st => '公益活動邀請', text: st => `動物之家想請 ${st.name} 幫忙拍影片,讓更多人來認養小貓小狗。沒有酬勞喔。`,
     choices: st => [
       { label: '🐶 答應', go: S => { st.fans += 300; st.mood += 10; st.loyalty += 5; st.energy -= 10; return `影片幫好多小動物找到家!${st.name}粉絲 +300,心情超好。`; } },
       { label: '這週太忙了', go: () => '下次有機會再幫忙。' },
     ] },
   { id: 'tired', w: 1, when: S => team(S).filter(s => s.energy < 45).sort((a, b) => a.energy - b.energy)[0], title: st => `${st.name} 太累了,想放假`, text: st => withCatch(S0, st, pick(S0, L.TIRED._)),
     choices: st => [
-      { label: '🏖 放假一週', go: S => { if (!st.job) st.plan = 'rest'; st.energy += 25; st.mood += 15; st.loyalty += 5; return `${st.name}好好休息,充飽電了。`; } },
+      { label: '🏖 放假一週', go: S => { if (!st.jobs.length) setPlan(S, st.id, 'rest'); st.energy += 25; st.mood += 15; st.loyalty += 5; return `${st.name}好好休息,充飽電了。`; } },
       { label: '💪 再撐一下', go: S => { st.mood -= 10; st.loyalty -= 6; return `${st.name}嘆了一口氣……`; } },
     ] },
   { id: 'snack', w: 0.8, when: S => true, title: () => '粉絲送來一大盒點心!', text: () => '是手作的餅乾,上面畫著每個人的臉。',
@@ -618,7 +706,7 @@ const EVENTS = [
       { label: '🔧 修好它($200)', cost: 200, go: () => '機器人恢復正常了。' },
       { label: '🎥 拍成影片', go: S => { const f = team(S).find(o => has(o, 'funny')) || pick(S, team(S)); f.fans += 250; f.mood += 6; return `${f.name}跟機器人一起「早安早安」,影片爆紅,粉絲 +250!`; } },
     ] },
-  { id: 'school', w: 0.8, when: S => pick(S, team(S).filter(s => !s.job)), title: st => '小學邀請去分享', text: st => `有一間小學想請 ${st.name} 去分享「怎麼做出好影片」。`,
+  { id: 'school', w: 0.8, when: S => pick(S, team(S).filter(s => !(s.jobs || []).length)), title: st => '小學邀請去分享', text: st => `有一間小學想請 ${st.name} 去分享「怎麼做出好影片」。`,
     choices: st => [
       { label: '🏫 去!', go: S => { const ok = st.skills.talk >= 3.5 || has(st, 'funny'); st.energy -= 8; if (ok) { st.fans += 260; st.mood += 8; return `小朋友聽得好開心,一直舉手問問題!粉絲 +260。`; } st.mood -= 3; st.skills.talk = Math.min(10, st.skills.talk + 0.3); return `${st.name}有點緊張,講得結結巴巴,不過口才 +0.3。`; } },
       { label: '這次先不要', go: () => '下次再說。' },
@@ -692,8 +780,7 @@ export function chooseEvent(S, i) {
 }
 function starLeaves(S, st) {
   st.gone = true; S.stats.left++;
-  const op = st.job && opById(S, st.job);
-  if (op) {
+  for (const op of S.ops.slice().filter(op => st.jobs.includes(op.id))) {
     for (const s of op.slots) if (s.who === st.id) s.who = null;
     if (!op.slots[0].who) {                           // 主角走了:換別人頂上,沒人就取消
       const k = op.slots.findIndex(s => s.who);
@@ -701,7 +788,7 @@ function starLeaves(S, st) {
       else if (op.status === 'run') S.ops.splice(S.ops.indexOf(op), 1);
     }
   }
-  st.job = null;
+  st.jobs = [];
   const keep = Math.round(st.fans * 0.3);
   feed(S, st.id, `${st.name}:` + withCatch(S, st, fill(pickLine(S, st, L.BYE))), 'bye');
   for (const o of friendsOf(S, st)) o.mood = clamp(o.mood - 10, 0, 100);
@@ -721,53 +808,71 @@ export function endWeek(S) {
   for (const op of S.ops.slice()) {
     if (op.status !== 'open') continue;
     if (op.slots[0].who) { lockOp(S, op); continue; }
-    for (const s of op.slots) if (s.who) { starById(S, s.who).job = null; starById(S, s.who).plan = 'rest'; s.who = null; }
+    for (const s of op.slots) if (s.who) { const st = starById(S,s.who); st.jobs=st.jobs.filter(id=>id!==op.id); st.sched=st.sched.map(v=>v==='job:'+op.id?'rest':v); s.who = null; }
     if (op.type === 'dome') continue;                // 巨蛋會一直留著
     S.ops.splice(S.ops.indexOf(op), 1);
     if (op.bids.length && chance(S, 0.5)) feed(S, null, `《${op.title.replace(/[《》]/g, '')}》被${pick(S, S.rivals).name}接走了。`, 'sys');
-    for (const b of op.bids) { const st = starById(S, b.id); if (st && !st.gone && !st.job) st.mood = clamp(st.mood - 2, 0, 100); }
+    for (const b of op.bids) { const st = starById(S, b.id); if (st && !st.gone && !st.jobs.length) st.mood = clamp(st.mood - 2, 0, 100); }
   }
-  // 2. 沒工作的人做自己的安排
-  for (const st of team(S)) {
-    if (st.job) continue;
-    const T = t => has(st, t);
-    if (st.sulk) { st.sulk--; st.mood = clamp(st.mood + 4, 0, 100); R.items.push({ id: st.id, text: `😤 ${st.name}在鬧彆扭,這週什麼都沒做。` }); continue; }
-    const p = st.plan || 'rest';
-    if (p === 'rest') {
-      st.energy += (T('chill') ? 45 : 35) + 8 * S.fac.lounge; st.mood += 6 + 2 * S.fac.lounge;
-      if (st.wish && st.wish.type === 'rest') wishDone(S, st);
-      if (chance(S, 0.25)) say(S, st, L.REST, {}, 'chat');
-    } else if (p === 'live') {
-      if (S.flags.down) { R.items.push({ id: st.id, text: `🔌 伺服器當機,${st.name}的直播開不了。` }); st.energy += 10; continue; }
-      const hot = S.trend.hot === 'live' ? 1.5 : 1;
-      const g = Math.round((60 + st.skills.talk * 35 + st.fans * 0.015) * hot), m = Math.round((60 + st.fans * 0.02) * hot);
-      st.fans += g; S.money += m; st.energy -= 14;
-      R.items.push({ id: st.id, text: `🔴 ${st.name}自己開直播:粉絲 +${fmt(g)}、$${fmt(m)}` });
-    } else if (p.startsWith('train:')) {
-      const k = p.slice(6);
-      if (S.flags.power) { R.items.push({ id: st.id, text: `🕯 停電,${st.name}沒辦法練習。` }); continue; }
-      let mult = (1 + 0.2 * S.fac.gym) * (0.7 + st.mood / 170) * (T('hot') ? 1.3 : 1) * (T('chill') ? 0.8 : 1) * (st.motivated ? 1.5 : 1) * (S.mentor ? 1.15 : 1);
-      if (st.energy < 20) mult *= 0.5;
-      const before = st.skills[k], gain = 0.8 * mult * (1 - before / 11);
-      st.skills[k] = +Math.min(10, before + gain).toFixed(2);
-      st.trained[k] = S.week; st.energy -= T('hot') ? 15 : 12;
-      if (st.wish && st.wish.type === 'train' && st.wish.skill === k) wishDone(S, st);
-      R.items.push({ id: st.id, text: `${D.SKILLS[k].icon} ${st.name}練${D.SKILLS[k].name} ${before.toFixed(1)} → ${st.skills[k].toFixed(1)}` });
-      if (chance(S, 0.3)) say(S, st, L.TRAIN, { skill: D.SKILLS[k].name }, 'chat');
+  R.timeline = []; R.opTypes = Object.fromEntries(S.ops.map(op=>[op.id,op.type]));
+  const startSkills = Object.fromEntries(team(S).map(st=>[st.id,{...st.skills}]));
+  for(let d=0;d<7;d++) {
+    const seq=S.seq, acts={}, floorOf={}, used={}, sulkOf={};
+    for(const st of team(S)) {
+      const value=st.sched[d]; acts[st.id]=value; sulkOf[st.id]=!!st.sulk; floorOf[st.id]=floorFor(S,value);
+      const T=t=>has(st,t);
+      if(value.startsWith('job:')) {
+        const op=opById(S,value.slice(4)); if(op) {
+          const log=(op.log ||= {})[st.id] ||= {e:0,m:0,n:0}; log.e+=st.energy; log.m+=st.mood; log.n++;
+          const i=op.slots.findIndex(s=>s.who===st.id);
+          for(const [k,w] of Object.entries(slotW(op,i))) st.skills[k]=Math.min(10,st.skills[k]+LEARNING.work*w*(1-st.skills[k]/11));
+          st.energy-=T('hot')?18:15; st.worked=true;
+        }
+      } else if(value==='rest' || value==='off') {
+        st.energy+=value==='off'?25:T('chill')?40:30; st.mood+=value==='off'?15:4;
+        if(value==='off') { R.items.push({id:st.id,text:`🎉 ${st.name} 放假去玩`}); feed(S,st.id,'🎉 今天放假去玩，回來再加油！','chat'); }
+        if(st.wish?.type==='rest') wishDone(S,st);
+      } else if(value==='live') {
+        if(!S.flags.down) {
+          const hot=S.trend.hot==='live'?1.5:1;
+          const g=Math.round((60+st.skills.talk*35+st.fans*0.015)*hot/3), m=Math.round((60+st.fans*0.02)*hot/3);
+          st.fans+=g; S.money+=m; R.items.push({id:st.id,text:`🔴 ${st.name} 自己直播：粉絲 +${fmt(g)}、$${fmt(m)}`});
+        }
+        st.energy-=8;
+      } else if(value.startsWith('train:') && !st.sulk) {
+        const k=value.slice(6), rooms=S.floors.filter(f=>f.type===k), lv=roomLv(S,k), capacity=rooms.reduce((a,f)=>a+f.lv+1,0);
+        used[k]=(used[k]||0)+1;
+        let seat=used[k];
+        for(let fi=0;fi<S.floors.length;fi++) if(S.floors[fi].type===k) {floorOf[st.id]=fi;seat-=S.floors[fi].lv+1;if(seat<=0)break;}
+        let mult=(lv?1+0.2*(lv-1):0.5)*(0.7+st.mood/170)*(T('hot')?1.3:1)*(T('chill')?0.8:1)*(st.motivated?1.5:1)*(S.mentor?1.15:1);
+        if(lv && used[k]>capacity) {mult*=0.5; if(!R.items.some(i=>i.crowded===k)) R.items.push({crowded:k,text:`${D.FLOORS[k].name}太擠了，部分練習效果減半。`});}
+        if(st.energy<20) mult*=0.5; if(S.flags.power) mult=0;
+        st.skills[k]=Math.min(10,st.skills[k]+LEARNING.training*mult*(1-st.skills[k]/11)); st.trained[k]=S.week;
+        st.energy-=T('hot')?12:10;
+        if(st.wish?.type==='train' && st.wish.skill===k && mult) wishDone(S,st);
+      }
+      // 每天只因同桌朋友增加一次心情。
+      st.energy+=roomLv(S,'cafe') ? 2+4*roomLv(S,'cafe') : 3;
+      if(value!=='off' && friendsOf(S,st).some(fr=>fr.sched[d]!=='off')) st.mood++;
+      const dorm=roomLv(S,'dorm'), lounge=roomLv(S,'lounge');
+      if(dorm) st.energy+=4+4*dorm;
+      if(lounge && !value.startsWith('job:')) {st.energy+=6+2*lounge;st.mood+=3;}
+      for(const k of ['energy','mood','loyalty']) st[k]=clamp(st[k],0,100);
+      st.noRest=(value==='rest'||value==='off')?0:(st.noRest||0)+1;
+      if(st.noRest>=6 && !st.warnedRest) {st.warnedRest=true; st.mood=clamp(st.mood-10,0,100); R.items.push({id:st.id,text:`😵 ${st.name} 一整週沒休息`,big:true}); if(chance(S,0.25)) st.cold=true; say(S,st,L.TIRED,{},'sad');}
     }
+    let says=S.feed.filter(f=>f.n>seq && f.id).slice(0,3).map(({id,text})=>({id,text}));
+    if(!says.length && chance(S,0.6)) {const st=pick(S,team(S)), fr=friendsOf(S,st).find(f=>acts[f.id]!=='off'); if(fr) feed(S,st.id,fill(pick(S,L.CHAT_FRIEND),{a:st.name,b:fr.name}),'chat'); else say(S,st,L.CHAT_SELF,{},'chat'); says=S.feed.slice(-1).map(({id,text})=>({id,text}));}
+    R.timeline.push({acts,floorOf,says,sulkOf});
   }
-  // 3. 進行中的工作
-  for (const op of S.ops.slice()) {
-    if (op.status !== 'run') continue;
-    const ids = op.slots.map(s => s.who).filter(Boolean);
-    op.slots.forEach((s, i) => {                     // 做中學:工作也會讓技能慢慢進步
-      if (!s.who) return;
-      const st = starById(S, s.who); st.energy -= has(st, 'hot') ? 20 : 16;
-      for (const [k, w] of Object.entries(slotW(op, i))) st.skills[k] = +Math.min(10, st.skills[k] + 0.25 * w * (1 - st.skills[k] / 11)).toFixed(2);
-    });
-    for (const id of ids) starById(S, id).worked = true;
-    if (--op.left > 0) { R.items.push({ op: op.id, text: `${MEDIA[op.type].icon} ${op.title} 製作中……(還有 ${op.left} 週)` }); continue; }
-    finishOp(S, op, R);
+  for(const st of team(S)) {
+    st.warnedRest=false;
+    if(st.sulk) {st.sulk--; R.items.push({id:st.id,text:`💢 ${st.name} 鬧彆扭，暫停練習。`});}
+    for(const k of D.SKILL_IDS) if(st.skills[k]>startSkills[st.id][k]+0.05) R.items.push({id:st.id,text:`${D.SKILLS[k].icon} ${st.name} ${D.SKILLS[k].name} ${startSkills[st.id][k].toFixed(1)} → ${st.skills[k].toFixed(1)}`});
+  }
+  for(const op of S.ops.slice()) if(op.status==='run') {
+    if(--op.left>0) R.items.push({op:op.id,text:`${MEDIA[op.type].icon} ${op.title} 製作中……(還有 ${op.left} 週)`});
+    else finishOp(S,op,R);
   }
   // 4. 心願倒數
   for (const st of team(S)) {
@@ -781,18 +886,20 @@ export function endWeek(S) {
   const funny = team(S).some(s => has(s, 'funny') && !s.sulk);
   for (const st of team(S)) {
     st.energy = clamp(st.energy, 0, 100);
-    st.mood += (55 + 3 * S.fac.lounge - st.mood) * 0.12 + (funny ? 1.5 : 0);
+    st.mood += (55 + 3 * roomLv(S,'lounge') - st.mood) * 0.12 + (funny ? 1.5 : 0);
     if (st.energy < 20) { st.mood -= 6; if (chance(S, 0.5)) say(S, st, L.TIRED, {}, 'sad'); }
     if (S.money < 0) st.mood -= 3;
     st.mood = clamp(st.mood, 0, 100);
+    const loyalty0 = st.loyalty;
     st.loyalty += st.mood > 70 ? 0.5 : st.mood < 35 ? -3 : 0;
-    if (!st.worked && st.plan !== 'rest') st.loyalty -= 1;          // 一整週沒有工作,有點無聊
+    if (!st.worked && !st.sched.some(v=>v==='rest'||v==='off')) st.loyalty -= 1;          // 一整週沒有工作,有點無聊
     if (st.energy < 15) st.loyalty -= 1;
     st.loyalty = clamp(st.loyalty, 0, 100);
     // 一直被冷落的人(連輸)每週再少一點
     if (st.lost >= 2) st.loyalty = clamp(st.loyalty - 2, 0, 100);
     st.worked = false;
     if (st.promise && S.week >= st.promise) { st.loyalty = clamp(st.loyalty - 20, 0, 100); delete st.promise; feed(S, st.id, `${st.name}:你說好的事……沒做到。`, 'sad'); }
+    if(st.trust>=70 && st.loyalty<loyalty0) st.loyalty=(st.loyalty+loyalty0)/2;
   }
   for (const st of team(S)) {
     const d = st.mood - mood0[st.id];
@@ -845,14 +952,14 @@ function finishOp(S, op, R) {
   const fame = m.fame ? 1 + ids.reduce((a, id) => a + starById(S, id).fans, 0) / 20000 : 1;
   const pull = ids.reduce((a, id) => a + starById(S, id).fans, 0) * 0.03;     // 越紅的明星,作品帶來越多新粉絲
   const sat = 1 / (1 + totalFans(S) / 250000);                                 // 全國就這麼多人,越後面越難漲
-  const money = Math.round(op.pay * mult * fame), fans = Math.round((op.fans + pull) * mult * fanMult * sat);
+  const money = Math.round(op.pay * OUTPUT.pay * mult * fame), fans = Math.round((op.fans + pull) * OUTPUT.fans * mult * fanMult * sat);
   S.money += money;
   ids.forEach(id => {
     const st = starById(S, id), i = op.slots.findIndex(s => s.who === id);
     st.fans += Math.round(fans * shares[i] / wsum);
     st.stat.ops++; if (g.g === 'S') st.stat.S++;
     if (!st.stat.best || 'SABC'.indexOf(g.g) < 'SABC'.indexOf(st.stat.best)) st.stat.best = g.g;
-    st.job = null; st.plan = st.energy < 40 ? 'rest' : st.plan === 'op' ? 'rest' : st.plan;
+    st.jobs = st.jobs.filter(id => id !== op.id);
     st.mood = clamp(st.mood + ({ S: 14, A: 8, B: 2, C: -8 })[g.g], 0, 100);
     if (g.g === 'S' || g.g === 'A') st.loyalty = clamp(st.loyalty + 2, 0, 100);
   });
@@ -865,7 +972,7 @@ function finishOp(S, op, R) {
   const lead = starById(S, ids[0]);
   if (lead) say(S, lead, L.RESULT[g.g], {}, g.g === 'C' ? 'sad' : 'good');
   S.stats.ops++; S.stats.byType[op.type] = (S.stats.byType[op.type] || 0) + 1;
-  if (g.g === 'S' || g.g === 'A') (S.stats.goodType = S.stats.goodType || {})[op.type] = 1;
+  if (g.g === 'S') (S.stats.goodType = S.stats.goodType || {})[op.type] = 1;
   if (g.g === 'S') S.stats.S++;
   if ('SABC'.indexOf(g.g) < 'SABC'.indexOf(S.stats.best)) S.stats.best = g.g;
   R.items.push({ op: op.id, grade: g.g, ids, big: true, text: `${m.icon} ${op.title}(${ids.map(id => nameOf(S, id)).join('、')})評價 ${g.g}${contest}!$${fmt(money)}、粉絲 +${fmt(fans)}${isHot(S, op) ? ' 🔥' : ''}` });

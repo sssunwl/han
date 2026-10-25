@@ -370,8 +370,72 @@ export function makeAccessory(kind, color) {
   return accCache.get(k);
 }
 
+// 公司大樓用具：沿用三階色與像素描邊。
+function bed({ bunk = false } = {}) {
+  const b=new Bmp(bunk?64:32,48);
+  for(const [x,y] of (bunk?[[3,5],[29,25]]:[[2,19]])) {
+    box(b,x,y,28,18,4,WOOD); b.rect(x+2,y+2,24,10,WHITE.mid);
+    b.rect(x+3,y+2,8,7,WHITE.hi); b.rect(x+11,y+3,14,10,CYAN.mid); b.hline(x+12,y+4,12,CYAN.hi);
+    b.rect(x,y+15,3,8,WOOD.lo);b.rect(x+25,y+15,3,8,WOOD.lo);
+  }
+  if(bunk) {b.rect(3,2,3,41,WOOD.mid);b.rect(56,2,3,43,WOOD.lo);for(let y=12;y<44;y+=7)b.hline(49,y,9,WOOD.hi);}
+  return outline(b);
+}
+function diningTable() {
+  const b=new Bmp(64,32);box(b,2,6,60,12,5,WOOD);b.rect(8,16,4,13,WOOD.lo);b.rect(52,16,4,13,WOOD.lo);
+  box(b,3,23,58,5,2,WOOD);box(b,3,1,58,4,2,WOOD); return outline(b);
+}
+function bowl() {
+  const b=new Bmp(12,10);b.hline(1,4,10,WHITE.hi);b.rect(2,5,8,3,CYAN.mid);b.hline(4,8,4,CYAN.lo);
+  b.vline(4,0,3,WHITE.mid);b.vline(8,1,2,WHITE.hi);return outline(b);
+}
+function foodCounter() {
+  const b=new Bmp(64,48);box(b,2,20,60,26,6,CYAN);b.rect(3,5,3,17,STEEL.mid);b.rect(58,5,3,17,STEEL.lo);box(b,1,3,62,5,2,WHITE);
+  for(let x=10;x<55;x+=15){b.rect(x,21,12,5,STEEL.lo);b.rect(x+2,21,8,3,GOLD.mid);} b.blit(bowl(),40,12);return outline(b);
+}
+function fridge() {
+  const b=new Bmp(32,64);box(b,3,2,26,59,5,WHITE);b.hline(4,25,24,STEEL.lo);b.rect(23,13,2,9,DARK.mid);b.rect(23,32,2,14,DARK.mid);b.rect(8,8,8,6,CYAN.mid);return outline(b);
+}
+function massageChair() {
+  const b=new Bmp(32,40);box(b,6,2,20,26,6,PURPLE);box(b,3,23,26,10,4,PURPLE);box(b,1,17,6,16,3,DARK);box(b,25,17,6,16,3,DARK);b.rect(7,34,18,4,BLACK.mid);b.rect(8,7,16,10,PURPLE.lo);return outline(b);
+}
+function footBath() {
+  const b=new Bmp(32,24);box(b,2,5,28,16,5,WOOD);b.rect(5,7,22,7,CYAN.mid);b.hline(8,8,7,CYAN.hi);return outline(b);
+}
+function speaker() {
+  const b=new Bmp(32,48);box(b,4,2,24,43,4,BLACK);for(const [y,r] of [[14,6],[32,8]]) {b.rect(16-r,y-r,r*2,r*2,DARK.mid);b.rect(13,y-3,6,6,STEEL.lo);}b.px(23,6,GREEN.hi);return outline(b);
+}
+function elevatorDoor({open=0}={}) {
+  const b=new Bmp(32,64);box(b,1,1,30,62,3,DARK);b.rect(4,8,24,52,BLACK.lo);
+  const w=Math.round(12*(1-Math.max(0,Math.min(1,open))));
+  if(w){b.rect(4,9,w,50,STEEL.mid);b.rect(28-w,9,w,50,STEEL.lo);b.vline(5,10,48,STEEL.hi);}
+  b.rect(12,3,8,3,GREEN.mid);b.px(30,32,GOLD.hi);return outline(b);
+}
+function reception() {
+  const b=new Bmp(64,48);box(b,2,20,60,26,7,WOOD);b.rect(9,30,46,9,PURPLE.mid);box(b,23,7,20,14,2,DARK);b.rect(26,9,14,7,CYAN.mid);b.rect(7,15,11,5,WHITE.hi);return outline(b);
+}
+function clapper() { const b=new Bmp(12,12);b.rect(1,4,10,7,BLACK.mid);b.rect(1,1,10,3,WHITE.mid);for(let x=2;x<11;x+=4)b.rect(x,1,2,3,BLACK.mid);b.hline(3,7,6,WHITE.mid);return outline(b); }
+function micHand() {const b=new Bmp(8,10);b.rect(2,1,5,4,STEEL.mid);b.rect(3,5,2,5,BLACK.mid);b.px(3,1,WHITE.hi);return outline(b);}
+function notes() {const b=new Bmp(8,8);b.vline(4,0,6,CYAN.mid);b.hline(4,0,4,CYAN.mid);b.rect(1,5,4,3,PINK.mid);return outline(b);}
+function roofSign() {const b=new Bmp(96,24);box(b,1,1,94,20,3,PURPLE);b.rect(4,5,88,12,DARK.lo);b.rect(13,21,4,3,STEEL.mid);b.rect(79,21,4,3,STEEL.mid);return outline(b);}
+
 /** 清單:預覽頁與匯出工具都讀這個 */
 export const KIT = {
+  bunk_bed: { w:64, h:48, tags:['公司大樓'], make:() => bed({bunk:true}) },
+  bed: { w:32, h:48, tags:['公司大樓'], make:bed },
+  dining_table: { w:64, h:32, tags:['公司大樓'], make:diningTable },
+  food_counter: { w:64, h:48, tags:['公司大樓'], make:foodCounter },
+  bowl: { w:12, h:10, tags:['公司大樓'], make:bowl },
+  fridge: { w:32, h:64, tags:['公司大樓'], make:fridge },
+  massage_chair: { w:32, h:40, tags:['公司大樓'], make:massageChair },
+  foot_bath: { w:32, h:24, tags:['公司大樓'], make:footBath },
+  speaker: { w:32, h:48, tags:['公司大樓'], make:speaker },
+  elevator_door: { w:32, h:64, tags:['公司大樓'], make:elevatorDoor },
+  reception: { w:64, h:48, tags:['公司大樓'], make:reception },
+  clapper: { w:12, h:12, tags:['公司大樓'], make:clapper },
+  mic_hand: { w:8, h:10, tags:['公司大樓'], make:micHand },
+  notes: { w:8, h:8, tags:['公司大樓'], make:notes },
+  roof_sign: { w:96, h:24, tags:['公司大樓'], make:roofSign },
   floor_studio: { w: 32, h: 32, tags: ['攝影棚', '地板', '可接續'], make: () => floor({ kind: 'studio' }) },
   floor_carpet: { w: 32, h: 32, tags: ['攝影棚', '地板', '可接續'], make: () => floor({ kind: 'carpet' }) },
   floor_stage: { w: 32, h: 32, tags: ['攝影棚', '地板', '可接續'], make: () => floor({ kind: 'stage' }) },

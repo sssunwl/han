@@ -1,3 +1,4 @@
+import { migrate } from './engine.js';
 /* ============================================================
    AI 明星養成的存檔:照溫泉旅館(games/onsen/store.js)的做法,雙保險 + 存檔碼
    - localStorage 是主存檔。但 sssunwl.github.io 底下所有專案共用同一份 ~5MB 額度
@@ -81,6 +82,6 @@ export async function decodeSave(code) {
     throw mine ? e : new Error('存檔碼不完整,可能沒有複製到整串');
   }
   const obj = parse(new TextDecoder().decode(bytes));
-  if (!obj || obj.v !== 1 || !Array.isArray(obj.stars) || !obj.rel) throw new Error('存檔碼壞掉了,讀不出公司');
-  return obj;
+  if (!obj || (obj.v !== 1 && obj.v !== 2) || !Array.isArray(obj.stars) || !obj.rel) throw new Error('存檔碼壞掉了,讀不出公司');
+  return migrate(obj);
 }

@@ -40,14 +40,14 @@
     .stats { order:5; flex-basis:100%; justify-content:space-between; }
     .stats .chip { flex:1; text-align:center; }
   }
-  #saveDot { position:absolute; right:10px; bottom:-20px; font-size:11px; color:#9df0c8; opacity:0; transition:opacity .3s; pointer-events:none; }
+  #saveDot { position:absolute; left:10px; bottom:-20px; font-size:11px; color:#9df0c8; opacity:0; transition:opacity .3s; pointer-events:none; }
   #saveDot.on { opacity:1; } #saveDot.bad { color:#ff8f8f; }
 
   .main { flex:1; min-height:0; display:flex; flex-direction:column; }
   .left { flex:none; display:flex; flex-direction:column; }
-  .stage { position:relative; height:min(36vh, 300px); min-height:170px; overflow:hidden; background:#0d0a22; }
-  @supports (height:1dvh) { .stage { height:min(36dvh, 300px); } }
-  #cv { position:absolute; inset:0; width:100%; height:100%; display:block; z-index:0; touch-action:manipulation; image-rendering:pixelated; }
+  .stage { position:relative; flex:none; height:min(42vh, 400px); min-height:170px; overflow:hidden; background:#0d0a22; }
+  @supports (height:1dvh) { .stage { height:min(42dvh, 400px); } }
+  #cv { position:absolute; inset:0; width:100%; height:100%; display:block; z-index:0; touch-action:none; image-rendering:pixelated; }
   #bubbles { position:absolute; inset:0; pointer-events:none; z-index:1; overflow:hidden; }
   .bub { position:absolute; transform:translate(-50%,-100%); width:max-content; max-width:150px; padding:4px 8px; border-radius:10px; font-size:11px; line-height:1.3;
          background:#fff; color:#2b1f3e; border:2px solid var(--c,#ff5ec4); box-shadow:0 2px 0 rgba(0,0,0,.25); animation:pop .25s ease-out; text-align:left; }
@@ -176,6 +176,23 @@
     .stage { flex:1; height:auto; min-height:0; }
     .right { flex:1; }
   }
+
+  .clock {position:absolute;top:4px;right:4px;z-index:2;background:#211a4edb;border-radius:8px;padding:4px 6px;font-size:11px;}
+  .clock button {border:0;border-radius:6px;padding:6px;color:#fff;background:#54428c;font:inherit;}
+  .scheduleRow {background:#fffaf7;color:#2b1f3e;border-radius:12px;padding:7px 4px;margin:8px 0;}
+  .scheduleGrid {display:grid;grid-template-columns:minmax(42px,1fr) repeat(7,minmax(34px,1fr));gap:1px;align-items:center;}
+  .scheduleGrid .person {min-width:0;font-size:11px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+  .scheduleGrid .person img {width:24px;height:32px;float:left;}
+  .scheduleGrid .b {height:4px;background:#e1d7ef;border-radius:3px;overflow:hidden;clear:both;}
+  .scheduleGrid .b i {display:block;height:100%;}
+  .scheduleGrid button {min-width:34px;min-height:42px;border:1px solid #e1d8ef;border-radius:7px;background:#f2ecff;padding:2px 0;font-size:16px;color:#342647;}
+  .scheduleGrid button.job {background:#ffefd0;}
+  .scheduleGrid small {display:block;font-size:12px;}
+  .scheduleNote {font-size:11px;margin-top:5px;text-align:right;}
+  .miniSched {display:flex;width:100%;justify-content:space-around;border:0;border-radius:8px;background:#f2ecff;padding:7px 0;margin-top:6px;cursor:pointer;}
+  .floorRow {display:flex;gap:7px;align-items:center;border-top:1px solid #e5daee;padding:8px 0;font-size:12px;}
+  .floorRow > div {flex:1;}
+  @media(max-width:560px){ .panel {padding:7px 4px;} .tabs button {font-size:12px;} }
 </style>
 </head>
 <body>
@@ -212,19 +229,20 @@
     </div>
     <div class="main">
       <div class="left">
-        <div class="stage"><canvas id="cv"></canvas><div id="bubbles"></div></div>
+        <div class="stage"><canvas id="cv"></canvas><div id="bubbles"></div><div class="clock"><span id="timeBar">週一 · 排定這週行程</span> <button id="noPlayBtn">🎬 播放:開</button><span id="playControls" hidden><button id="speedBtn">⏩ 1×</button><button id="skipBtn">⏭ 週末</button></span></div></div>
         <div class="trend" id="trend"></div>
         <div class="goal" id="goal"></div>
       </div>
       <div class="right">
         <div class="tabs" id="tabs">
           <button data-tab="ops" class="on">📋 機會<span class="badge" id="bOps"></span></button>
+          <button data-tab="sched">📅 行程</button>
           <button data-tab="stars">⭐ 明星</button>
           <button data-tab="feed">💬 訊息<span class="badge" id="bFeed"></span></button>
           <button data-tab="co">🏢 公司<span class="badge" id="bCo"></span></button>
         </div>
         <div class="panel" id="panel"></div>
-        <div class="next"><button class="btn" id="nextBtn">▶ 下一週</button></div>
+        <div class="next"><button class="btn" id="nextBtn">▶ 開始這週</button></div>
       </div>
     </div>
   </div>
@@ -241,10 +259,10 @@
       <li>每一回合是<b>一週</b>。📋 <b>機會</b>裡有新的角色、活動、劇本。</li>
       <li>想要的明星會<b>自己跑來搶</b>,說出理由。看「預估評價」選一位(按「選他」)。</li>
       <li>沒選上的人會照個性反應:有人不服輸去練習,有人吃醋、鬧彆扭,太常被冷落還會<b>想跳槽</b>。</li>
-      <li>⭐ <b>明星</b>:沒工作的人可以排<b>練習 / 休息 / 自己直播</b>。累了一定要休息!</li>
+      <li>📅 <b>行程</b>:點每天的格子，可以排<b>練習 / 休息 / 自己直播</b>。累了一定要休息!</li>
       <li>📈 上面的<b>趨勢</b>每週會變,接到 🔥 熱門的媒體或 # 話題,效果更好。</li>
-      <li>🏢 <b>公司</b>:升級、蓋設施、辦試鏡找新人。跟著 🎯 目標走,最後挑戰<b>星光巨蛋</b>!</li>
-      <li>都排好了就按 <b>▶ 下一週</b>。</li>
+      <li>🏢 <b>公司</b>:升級、蓋樓層、辦試鏡找新人。跟著 🎯 目標走,最後挑戰<b>星光巨蛋</b>!</li>
+      <li>都排好了就按 <b>▶ 開始這週</b>。</li>
     </ol>
     <button class="btn wide" id="helpClose" style="margin-top:12px">知道了!</button></div></div>
   <div class="modal" id="codeBox"><div class="card">
@@ -254,6 +272,7 @@
       <div id="codeMsg"></div>
       <div class="btnrow"><button class="btn" id="codeGo">複製</button><button class="btn ghost" id="codeClose">關閉</button></div>
   </div></div>
+  <div class="modal" id="roomBox"><div class="card"><h2 id="roomTitle"></h2><div id="roomBody"></div><button class="btn ghost wide" id="roomClose" style="margin-top:10px">關閉</button></div></div>
   <div id="toast"></div>
 
   <script type="module" src="./main.js"></script>
