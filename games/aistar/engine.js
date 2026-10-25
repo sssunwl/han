@@ -14,7 +14,7 @@ const { MEDIA, TOPICS, TRAITS, LEVELS } = D;
 // 七天制的進步速度可獨立校準，不改目標與評價門檻。
 export const LEARNING = Object.freeze({ training: 0.12, work: 0.035 });
 // 七天制一個人一週能接好幾個小案子,作品的粉絲/酬勞要打折,節奏才跟 v1 差不多(結局約第 30~60 週)
-export const OUTPUT = Object.freeze({ fans: 0.36, pay: 0.45 });
+export const OUTPUT = Object.freeze({ fans: 0.33, pay: 0.45 });
 
 // ---------- 亂數(mulberry32,狀態存在 S.rs) ----------
 export function rnd(S) {
@@ -128,7 +128,7 @@ export const bestSkill = st => D.SKILL_IDS.reduce((a, k) => (st.skills[k] > st.s
 // ---------- 開新局 ----------
 export function newGame({ seed = (Date.now() % 2147483647) | 0, company = '星光 AI 娛樂', ng = 0, mentor = null, trophies = [] } = {}) {
   const S = {
-    v: 3, staff:[], scouted:[], seed, rs: seed, week: 1, ng, company, lv: 1, floors: initialFloors(), money: 2500,
+    v: 4, staff:[], scouted:[], releases: [], groups: [], chart: [], posts: [], sns: { strategy: 'vlog' }, actLog: [], seed, rs: seed, week: 1, ng, company, lv: 1, floors: initialFloors(), money: 2500,
     stars: [], rel: {}, everRival: [], ops: [], nextId: 1, feed: [], seq: 0, trend: null, nextTrend: null,
     rivals: D.RIVALS.map(r => ({ ...r, fans: Math.round(r.fans * (1 + 0.6 * ng)), g: r.g * (1 + 0.12 * ng) })),
     goals: [], trophies: trophies.slice(), mentor, teamups: [], temp: [], flags: {}, event: null,
@@ -228,7 +228,8 @@ export function interest(S, st, op) {
 }
 
 function computeBids(S, op) {
-  const cands = team(S).filter(st => isFree(st, op)).map(st => ({ st, ...interest(S, st, op) })).filter(c => c.v > 55).sort((a, b) => b.v - a.v).slice(0, 4);
+  const cands = team(S).filter(st => isFree(st, op) && (!op.only || op.only.includes(st.id))).map(st => ({ st, ...interest(S, st, op) })).filter(c => c.v > (op.groupId ? 45 : 55)).sort((a, b) => b.v - a.v).slice(0, 4);
+  if (op.groupId && op.type === 'group_album') for (const c of cands) c.reason = 'center';
   // 對手也在搶 → 好勝、愛吃醋的加碼,理由變成「不能讓對手搶走」
   for (let i = 1; i < cands.length; i++) {
     const c = cands[i], r = cands.slice(0, i).find(p => isRival(S, p.st.id, c.st.id));
@@ -285,6 +286,7 @@ export function perf(S, st, op, slot = 0, noise = true, mates = null) {
   if (st.topic === op.topic) v += 4;
   if (st.motivated) v += 3;
   if (S.mentor) v += 3;
+  if (op.groupId) { const g = groupById(S, op.groupId); if (g) v += (teamwork(S, g) - 50) * 0.15; }
   if (op.type === 'dome') v += Math.min(8, (team(S).length - 3) * 1.5) - 10;   // 超大場面比較難,但全公司在台下應援
   if (noise) v += (rnd(S) - 0.5) * 18;
   return v;
@@ -314,6 +316,7 @@ export function beginWeek(S) {
     const op = makeOp(S, 'duo', { self: true }); op.title = `${a.name}×${b.name} 自製企劃`; op.pay = Math.round(op.pay * 0.6);
     S.ops.push(op);
   }
+  musicShows(S);
   // 巨蛋
   if (S.goals.includes('dome') && !S.ended && !S.ops.some(o => o.type === 'dome') && !(S.domeWait > 0)) {
     const op = makeOp(S, 'dome'); op.title = '🏟 星光巨蛋演唱會'; op.fans = Math.round(MEDIA.dome.fans * (1 + 0.3 * S.ng)); op.pay = MEDIA.dome.pay;
@@ -398,11 +401,21 @@ export function assign(S, opId, slotIdx, starId) {
   if (!op || op.status !== 'open') return '這個機會已經開始了';
   if (!st || st.gone) return '找不到這位明星';
   if(st.jobs.includes(op.id)) return '已經參加這個機會了';
+  if (op.only && !op.only.includes(st.id)) return op.type === 'musicshow' ? '只有原唱可以上打歌舞台' : '只有團員可以參加';
   if(!isFree(st,op)) return `${st.name}這週排不下，要留 ${op.days} 天空檔`;
   const slot = op.slots[slotIdx];
   if (!slot || slot.who) return '這個角色已經有人了';
   slot.who = st.id; st.jobs.push(op.id); scheduleJob(st, op);
   const bid = op.bids.find(b => b.id === st.id);
+  if (op.groupId && slotIdx === 0 && op.type === 'group_album') {
+    say(S, st, L.CENTER_WIN, {}, 'win', { op: op.id });
+    st.mood = clamp(st.mood + 10, 0, 100); st.lost = 0;
+    const gg = groupById(S, op.groupId); if (gg) gg.center = st.id;
+    fillGroupSlots(S, op);
+    if (op.slots.every(s => s.who)) lockOp(S, op);
+    return null;
+  }
+  if (op.only && op.type === 'musicshow') fillGroupSlots(S, op);
   const isLead = slotIdx === 0 && op.slots.length > 1 && D.LEAD_ROLES.includes(slot.role);
   if (bid && !(has(st, 'proud') && hasLead(op) && !isLead)) {
     say(S, st, L.WIN, {}, 'win', { op: op.id });
@@ -425,7 +438,7 @@ function lockOp(S, op) {
   const ids = op.slots.map(s => s.who).filter(Boolean), winner = starById(S, ids[0]);
   for (const b of op.bids) {
     const st = starById(S, b.id);
-    if (!st || st.gone || ids.includes(st.id)) continue;
+    if (!st || st.gone || (ids.includes(st.id) && !(op.groupId && op.type === 'group_album' && st.id !== ids[0]))) continue;
     loseReaction(S, st, op, winner);
   }
   for (const y of op.yields) { const st = starById(S, y.id); if (st && ids.includes(y.friend)) { addRel(S, st.id, y.friend, 6); st.loyalty = clamp(st.loyalty + 2, 0, 100); } }
@@ -499,6 +512,9 @@ export function floorFor(S, value, op = null) {
     op ||= opById(S,value.slice(4));
     if (['concert','contest','dome'].includes(op?.type)) return -1;
     if (['short','duo','holo'].includes(op?.type)) type='dance';
+    if (['own_album','group_album'].includes(op?.type)) type='sing';
+    if (op?.type==='own_show') type='talk';
+    if (op?.type==='musicshow') return -1;
   }
   if(type==='charm' || op?.type==='fashion') type='style';
   let i = S.floors.findIndex(f=>f.type===type);
@@ -518,14 +534,18 @@ export function upgradeFloor(S,i) {
   S.money-=cost; f.lv++; feed(S,null,`${D.FLOORS[f.type].icon} ${i+1}F 升到 Lv${f.lv}！`,'good'); return null;
 }
 export function migrate(S) {
-  if(S.v===3) return S;
+  if(S.v===4) return S;
+  if(S.v===3) {
+    S.releases ||= []; S.groups ||= []; S.chart ||= []; S.posts ||= []; S.sns ||= { strategy: 'vlog' }; S.actLog ||= [];
+    S.v = 4; return S;
+  }
   if(S.v===2) {
     S.staff=[]; S.scouted=[];
     for(const st of [...S.stars,...(S.audition||[])]) {
       st.skills.charm=+(1+rnd(S)*1.4).toFixed(2); st.career=drawCareer(S,st); st.careerStep=0; st.trainee=false; st.pot=1;
       st.stat.byType={}; st.stat.roles=[];
     }
-    S.v=3; return S;
+    S.v=3; return migrate(S);
   }
   if(S.v!==1) return S;
   const fac=S.fac || {}; S.floors=initialFloors();
@@ -648,7 +668,7 @@ const EVENTS = [
       { label: '📢 發聲明澄清($500)', cost: 500, go: S => { st.fans += 150; st.mood += 8; return `大家知道那是假的了!${st.name}的粉絲反而 +150。小知識:AI 做的影片要標示「AI 生成」。`; } },
       { label: '🙋 請粉絲一起檢舉', go: S => { st.mood -= 5; st.fans = Math.round(st.fans * 0.97); return '粉絲幫忙檢舉,假影片被下架了,不過還是有人搞混。'; } },
       { label: '🤐 不理它', go: S => { st.fans = Math.round(st.fans * 0.85); st.mood -= 12; st.loyalty -= 6; return `假影片越傳越廣,${st.name}的粉絲掉了 15%,心情很差……`; } },
-    ] },
+    ].concat(S0 && staffLv(S0, 'editor') >= 3 ? [{ label: '📱 交給小編處理', go: S => { st.fans += 150; st.mood += 8; return `小編發了澄清貼文,大家都知道那是假的了!小知識:AI 做的影片要標示「AI 生成」。`; } }] : []) },
   { id: 'bday', w: 1, when: S => pick(S, team(S)), title: st => `今天是 ${st.name} 的生日!`, text: st => `${st.emoji} ${st.name}偷偷看了好幾次日曆……`,
     choices: st => [
       { label: '🎂 辦慶生會($400)', cost: 400, go: S => { for (const o of team(S)) { o.mood += 8; addRel(S, o.id, st.id, 5); } st.mood += 15; st.loyalty += 8; return '大家一起唱生日快樂歌!全員心情變好,感情也更好了。'; } },
@@ -734,7 +754,7 @@ const EVENTS = [
     choices: st => [
       { label: '🫂 陪他聊聊,一起檢舉', go: S => { st.mood += 6; st.loyalty += 6; return `${st.name}說:「你說得對,不要因為一個人的壞話,忘了很多人喜歡我。」`; } },
       { label: '📵 讓他這週不要看留言', go: S => { st.mood += 2; return '先離開網路休息一下,心情慢慢好起來。'; } },
-    ] },
+    ].concat(S0 && staffLv(S0, 'editor') >= 3 ? [{ label: '📱 交給小編處理', go: S => { st.mood += 8; st.loyalty += 6; return `小編幫忙檢舉、隱藏了留言,還貼了一張粉絲加油卡給${st.name}。`; } }] : []) },
   { id: 'nominate', w: 0.7, when: S => (S.week > 6 ? team(S).sort((a, b) => b.fans - a.fans)[0] : null), title: st => '頒獎典禮邀請!', text: st => '「年度新星獎」想請公司派一位明星出席走紅毯。要派誰?',
     choices: () => team(S0).slice().sort((a, b) => b.fans - a.fans).slice(0, 3).map(o => ({ label: `${o.emoji} ${o.name}`, go: S => { const g = Math.round(300 + o.fans * 0.08); o.fans += g; o.mood += 10; for (const x of team(S)) if (x.id !== o.id && (has(x, 'jeal') || has(x, 'proud'))) { x.mood -= 6; } return `${o.name}在紅毯上超亮眼!粉絲 +${fmt(g)}。`; } })) },
   { id: 'power', w: 0.6, when: S => true, title: () => '停電了!', text: () => '整棟大樓停電,沒辦法練習。大家只好點蠟燭聊天。',
@@ -826,7 +846,9 @@ export function endWeek(S) {
     if (op.slots[0].who) { lockOp(S, op); continue; }
     for (const s of op.slots) if (s.who) { const st = starById(S,s.who); st.jobs=st.jobs.filter(id=>id!==op.id); st.sched=st.sched.map(v=>v==='job:'+op.id?'rest':v); s.who = null; }
     if (op.type === 'dome') continue;                // 巨蛋會一直留著
+    if (op.project) continue;                         // 自家企劃也一直留著,等玩家選人或取消
     S.ops.splice(S.ops.indexOf(op), 1);
+    if (op.own) continue;                             // 音樂節目沒去,就這樣
     if (op.bids.length && chance(S, 0.5)) feed(S, null, `《${op.title.replace(/[《》]/g, '')}》被${pick(S, S.rivals).name}接走了。`, 'sys');
     for (const b of op.bids) { const st = starById(S, b.id); if (st && !st.gone && !st.jobs.length) st.mood = clamp(st.mood - 2, 0, 100); }
   }
@@ -842,7 +864,7 @@ export function endWeek(S) {
           const log=(op.log ||= {})[st.id] ||= {e:0,m:0,n:0}; log.e+=st.energy; log.m+=st.mood; log.n++;
           const i=op.slots.findIndex(s=>s.who===st.id);
           for(const [k,w] of Object.entries(slotW(op,i))) st.skills[k]=Math.min(10,st.skills[k]+LEARNING.work*w*(1-st.skills[k]/11));
-          st.energy-=T('hot')?18:15; st.worked=true;
+          st.energy-=T('hot')?18:15; st.worked=true; if(isHot(S,op)) st.hotThisWeek=true;
         }
       } else if(value==='rest' || value==='off') {
         st.energy+=value==='off'?25:T('chill')?40:30; st.mood+=value==='off'?15:4;
@@ -876,7 +898,7 @@ export function endWeek(S) {
       if(lounge && !value.startsWith('job:')) {st.energy+=6+2*lounge;st.mood+=3;}
       for(const k of ['energy','mood','loyalty']) st[k]=clamp(st[k],0,100);
       st.noRest=(value==='rest'||value==='off')?0:(st.noRest||0)+1;
-      if(st.noRest>=6 && !st.warnedRest) {st.warnedRest=true; st.mood=clamp(st.mood-10,0,100); R.items.push({id:st.id,text:`😵 ${st.name} 一整週沒休息`,big:true}); if(chance(S,0.25)) st.cold=true; say(S,st,L.TIRED,{},'sad');}
+      if(st.noRest>=7 && !st.warnedRest) {st.warnedRest=true; st.mood=clamp(st.mood-10,0,100); R.items.push({id:st.id,text:`😵 ${st.name} 一整週沒休息`,big:true}); if(chance(S,0.25)) st.cold=true; say(S,st,L.TIRED,{},'sad');}
     }
     let says=S.feed.filter(f=>f.n>seq && f.id).slice(0,3).map(({id,text})=>({id,text}));
     if(!says.length && chance(S,0.6)) {const st=pick(S,team(S)), fr=friendsOf(S,st).find(f=>acts[f.id]!=='off'); if(fr) feed(S,st.id,fill(pick(S,L.CHAT_FRIEND),{a:st.name,b:fr.name}),'chat'); else say(S,st,L.CHAT_SELF,{},'chat'); says=S.feed.slice(-1).map(({id,text})=>({id,text}));}
@@ -932,6 +954,7 @@ export function endWeek(S) {
   R.items.push({ text: `🏢 房租 $${fmt(rent)} + 明星薪水 $${fmt(pay)} + 員工薪水 $${fmt(staffPay)}` });
   // 7. 別家公司
   for (const r of S.rivals) r.fans = Math.round(r.fans * (1 + r.g * (0.7 + rnd(S) * 0.6)) + 60);
+  phase3Week(S, R);
   // 8. 季度星光榜(每 12 週)
   if (S.week % 12 === 0) {
     const rk = rankNow(S), prize = [0, 3000, 1500, 800, 300][rk];
@@ -951,7 +974,7 @@ export function endWeek(S) {
 
 function finishOp(S, op, R) {
   const ids = op.slots.map(s => s.who).filter(Boolean), m = MEDIA[op.type];
-  const shares = op.slots.length === 1 ? [1] : op.type === 'dome' || op.type === 'duo' ? op.slots.map(() => 1 / op.slots.length) : [0.62, 0.38];
+  const shares = op.slots.length === 1 ? [1] : op.slots.length === 2 && !['dome', 'duo'].includes(op.type) ? [0.62, 0.38] : op.slots.map(() => 1 / op.slots.length);
   let score = 0, wsum = 0;
   const per = op.slots.map((s, i) => {
     if (!s.who) return null;
@@ -974,7 +997,20 @@ function finishOp(S, op, R) {
   const fame = m.fame ? 1 + ids.reduce((a, id) => a + starById(S, id).fans, 0) / 20000 : 1;
   const pull = ids.reduce((a, id) => a + starById(S, id).fans, 0) * 0.03;     // 越紅的明星,作品帶來越多新粉絲
   const sat = 1 / (1 + totalFans(S) / 250000);                                 // 全國就這麼多人,越後面越難漲
-  const money = Math.round(op.pay * OUTPUT.pay * mult * fame * (1+staffEffect(S,'manager',[0.1,0.15,0.2])+(['fashion','ad'].includes(op.type)?staffEffect(S,'stylist',[0.05,0.08,0.1]):0))), fans = Math.round((op.fans + pull) * OUTPUT.fans * mult * fanMult * sat);
+  let money = Math.round(op.pay * OUTPUT.pay * mult * fame * (1+staffEffect(S,'manager',[0.1,0.15,0.2])+(['fashion','ad'].includes(op.type)?staffEffect(S,'stylist',[0.05,0.08,0.1]):0))), fans = Math.round((op.fans + pull) * OUTPUT.fans * mult * fanMult * sat);
+  let release = null;
+  if (['drama', 'own_drama'].includes(op.type)) S.actLog.push({ id: ids[0], score, week: S.week });
+  if (op.project) {                                    // 自家企劃:沒有一次性酬勞,上架後每週分潤
+    const q = projectQuality(S, op, score);
+    g = D.gradeOf(q); money = 0;
+    fans = Math.round((op.fans * 1.2 + pull) * OUTPUT.fans * g.mult * sat);
+    release = { id: 'r' + S.nextId++, type: op.type, title: op.title, artists: ids.slice(), groupId: op.groupId || null, quality: Math.round(q), grade: g.g,
+      week: S.week, weeksLeft: 8, budget: op.budget, w: op.w, total: { money: 0, fans }, wins: 0, best: 0, boost: 0 };
+    S.releases.push(release);
+  }
+  if (op.type === 'musicshow') { const r = S.releases.find(x => x.id === op.releaseId); if (r) r.boost = (r.boost || 0) + ({ S: 15, A: 10, B: 10, C: 3 })[g.g]; }
+  const grp = op.groupId && groupById(S, op.groupId);
+  if (grp && op.type !== 'musicshow') { grp.fans += Math.round(fans * 0.5); grp.albums = (grp.albums || 0) + 1; fans = Math.round(fans * 0.5); }
   S.money += money;
   ids.forEach(id => {
     const st = starById(S, id), i = op.slots.findIndex(s => s.who === id);
@@ -1000,7 +1036,9 @@ function finishOp(S, op, R) {
   if (g.g === 'S') (S.stats.goodType = S.stats.goodType || {})[op.type] = 1;
   if (g.g === 'S') S.stats.S++;
   if ('SABC'.indexOf(g.g) < 'SABC'.indexOf(S.stats.best)) S.stats.best = g.g;
-  R.items.push({ op: op.id, grade: g.g, ids, big: true, text: `${m.icon} ${op.title}(${ids.map(id => nameOf(S, id)).join('、')})評價 ${g.g}${contest}!$${fmt(money)}、粉絲 +${fmt(fans)}${isHot(S, op) ? ' 🔥' : ''}` });
+  R.items.push({ op: op.id, grade: g.g, ids, big: true, text: release
+    ? `${m.icon} ${op.title}(${grp ? grp.name : ids.map(id => nameOf(S, id)).join('、')})上架!品質 ${g.g},粉絲 +${fmt(fans)}(接下來 8 週有播放分潤)`
+    : `${m.icon} ${op.title}(${ids.map(id => nameOf(S, id)).join('、')})評價 ${g.g}${contest}!$${fmt(money)}、粉絲 +${fmt(fans)}${isHot(S, op) ? ' 🔥' : ''}` });
   R.grades.push(g.g);
   S.ops.splice(S.ops.indexOf(op), 1);
   if (op.type === 'dome') {
@@ -1101,7 +1139,7 @@ export const trainingStaff=(S,k)=>(1+Math.max(0,...S.staff.filter(st=>st.role===
 export function canHire(S,role) {
  if(!D.STAFF_ROLES[role])return '找不到職業';
  if(S.staff.length>=1+S.lv)return '員工名額滿了';
- const floor={chef:'cafe',scout:'scout',stylist:'style'}[role];
+ const floor={chef:'cafe',scout:'scout',stylist:'style',producer:'production',editor:'sns'}[role];
  if(floor&&!roomLv(S,floor))return '要先蓋'+D.FLOORS[floor].name;
  if(S.money<600+300*S.staff.length)return '錢不夠';return null;
 }
@@ -1144,4 +1182,251 @@ export function debut(S,id) {
  if(S.money<1000)return '出道舞台要 $1,000';S.money-=1000;st.trainee=false;st.debutWeek=S.week;st.fans+=500;st.mood=clamp(st.mood+20,0,100);
  const text=say(S,st,L.DEBUT,{},'good');S.report?.items.push({id,text:`🎉 ${st.name}出道!${text}`,big:true});
  if(!S.trophies.some(t=>t.id==='first_debut'))S.trophies.push({id:'first_debut',name:'第一位出道',icon:'🎉',week:S.week,ng:S.ng});return null;
+}
+
+/* ============================================================
+   第 3 階段:自家製作部、SNS 部門、團體、音樂排行、頒獎典禮
+   自家企劃直接沿用「機會」系統(op.own / op.project):選人、搶角色、行程、演出分數、
+   播放動畫全部共用;差別只在不會被別家公司接走、沒有一次性酬勞,完成後變成上架作品每週分潤。
+   ============================================================ */
+export const groupById = (S, id) => (S.groups || []).find(g => g.id === id);
+export const groupOf = (S, starId) => (S.groups || []).find(g => g.members.includes(starId));
+const staffLv = (S, role) => Math.max(0, ...S.staff.filter(st => st.role === role).map(st => st.lv));
+
+/** 默契:成員兩兩關係平均(−100→0、+100→70)+ 一起完成的團體作品 × 5(最多 30) */
+export function teamwork(S, g) {
+  const m = g.members.filter(id => starById(S, id) && !starById(S, id).gone);
+  let sum = 0, n = 0;
+  for (let i = 0; i < m.length; i++) for (let j = i + 1; j < m.length; j++) { sum += rel(S, m[i], m[j]); n++; }
+  const avg = n ? sum / n : 0;
+  return Math.round(clamp((avg + 100) / 200 * 70 + Math.min(30, (g.albums || 0) * 5), 0, 100));
+}
+
+// ---------- 製作部 ----------
+export const projectSlots = S => roomLv(S, 'production');
+export const projectsRunning = S => S.ops.filter(o => o.project).length;
+export function canStartProject(S, type, budget = 'small', groupId = null) {
+  const m = MEDIA[type], b = D.BUDGETS[budget];
+  if (!m?.project || !b) return '沒有這種企劃';
+  if (!roomLv(S, 'production')) return '要先蓋 🎛 製作部';
+  if (projectsRunning(S) >= projectSlots(S)) return `製作部 Lv${roomLv(S, 'production')} 同時只能做 ${projectSlots(S)} 個企劃`;
+  for (const f of m.needs) if (!roomLv(S, f)) return `要先蓋${D.FLOORS[f].icon}${D.FLOORS[f].name}`;
+  if (type === 'group_album') {
+    const g = groupById(S, groupId);
+    if (!g) return '要先成立團體';
+    if (g.members.filter(id => !starById(S, id)?.gone).length < 3) return '團員不夠 3 人';
+  }
+  if (S.money < b.cost) return `預算要 $${fmt(b.cost)}`;
+  return null;
+}
+export function startProject(S, type, budget = 'small', groupId = null) {
+  const why = canStartProject(S, type, budget, groupId); if (why) return why;
+  const b = D.BUDGETS[budget]; S.money -= b.cost;
+  const op = makeOp(S, type, { own: true, project: true, budget });
+  op.pay = 0; op.fans = Math.round(MEDIA[type].fans * fansScale(S));
+  if (type === 'group_album') {
+    const g = groupById(S, groupId), members = g.members.filter(id => !starById(S, id).gone);
+    op.groupId = g.id; op.only = members.slice(); op.w = { ...D.CONCEPTS[g.concept].w };
+    op.slots = members.map((_, i) => ({ role: i ? '成員' : 'C 位', who: null }));
+    op.title = `${g.name} 第 ${(g.albums || 0) + 1} 張專輯${op.title}`;
+  }
+  S.ops.push(op);
+  computeBids(S, op);
+  feed(S, null, `🎛 製作部開始新企劃:${MEDIA[type].icon}${op.title}(${b.name}預算)`, 'good');
+  return null;
+}
+/** 取消還沒開工的企劃:退一半預算 */
+export function cancelProject(S, opId) {
+  const op = opById(S, opId);
+  if (!op?.project) return '找不到企劃';
+  if (op.status !== 'open') return '已經開工了,不能取消';
+  for (const s of op.slots) if (s.who) { const st = starById(S, s.who); st.jobs = st.jobs.filter(id => id !== op.id); st.sched = st.sched.map(v => v === 'job:' + op.id ? 'train:' + bestSkill(st) : v); }
+  S.ops.splice(S.ops.indexOf(op), 1);
+  S.money += Math.round(D.BUDGETS[op.budget].cost / 2);
+  feed(S, null, `🎛 取消了企劃《${op.title.replace(/[《》「」]/g, '')}》,退回一半預算。`, 'sys');
+  return null;
+}
+export function projectQuality(S, op, score) {
+  return score + D.BUDGETS[op.budget || 'small'].bonus + roomLv(S, 'production') * 2 + [0, 5, 8, 12][staffLv(S, 'producer')];
+}
+/** 團體企劃 / 音樂節目:把其他團員(或原唱)自動排進還空著的位置 */
+function fillGroupSlots(S, op) {
+  for (const id of op.only || []) {
+    if (op.slots.some(s => s.who === id)) continue;
+    const slot = op.slots.find(s => !s.who), st = starById(S, id);
+    if (!slot || !st || st.gone || !isFree(st, op)) continue;
+    slot.who = id; st.jobs.push(op.id); scheduleJob(st, op);
+  }
+}
+
+// ---------- 團體 ----------
+export function randomGroupName(S) {
+  const used = new Set((S.groups || []).map(g => g.name));
+  for (let k = 0; k < 20; k++) { const n = pick(S, D.GROUP_PREFIX) + pick(S, D.GROUP_SUFFIX); if (!used.has(n)) return n; }
+  return '星光小隊' + ((S.groups || []).length + 1);
+}
+export function canFormGroup(S, ids) {
+  if (!Array.isArray(ids) || ids.length < 3 || ids.length > 5) return '要選 3~5 位';
+  for (const id of ids) {
+    const st = starById(S, id);
+    if (!st || st.gone) return '找不到明星';
+    if (st.trainee) return `${st.name}還是練習生`;
+    if (groupOf(S, id)) return `${st.name}已經在別的團了`;
+  }
+  if (S.money < D.GROUP_COST) return `出道企劃要 $${fmt(D.GROUP_COST)}`;
+  return null;
+}
+export function formGroup(S, name, concept, ids) {
+  const why = canFormGroup(S, ids); if (why) return why;
+  if (!D.CONCEPTS[concept]) return '要選風格';
+  S.money -= D.GROUP_COST;
+  const g = { id: 'g' + S.nextId++, name: String(name || '').trim().slice(0, 10) || randomGroupName(S), concept, members: ids.slice(), fans: 0, albums: 0, formed: S.week, wins: 0 };
+  S.groups.push(g);
+  for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) addRel(S, ids[i], ids[j], 3);
+  feed(S, null, `👯 新團體「${g.name}」${D.CONCEPTS[concept].icon}成立了!`, 'good');
+  for (const id of ids) { const st = starById(S, id); st.mood = clamp(st.mood + 8, 0, 100); }
+  say(S, starById(S, ids[0]), L.GROUP_FORM, {}, 'good');
+  return null;
+}
+export function disbandGroup(S, id) {
+  const g = groupById(S, id); if (!g) return '找不到團體';
+  if (S.ops.some(o => o.groupId === id && o.status === 'run')) return '專輯做到一半,不能解散';
+  for (const op of S.ops.filter(o => o.groupId === id && o.project)) cancelProject(S, op.id);
+  for (const op of S.ops.filter(o => o.groupId === id)) {               // 還沒去的打歌舞台也一起取消
+    for (const sl of op.slots) if (sl.who) { const st = starById(S, sl.who); st.jobs = st.jobs.filter(x => x !== op.id); st.sched = st.sched.map(v => v === 'job:' + op.id ? 'rest' : v); }
+  }
+  S.ops = S.ops.filter(o => o.groupId !== id);
+  for (const mid of g.members) { const st = starById(S, mid); if (st && !st.gone) st.mood = clamp(st.mood - 5, 0, 100); }
+  S.groups = S.groups.filter(x => x !== g);
+  feed(S, null, `👋 「${g.name}」解散了,謝謝大家一路陪伴。`, 'sys');
+  return null;
+}
+
+// ---------- SNS ----------
+export function setSnsStrategy(S, id) {
+  if (!roomLv(S, 'sns')) return '要先蓋 📱 SNS 部門';
+  if (!D.SNS[id]) return '沒有這種策略';
+  S.sns.strategy = id; return null;
+}
+function snsWeek(S, R) {
+  const lv = roomLv(S, 'sns'); if (!lv) return;
+  const mult = [1, 1.4, 1.8][lv - 1] * [1, 1, 1.15, 1.3][staffLv(S, 'editor')];
+  const st0 = S.sns.strategy, stars = debuted(S);
+  let total = 0;
+  const add = (st, n) => { n = Math.round(n * mult); st.fans += n; total += n; };
+  if (st0 === 'vlog') for (const st of stars) { add(st, 40 + st.fans * 0.004); st.mood = clamp(st.mood + 2, 0, 100); }
+  if (st0 === 'challenge') for (const st of stars) add(st, (20 + st.fans * 0.003) * (st.hotThisWeek ? 3 : 1));
+  if (st0 === 'behind') for (const st of stars) { add(st, 20 + st.fans * 0.002); st.trust = clamp(st.trust + 2, 0, 100); st.loyalty = clamp(st.loyalty + 2, 0, 100); }
+  if (st0 === 'qa') { const low = stars.slice().sort((a, b) => a.fans - b.fans).slice(0, 3); for (const st of stars) add(st, low.includes(st) ? 150 + st.fans * 0.01 : 10); }
+  // 這週的貼文(畫面上的社群卡片)
+  const posters = shuffle(S, stars).slice(0, ri(S, 2, 3));
+  for (const st of posters) {
+    const text = fill(pickLine(S, st, L.SNS_POST[st0]), { name: st.name });
+    S.posts.unshift({ week: S.week, id: st.id, text, likes: Math.round(10 + st.fans * (0.03 + rnd(S) * 0.05)) });
+  }
+  S.posts = S.posts.slice(0, 12);
+  for (const st of stars) st.hotThisWeek = false;
+  R.items.push({ text: `📱 SNS(${D.SNS[st0].icon}${D.SNS[st0].name}):粉絲 +${fmt(total)}` });
+}
+
+// ---------- 播放分潤、音樂排行 ----------
+const songFans = (S, r) => r.groupId && groupById(S, r.groupId) ? groupById(S, r.groupId).fans + r.artists.reduce((a, id) => a + (starById(S, id)?.fans || 0), 0) / 2
+  : r.artists.reduce((a, id) => a + (starById(S, id)?.fans || 0), 0);
+function royalties(S, R) {
+  let m = 0, f = 0;
+  for (const r of S.releases) {
+    if (r.weeksLeft <= 0) continue;
+    const age = S.week - r.week, decay = Math.pow(0.85, age), bm = D.BUDGETS[r.budget || 'small'].mult, prod = 1 + [0, 0.1, 0.2, 0.3][staffLv(S, 'producer')];
+    const money = Math.round(r.quality * 30 * decay * bm * prod * OUTPUT.pay), fans = Math.round(r.quality * 25 * decay * bm * OUTPUT.fans);
+    S.money += money; r.total.money += money; r.total.fans += fans;
+    const ids = r.artists.filter(id => starById(S, id) && !starById(S, id).gone);
+    const g = r.groupId && groupById(S, r.groupId);
+    if (g) g.fans += Math.round(fans / 2);
+    for (const id of ids) starById(S, id).fans += Math.round((g ? fans / 2 : fans) / Math.max(1, ids.length));
+    r.weeksLeft--; m += money; f += fans;
+  }
+  if (m || f) R.items.push({ text: `💿 播放分潤:$${fmt(m)}、粉絲 +${fmt(f)}` });
+}
+function chartWeek(S, R) {
+  const prev = Object.fromEntries((S.chart || []).map((c, i) => [c.title, i + 1]));
+  const songs = S.releases.filter(r => D.SONG_TYPES.includes(r.type) && S.week - r.week < 6);
+  const rows = songs.map(r => {
+    const age = S.week - r.week, score = r.quality * (0.8 + 0.4 * Math.pow(0.85, age)) * (1 + Math.log10(1 + songFans(S, r) / 5000) * 0.5) + (r.boost || 0);
+    r.boost = 0; r.best = Math.max(r.best || 0, score);
+    const g = r.groupId && groupById(S, r.groupId);
+    return { title: r.title, artist: g ? g.name : r.artists.map(id => nameOf(S, id)).join('、'), score: Math.round(score), mine: true, releaseId: r.id };
+  });
+  const npcN = Math.max(3, 5 - rows.length);
+  for (let i = 0; i < npcN; i++) rows.push({ title: pick(S, D.NPC_SONGS), artist: pick(S, S.rivals).name, score: Math.round(62 + Math.min(50, S.week * 0.8) + rnd(S) * 25), mine: false });
+  rows.sort((a, b) => b.score - a.score);
+  S.chart = rows.slice(0, 5).map((c, i) => ({ ...c, prev: prev[c.title] || null }));
+  if (!songs.length) { S.chart = []; return; }
+  const top = S.chart[0];
+  if (top.mine) {
+    const r = S.releases.find(x => x.id === top.releaseId); r.wins = (r.wins || 0) + 1;
+    const g = r.groupId && groupById(S, r.groupId); if (g) g.wins = (g.wins || 0) + 1;
+    S.stats.chartWins = (S.stats.chartWins || 0) + 1;
+    const gain = Math.round(1000 * fansScale(S));
+    for (const id of r.artists) { const st = starById(S, id); if (st && !st.gone) { st.mood = clamp(st.mood + 10, 0, 100); st.fans += Math.round(gain / r.artists.length); } }
+    const st = starById(S, r.artists[0]);
+    if (st) say(S, st, L.CHART_WIN, {}, 'good');
+    R.items.push({ text: `🏆 ${top.title}(${top.artist})拿下音樂節目一位!`, big: true });
+    if (!S.trophies.some(t => t.id === 'first_chart' && t.ng === S.ng)) S.trophies.push({ id: 'first_chart', icon: '🎵', name: '第一個一位', ng: S.ng, week: S.week });
+  }
+}
+/** 每週開始:上架 6 週內的歌,自動開一個打歌舞台 */
+function musicShows(S) {
+  for (const r of S.releases.filter(r => D.SONG_TYPES.includes(r.type) && S.week - r.week < 6)) {
+    if (S.ops.some(o => o.releaseId === r.id)) continue;
+    const ids = r.artists.filter(id => starById(S, id) && !starById(S, id).gone && !starById(S, id).trainee);
+    if (!ids.length) continue;
+    const op = makeOp(S, 'musicshow', { own: true, releaseId: r.id, only: ids, groupId: r.groupId || null });
+    op.w = { ...r.w }; op.slots = ids.map((_, i) => ({ role: i ? '成員' : '原唱', who: null }));
+    op.title = `打歌舞台 ${r.title}`;
+    S.ops.push(op);
+  }
+}
+
+// ---------- 年度頒獎典禮(每 24 週) ----------
+function awards(S, R) {
+  const from = S.week - 23, npc = base => ({ label: `${pick(S, S.rivals).name}・${pick(S, D.NPC_NAMES)}`, value: Math.round(base * (0.7 + rnd(S) * 0.45)), mine: false });
+  const list = [];
+  for (const a of D.AWARDS) {
+    let ours = [];
+    if (a.cat === 'rookie') ours = debuted(S).filter(st => (st.debutWeek ?? st.joined) >= from && (st.debutWeek ?? st.joined) > 1).map(st => ({ label: st.name, value: st.fans, id: st.id }));
+    if (a.cat === 'song') ours = S.releases.filter(r => D.SONG_TYPES.includes(r.type) && r.week >= from).map(r => ({ label: r.title, value: Math.round(r.best || 0), ids: r.artists }));
+    if (a.cat === 'group') ours = S.groups.map(g => ({ label: g.name, value: g.fans, ids: g.members }));
+    if (a.cat === 'acting') ours = Object.values((S.actLog || []).filter(x => x.week >= from && starById(S, x.id)).reduce((m, x) => { if (!m[x.id] || m[x.id].value < x.score) m[x.id] = { label: nameOf(S, x.id), value: Math.round(x.score), id: x.id }; return m; }, {}));
+    if (a.cat === 'popular') ours = debuted(S).map(st => ({ label: st.name, value: st.fans, id: st.id }));
+    ours = ours.sort((x, y) => y.value - x.value).slice(0, 2).map(o => ({ ...o, mine: true }));
+    const base = ours[0]?.value || { rookie: 3000, song: 100, group: 20000, acting: 70, popular: 30000 }[a.cat];
+    const nominees = ours.concat([npc(base), npc(base)]);
+    const winner = nominees.slice().sort((x, y) => y.value - x.value)[0];
+    list.push({ ...a, nominees, winner });
+    const winIds = winner.mine ? (winner.id ? [winner.id] : winner.ids || []) : [];
+    for (const id of winIds) {
+      const st = starById(S, id); if (!st || st.gone) continue;
+      st.fans += Math.round(2000 * fansScale(S) / winIds.length); st.mood = clamp(st.mood + 15, 0, 100);
+    }
+    if (winner.mine) {
+      const sp = starById(S, winIds[0]);
+      if (sp) say(S, sp, L.AWARD_WIN, {}, 'good');
+      S.trophies.push({ id: `award_${a.cat}_${S.week}`, icon: a.icon, name: `${a.name}(第 ${S.week} 週)`, ng: S.ng, week: S.week });
+      S.stats.awards = (S.stats.awards || 0) + 1;
+      R.items.push({ text: `🏆 頒獎典禮:${a.icon}${a.name} —— ${winner.label}!`, big: true });
+    } else for (const o of ours) {
+      for (const id of o.id ? [o.id] : o.ids || []) { const st = starById(S, id); if (st && !st.gone) st.mood = clamp(st.mood - 3, 0, 100); }
+      const sp = starById(S, o.id || (o.ids || [])[0]); if (sp) say(S, sp, L.AWARD_LOSE, {}, 'say');
+    }
+  }
+  R.awards = list;
+  feed(S, null, `🏆 第 ${S.week} 週年度頒獎典禮結束!`, 'event');
+}
+
+/** 每週末:播放分潤、SNS、音樂排行、(每 24 週)頒獎 */
+function phase3Week(S, R) {
+  royalties(S, R);
+  snsWeek(S, R);
+  chartWeek(S, R);
+  if (S.week % 24 === 0) awards(S, R);
 }

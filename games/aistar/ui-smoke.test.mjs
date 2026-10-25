@@ -23,7 +23,7 @@ function node(id='') {
 }
 const document={getElementById:id=>{if(!nodes.has(id))nodes.set(id,node(id));return nodes.get(id);},createElement:()=>node(),addEventListener:noop};
 for(const match of readFileSync(new URL('./index.html',import.meta.url),'utf8').matchAll(/id="([^"]+)"/g))document.getElementById(match[1]);
-document.getElementById('tabs').children=['ops','sched','stars','feed','co'].map(tab=>Object.assign(node(),{dataset:{tab}}));
+document.getElementById('tabs').children=['ops','sched','stars','prod','feed','co'].map(tab=>Object.assign(node(),{dataset:{tab}}));
 globalThis.document=document;globalThis.devicePixelRatio=1;globalThis.ImageData=class {constructor(data,w,h){Object.assign(this,{data,width:w,height:h});}};
 const sandbox={E,D,Bmp,toCanvas,makeFrame,FW,FH,ST,makeAccessory,stWall,Camera,bindPointer,document,devicePixelRatio:1,ImageData:globalThis.ImageData,
   console,performance,Date,Math,Map,Set,addEventListener:noop,ResizeObserver:class {observe(){}},requestAnimationFrame:noop,setInterval:noop,setTimeout:()=>1,clearTimeout:noop,
@@ -44,7 +44,7 @@ console.log('假 DOM 煙霧測試：五個分頁、大樓繪製、播放、跳�
 
 S.money=100000;S.lv=4;E.buildFloor(S,'style');E.buildFloor(S,'scout');E.hire(S,'trainer','charm');E.hire(S,'manager');E.hire(S,'chef');
 S.floors.find(f=>f.type==='scout').lv=3;E.scoutWeek(S);const candidate=S.scouted[0];E.signScouted(S,candidate.id);
-for(const b of document.getElementById('tabs').children){document.getElementById('tabs').fire('click',{target:{closest:()=>b}});if(b.dataset.tab==='co'){assert.match(document.getElementById('panel').innerHTML,/星探發掘/);assert.match(document.getElementById('panel').innerHTML,/員工/);}if(b.dataset.tab==='stars')assert.match(document.getElementById('panel').innerHTML,/下次評鑑/);}
+for(const b of document.getElementById('tabs').children){document.getElementById('tabs').fire('click',{target:{closest:()=>b}});if(b.dataset.tab==='co'){assert.match(document.getElementById('panel').innerHTML,/星探發掘/);assert.match(document.getElementById('panel').innerHTML,/員工/);}if(b.dataset.tab==='stars')assert.match(document.getElementById('panel').innerHTML,/下次評鑑/);if(b.dataset.tab==='prod'){assert.match(document.getElementById('panel').innerHTML,/製作部/);assert.match(document.getElementById('panel').innerHTML,/團體/);assert.match(document.getElementById('panel').innerHTML,/SNS/);}}
 AS.tick(1);AS.openTrainer();assert.match(document.getElementById('roomBody').innerHTML,/魅力/);
 S.week=4;candidate.joined=1;const evaluation={week:4,items:[]};E.evaluate(S,evaluation);AS.openEvaluation(evaluation);assert.match(document.getElementById('roomBody').innerHTML,/分/);
 console.log('第二階段假 DOM：星探、員工、明星分區、魅力訓練師及評鑑視窗可 render');

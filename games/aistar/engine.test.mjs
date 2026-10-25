@@ -13,7 +13,7 @@ function opportunity(S,type,id='test') {
 }
 {
   const S=fresh(), st=S.stars[0];S.ops=[];
-  assert.equal(S.v,3);assert.equal(S.floors.length,5);assert.equal(st.sched.length,7);assert.equal(st.sched[6],'rest');
+  assert.equal(S.v,4);assert.equal(S.floors.length,5);assert.equal(st.sched.length,7);assert.equal(st.sched[6],'rest');
   const one=opportunity(S,'short'), two=opportunity(S,'voice','test2');
   assert.equal(E.assign(S,one.id,0,st.id),null);assert.equal(E.assign(S,two.id,0,st.id),null);
   assert.deepEqual(st.jobs,['test','test2']);assert.equal(E.freeDays(st),4);assert.equal(st.sched[6],'rest');
@@ -61,7 +61,7 @@ function opportunity(S,type,id='test') {
   S.ops=[];const op=opportunity(S,'dome');op.weeks=op.left=3;
   for(const [i,st] of S.stars.entries()){st.job=i===0?op.id:null;st.plan='train:talk';delete st.jobs;delete st.sched;delete st.trust;delete st.done;}
   op.slots[0].who=S.stars[0].id;op.status='run';
-  E.migrate(S);assert.equal(S.v,3);assert.equal(S.floors.length,9);assert.equal(op.left,2);assert.equal(op.days,5);
+  E.migrate(S);assert.equal(S.v,4);assert.equal(S.floors.length,9);assert.equal(op.left,2);assert.equal(op.days,5);
   assert.equal(S.stars[0].sched.filter(v=>v==='job:test').length,5);assert.equal(S.floors[1].lv,3);assert.equal(E.roomLv(S,'dance'),3);
   assert.ok(E.ACT_NAMES[S.stars[1].sched[0]]);assert.equal(S.stars[1].sched[6],'rest');assert.equal(S.fac,undefined);
   const same=JSON.stringify(S);E.migrate(S);assert.equal(JSON.stringify(S),same);
@@ -153,3 +153,73 @@ console.log('第二階段：魅力、角色里程碑、練習生限制、評鑑�
  E.beginWeek(S);assert.equal(S.event.id,'leave');assert.equal(S.event.star,st.id);assert.match(S.event.text,/再一起想想/);
  E.chooseEvent(S,0);assert.equal(S.event,null);assert.equal(st.gone,undefined);
 }
+
+// ---------- 第 3 階段:製作部、SNS、團體、排行、頒獎 ----------
+{
+  const S = fresh(901); S.money = 300000; S.lv = 4; S.event = null;
+  // 沒有製作部不能開企劃;蓋了之後可以,同時企劃數 = 製作部 Lv
+  assert.match(E.canStartProject(S, 'own_album', 'small'), /製作部/);
+  for (const t of ['production', 'sns', 'sing', 'talk']) assert.equal(E.buildFloor(S, t), null);
+  const m0 = S.money;
+  assert.equal(E.startProject(S, 'own_album', 'mid'), null); assert.equal(S.money, m0 - 5000);
+  assert.match(E.startProject(S, 'own_show', 'small'), /同時只能做 1/);
+  const op = S.ops.find(o => o.project);
+  // 取消退一半
+  assert.equal(E.cancelProject(S, op.id), null); assert.equal(S.money, m0 - 2500);
+  assert.equal(E.startProject(S, 'own_album', 'small'), null);
+  const p2 = S.ops.find(o => o.project);
+  // 沒人接也不會被別家公司接走
+  S.event = null; E.endWeek(S); assert.ok(S.ops.includes(p2));
+  // 做完 → 上架、之後每週分潤遞減
+  assert.equal(E.assign(S, p2.id, 0, E.debuted(S)[0].id), null);
+  for (let i = 0; i < 4 && !S.releases.length; i++) { S.event = null; E.endWeek(S); }
+  assert.equal(S.releases.length, 1);
+  const r = S.releases[0], money = [];
+  for (let i = 0; i < 3; i++) { S.event = null; const before = r.total.money; E.endWeek(S); money.push(r.total.money - before); }
+  assert.ok(money[0] > money[1] && money[1] > money[2] && money[2] > 0);
+  assert.ok(S.chart.length >= 3 && S.chart.some(c => c.mine));
+  // 打歌舞台:上架 6 週內每週都有一個,只給原唱
+  const ms = S.ops.find(o => o.type === 'musicshow');
+  assert.ok(ms && ms.only.includes(r.artists[0]));
+  const other = E.debuted(S).find(st => !r.artists.includes(st.id));
+  assert.match(E.assign(S, ms.id, 0, other.id), /原唱/);
+  // SNS 四種策略都能用,而且會產生貼文
+  for (const k of Object.keys(D.SNS)) assert.equal(E.setSnsStrategy(S, k), null);
+  S.event = null; const f0 = E.totalFans(S); E.endWeek(S); assert.ok(S.posts.length >= 2);
+  // 員工:製作人 / 小編要先有樓層
+  assert.equal(E.hire(S, 'producer'), null); assert.equal(E.hire(S, 'editor'), null);
+}
+{
+  const S = fresh(902); S.money = 300000; S.lv = 4; S.event = null;
+  for (const t of ['production', 'sing']) E.buildFloor(S, t);
+  const ids = E.debuted(S).slice(0, 3).map(s => s.id);
+  assert.match(E.formGroup(S, '', 'cute', ids.slice(0, 2)), /3~5/);
+  assert.equal(E.formGroup(S, '測試團', 'cute', ids), null);
+  assert.match(E.formGroup(S, '', 'cool', ids), /已經在別的團/);
+  const g = S.groups[0]; assert.equal(g.name, '測試團');
+  const tw = E.teamwork(S, g); assert.ok(tw >= 0 && tw <= 100);
+  assert.equal(E.startProject(S, 'group_album', 'small', g.id), null);
+  const op = S.ops.find(o => o.type === 'group_album');
+  assert.equal(op.slots.length, 3); assert.equal(op.slots[0].role, 'C 位');
+  assert.ok(op.bids.every(b => ids.includes(b.id)) && op.bids.every(b => b.reason === 'center'));
+  // 選 C 位 → 其他團員自動補上;想要 C 位但沒選上的人會反應
+  op.bids = ids.map(id => ({ id, v: 80, reason: 'center', text: 'C 位給我!' }));
+  const before = S.seq;
+  assert.equal(E.assign(S, op.id, 0, ids[0]), null);
+  assert.ok(op.slots.every(s => s.who)); assert.equal(op.status, 'run'); assert.equal(g.center, ids[0]);
+  assert.ok(S.feed.filter(f => f.n > before && f.kind === 'lose').length === 2);
+  for (let i = 0; i < 3; i++) { S.event = null; E.endWeek(S); }
+  assert.ok(g.fans > 0 && g.albums === 1);
+  // 頒獎:第 24 週結算會有 5 個獎
+  while (S.week % 24) { S.event = null; E.endWeek(S); }
+  S.event = null; const R = E.endWeek(S);
+  assert.equal(R.awards.length, 5); assert.ok(R.awards.every(a => a.nominees.length >= 2 && a.winner));
+  assert.equal(E.disbandGroup(S, g.id), null); assert.equal(S.groups.length, 0);
+}
+{
+  // v3 → v4 遷移
+  const S = fresh(903); S.v = 3; delete S.releases; delete S.groups; delete S.chart; delete S.posts; delete S.sns; delete S.actLog;
+  E.migrate(S); assert.equal(S.v, 4); assert.deepEqual(S.groups, []); assert.equal(S.sns.strategy, 'vlog');
+  for (const k of ['mixing_console', 'monitor_wall', 'sns_wall', 'heart_sign', 'red_carpet', 'award_trophy', 'confetti', 'album_cover']) { const it = KIT[k], b = it.make(); assert.equal(b.w, it.w); assert.equal(b.h, it.h); }
+}
+console.log('第三階段:製作部企劃/取消/不被接走/分潤遞減、排行、打歌、SNS、團體/C 位/默契、頒獎、遷移、新素材:通過');

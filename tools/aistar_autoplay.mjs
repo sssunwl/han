@@ -24,6 +24,20 @@ export function botWeek(S, style = 'mix') {
   for(const st of E.team(S).filter(st=>st.trainee&&st.evaluation?.canDebut)) E.debut(S,st.id);
   for(const st of S.scouted.slice().sort((a,b)=>b.pot-a.pot)) if(S.money>1300) E.signScouted(S,st.id);
   E.autoArrangeAll(S);
+  // 第 3 階段:SNS 策略輪流、組團、製作部開企劃
+  if (E.roomLv(S, 'sns')) E.setSnsStrategy(S, ['vlog', 'challenge', 'behind', 'qa'][S.week % 4]);
+  if (!S.groups.length && E.debuted(S).length >= 6 && S.money > D.GROUP_COST + 3000) {
+    const pool = E.debuted(S), pickd = [pool.slice().sort((a, b) => E.friendsOf(S, b).length - E.friendsOf(S, a).length)[0]];
+    while (pickd.length < 4) pickd.push(pool.filter(st => !pickd.includes(st)).sort((a, b) => pickd.reduce((x, p) => x + E.rel(S, p.id, b.id), 0) - pickd.reduce((x, p) => x + E.rel(S, p.id, a.id), 0))[0]);
+    const cnt = {}; for (const st of pickd) { const c = { charm: 'cute', dance: 'cool', sing: 'fresh', talk: 'funny', act: 'funny' }[E.bestSkill(st)]; cnt[c] = (cnt[c] || 0) + 1; }
+    E.formGroup(S, '', Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0], pickd.map(st => st.id));
+  }
+  for (let k = 0; k < 3 && E.projectsRunning(S) < E.projectSlots(S); k++) {
+    const budget = S.money > 20000 ? 'big' : S.money > 8000 ? 'mid' : 'small';
+    if (S.money < D.BUDGETS[budget].cost + 3000) break;
+    const g = S.groups[0], types = (g && !S.ops.some(o => o.groupId === g.id && o.project) ? ['group_album'] : []).concat(['own_album', 'own_drama', 'own_show']);
+    if (!types.some(t => !E.startProject(S, t, budget, g && g.id))) break;
+  }
   const fair = style === 'fair' || (style === 'mix' && S.week % 2 === 0);
   // 2. 機會:巨蛋優先,其他照酬勞大的先
   const ops = S.ops.filter(o => o.status === 'open').sort((a, b) => (b.type === 'dome') - (a.type === 'dome') || b.pay - a.pay);
@@ -71,7 +85,7 @@ export function botWeek(S, style = 'mix') {
     const best = S.audition.map((c, i) => [i, Math.max(...Object.values(c.skills))]).sort((a, b) => b[1] - a[1])[0];
     if (E.sign(S, best[0])) E.skipAudition(S);
   } else if (E.debuted(S).length < D.LEVELS[S.lv].max && S.money > D.auditionCost(E.debuted(S).length) + 3000) E.auditionNow(S);
-  for(const role of ['chef','manager','trainer','scout','stylist']) if(!S.staff.some(st=>st.role===role)) {
+  for(const role of ['chef','manager','trainer','scout','producer','editor','stylist']) if(!S.staff.some(st=>st.role===role)) {
     const counts=Object.fromEntries(D.SKILL_IDS.map(k=>[k,E.team(S).filter(st=>st.spec===k).length]));
     const skill=D.SKILL_IDS.slice().sort((a,b)=>counts[b]-counts[a])[0];
     if(S.money>600+300*S.staff.length+3000) E.hire(S,role,skill);
@@ -79,11 +93,11 @@ export function botWeek(S, style = 'mix') {
   }
   const nx = D.LEVELS[S.lv + 1];
   const reserve = nx ? nx.cost * 0.6 : 0;
-  for(const type of ['style','scout','sing','act','talk','lounge']) if(!E.roomLv(S,type)) {
+  for(const type of ['style','scout','sing','act','talk','production','sns','lounge']) if(!E.roomLv(S,type)) {
     if(S.money>E.floorCost(S,type)+reserve+2000) E.buildFloor(S,type);
     break;
   }
-  for(const type of ['dance','sing','act','talk','style','scout','cafe','dorm','studio']) {
+  for(const type of ['dance','sing','act','talk','style','scout','production','sns','cafe','dorm','studio']) {
     const i=S.floors.findIndex(f=>f.type===type && f.lv<3);
     if(i>=0 && S.money>E.upgradeCost(S,i)+reserve+2000) E.upgradeFloor(S,i);
   }
@@ -113,6 +127,7 @@ export function run(seed, style = 'mix', maxWeeks = 200, log = false) {
   } catch (e) { out.errors.push(e.stack.split('\n').slice(0, 3).join(' | ')); }
   out.goals = S.goalWeek || {};
   out.week = S.week; out.fans = E.totalFans(S); out.left = S.stats.left; out.team = E.team(S).length; out.saveSize = JSON.stringify(S).length;
+  out.projects=S.releases.length;out.groups=S.groups.length;out.chartWins=S.stats.chartWins||0;out.awards=S.stats.awards||0;
   out.careers=E.debuted(S).filter(st=>st.careerStep===3).length;out.debuted=E.debuted(S).length;out.newDebuts=S.stars.filter(st=>st.debutWeek).length;
   out.S = S;
   return out;
@@ -147,8 +162,11 @@ function compare(seeds) {
 }
 
 function migrateTest() {
- for(const v of [1,2]) {
-  const S=E.newGame({seed:222});botWeek(S);S.v=v;delete S.staff;delete S.scouted;
+ for(const v of [1,2,3]) {
+  const S=E.newGame({seed:222});botWeek(S);S.v=v;
+  for(const k of ['releases','groups','chart','posts','sns','actLog']) delete S[k];
+  if(v===3){E.migrate(S);if(S.v!==4||!Array.isArray(S.groups)||!S.sns)throw Error('遷移失敗');for(let w=0;w<10;w++){botWeek(S);if(!E.endWeek(S))throw Error('遷移後結算失敗');}console.log('v3 → v4 遷移後 10 週：0 錯誤');continue;}
+  delete S.staff;delete S.scouted;
   for(const st of [...S.stars,...(S.audition||[])]) {delete st.skills.charm;delete st.career;delete st.careerStep;delete st.pot;delete st.trainee;delete st.stat.byType;delete st.stat.roles;}
   if(v===1) {
    S.fac={gym:2,lounge:1,edit:2};delete S.floors;
@@ -156,9 +174,9 @@ function migrateTest() {
    for(const op of S.ops){delete op.days;delete op.log;op.weeks=3;op.left=3;}
   }
   E.migrate(S);
-  if(S.v!==3||S.fac||S.stars.some(st=>st.sched.length!==7||!st.skills.charm||!st.career))throw Error('遷移失敗');
+  if(S.v!==4||!Array.isArray(S.groups)||S.fac||S.stars.some(st=>st.sched.length!==7||!st.skills.charm||!st.career))throw Error('遷移失敗');
   for(let w=0;w<10;w++){botWeek(S);const r=E.endWeek(S);if(!r||r.timeline.length!==7)throw Error('遷移後結算失敗');}
-  console.log(`v${v} → v3 遷移後 10 週：0 錯誤`);
+  console.log(`v${v} → v4 遷移後 10 週：0 錯誤`);
  }
 }
 
@@ -169,7 +187,7 @@ if (typeof process !== 'undefined' && process.argv[1] && process.argv[1].endsWit
     const N = Number(process.argv[2] || 3), style = process.argv[3] || 'mix', MAX = Number(process.argv[4] || 200);
     for (let i = 0; i < N; i++) {
       const r = run(1000 + i * 7919, style, MAX, process.env.LOG === '1');
-      console.log(`種子 ${r.seed} [${style}] 結局:${r.ending ? r.ending.icon + r.ending.name + ' 第 ' + r.ending.week + ' 週' : '沒到(停在第 ' + r.week + ' 週)'}  目標週:${Object.entries(r.goals).map(([k, v]) => k + '=' + v).join(' ')}  粉絲 ${fmt(r.fans)}  最低存款 $${fmt(r.minMoney)}  離開 ${r.left} 人  剩 ${r.team} 人  大目標 ${r.careers}/${r.debuted}  練習生出道 ${r.newDebuts}  存檔 ${(r.saveSize / 1024).toFixed(1)}KB  錯誤 ${r.errors.length}${r.errors.length ? ' ' + r.errors.slice(0, 3).join(' / ') : ''}`);
+      console.log(`種子 ${r.seed} [${style}] 結局:${r.ending ? r.ending.icon + r.ending.name + ' 第 ' + r.ending.week + ' 週' : '沒到(停在第 ' + r.week + ' 週)'}  目標週:${Object.entries(r.goals).map(([k, v]) => k + '=' + v).join(' ')}  粉絲 ${fmt(r.fans)}  最低存款 $${fmt(r.minMoney)}  離開 ${r.left} 人  剩 ${r.team} 人  大目標 ${r.careers}/${r.debuted}  練習生出道 ${r.newDebuts}  企劃 ${r.projects} 團體 ${r.groups} 一位 ${r.chartWins} 得獎 ${r.awards}  存檔 ${(r.saveSize / 1024).toFixed(1)}KB  錯誤 ${r.errors.length}${r.errors.length ? ' ' + r.errors.slice(0, 3).join(' / ') : ''}`);
     }
   }
 }

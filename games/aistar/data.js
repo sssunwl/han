@@ -29,10 +29,18 @@ export const MEDIA = {
   // 限時新平台(事件帶出來)
   holo:    { name: '全息直播', icon: '🌐', pf: '全息島', w: { talk: 0.5, dance: 0.5 }, days: 1, weeks: 1, pay: 900, fans: 1000, slots: ['主持'], lv: 1, temp: true },
   pet:     { name: 'AI 寵物頻道', icon: '🐾', pf: '毛毛台', w: { talk: 0.5, act: 0.5 }, days: 1, weeks: 1, pay: 800, fans: 900, slots: ['主持'], lv: 1, temp: true },
+  // 自家企劃(製作部做的,不會出現在每週隨機機會裡,也不會被別家公司接走)
+  own_album:   { name:'自家單曲', icon:'💿', pf:'自家製作', w:{sing:0.7,dance:0.3}, days:2, weeks:3, pay:0, fans:700, slots:['主唱'], lv:1, own:true, project:true, needs:['sing'] },
+  own_drama:   { name:'自家短劇', icon:'🎞', pf:'自家製作', w:{act:1}, days:2, weeks:4, pay:0, fans:1100, slots:['主角','配角'], lv:1, own:true, project:true, needs:['studio'], big:true },
+  own_show:    { name:'自家綜藝', icon:'📺', pf:'自家製作', w:{talk:0.7,act:0.3}, days:2, weeks:3, pay:0, fans:800, slots:['主持','來賓'], lv:1, own:true, project:true, needs:['talk'] },
+  group_album: { name:'團體專輯', icon:'💽', pf:'自家製作', w:{sing:0.5,charm:0.5}, days:2, weeks:3, pay:0, fans:1500, slots:['C 位'], lv:1, own:true, project:true, needs:['sing','dance'], big:true },
+  musicshow:   { name:'音樂節目', icon:'🎶', pf:'打歌舞台', w:{sing:0.6,dance:0.4}, days:1, weeks:1, pay:400, fans:900, slots:['原唱'], lv:1, own:true },
   // 最終目標
   dome:    { name: '星光巨蛋演唱會', icon: '🏟', pf: '星光巨蛋', w: { sing: 0.4, dance: 0.4, talk: 0.2 }, days: 5, weeks: 2, pay: 30000, fans: 60000, slots: ['主唱', '主舞', '主持'], sw: [{ sing: 0.8, dance: 0.2 }, { dance: 0.8, sing: 0.2 }, { talk: 0.8, act: 0.2 }], lv: 4, big: true, final: true },
 };
-export const NORMAL_MEDIA = Object.keys(MEDIA).filter(k => !MEDIA[k].temp && !MEDIA[k].final);
+export const NORMAL_MEDIA = Object.keys(MEDIA).filter(k => !MEDIA[k].temp && !MEDIA[k].final && !MEDIA[k].own);
+export const PROJECTS = Object.keys(MEDIA).filter(k => MEDIA[k].project);
+export const SONG_TYPES = ['own_album', 'group_album'];
 /** 主角類的角色(愛面子搶這個,配角就不開心) */
 export const LEAD_ROLES = ['主角', '主唱'];
 
@@ -50,6 +58,10 @@ export const TITLES = {
   concert: ['{t}虛擬演唱會', '元宇宙{t}音樂祭'],
   holo: ['全息{t}派對'], pet: ['AI 寵物陪你看{t}'],
   dome: ['星光巨蛋演唱會'],
+  own_album: ['「{t}之歌」', '「{t}的約定」', '「我的{t}日記」', '「{t}星期天」'],
+  own_drama: ['《{t}偵探事件簿》', '《{t}放學後》', '《{t}奇幻旅程》'],
+  own_show: ['《{t}大挑戰》', '《{t}超級任務》', '《{t}知識王》'],
+  group_album: ['《{t}》'], musicshow: ['打歌舞台'],
 };
 
 export const TOPICS = [
@@ -106,6 +118,9 @@ export const FLOORS = {
   dorm: { name:'宿舍', icon:'🛏', desc:'每日晚上體力 +8/12/16', build:1200, cost:[1000,2500] },
   lounge: { name:'休息室', icon:'🧖', desc:'沒工作的晚上體力 +8/10/12、心情 +3', build:2500, cost:[2000,5000] },
 };
+  // 第 3 階段
+FLOORS.production = { name:'製作部', icon:'🎛', build:3000, cost:[2500,6000], desc:'自己做專輯、短劇、綜藝,做好了每週有播放分潤;可同時做 1/2/3 個企劃' };
+FLOORS.sns = { name:'SNS 部門', icon:'📱', build:2500, cost:[2000,5000], desc:'經營社群:每週選一種貼文策略,大家被動漲粉(效果 ×1/1.4/1.8)' };
 export const salary = st => st.trainee ? 30 : Math.round(60 + st.fans / 160);
 export const auditionCost = n => 800 + n * 250;
 export const OUTFIT_COST = 300, MEET_COST = 500, TALK_COST = 150;
@@ -158,4 +173,41 @@ export const STAFF_ROLES={
  scout:{name:'星探',icon:'🔭',floor:'scout',desc:'發掘新人機率 +25%，Lv3 看得到最強技能'},
  stylist:{name:'造型師',icon:'💄',floor:'style',desc:'魅力練習 ×1.2/1.3/1.4，走秀與廣告酬勞 +5/8/10%'},
 };
+STAFF_ROLES.producer = { name:'製作人', icon:'🎛', floor:'production', desc:'自家企劃品質 +5/8/12、播放分潤 +10/20/30%' };
+STAFF_ROLES.editor = { name:'小編', icon:'📱', floor:'sns', desc:'SNS 效果 ×1/1.15/1.3;Lv3 可以幫忙處理假影片、壞留言' };
+CAREERS.singer.media.push('own_album', 'group_album', 'musicshow');
+CAREERS.dancer.media.push('group_album', 'musicshow');
+CAREERS.actor.media.push('own_drama');
+CAREERS.variety.media.push('own_show');
+
+/* ---------- 第 3 階段:製作、SNS、團體、排行、頒獎 ---------- */
+export const BUDGETS = {
+  small: { name:'小', cost:2000, bonus:0, mult:1 },
+  mid:   { name:'中', cost:5000, bonus:6, mult:1.8 },
+  big:   { name:'大', cost:12000, bonus:12, mult:3 },
+};
+export const SNS = {
+  vlog:      { name:'日常 Vlog', icon:'📹', desc:'每個人都漲一點粉,心情 +2' },
+  challenge: { name:'跟風挑戰', icon:'🔥', desc:'漲粉;這週有接到熱門 🔥 媒體的人 ×3' },
+  behind:    { name:'幕後花絮', icon:'🎬', desc:'漲一點粉;信任、歸屬感 +2' },
+  qa:        { name:'粉絲問答', icon:'💬', desc:'粉絲最少的 3 位大漲,其他人一點點' },
+};
+export const CONCEPTS = {
+  cute:  { name:'可愛', icon:'🍬', w:{ sing:0.5, charm:0.5 } },
+  cool:  { name:'帥氣', icon:'😎', w:{ dance:0.6, charm:0.4 } },
+  fresh: { name:'清新', icon:'🌿', w:{ sing:0.6, talk:0.4 } },
+  funny: { name:'搞笑', icon:'🤪', w:{ talk:0.6, act:0.4 } },
+};
+export const GROUP_PREFIX = ['星星', '彩虹', '泡泡', '閃光', 'Pixel', 'Sunny', 'Cosmo', '棉花', '蘇打', '晴天'];
+export const GROUP_SUFFIX = ['糖', '小隊', 'Pop', 'Wave', 'Five', '少年團', '少女隊', '樂團', 'Stars', '探險隊'];
+export const GROUP_COST = 3000;
+export const NPC_SONGS = ['「月亮汽水」', '「跳跳糖」', '「晴天列車」', '「彩色雨傘」', '「小小宇宙」', '「草莓地圖」', '「藍色鯨魚」', '「夏日冰塊」', '「星空電話」', '「好朋友進行曲」'];
+export const NPC_NAMES = ['小晴', '阿森', '米米', '雷歐', '蘋蘋', '凱凱', '莎莎', '豆豆'];
+export const AWARDS = [
+  { cat:'rookie', icon:'🌱', name:'年度新人' },
+  { cat:'song', icon:'🎵', name:'年度歌曲' },
+  { cat:'group', icon:'👯', name:'年度團體' },
+  { cat:'acting', icon:'🎭', name:'年度演技' },
+  { cat:'popular', icon:'⭐', name:'人氣獎' },
+];
 export const staffSalary = st => 80+40*(st.lv-1);

@@ -437,7 +437,91 @@ function officeProp(kind,w,h) {
  return outline(b);
 }
 /** 清單:預覽頁與匯出工具都讀這個 */
+
+/* ---------- 第 3 階段:製作部、SNS 部門、頒獎典禮 ---------- */
+function mixingConsole() {                              // 混音台:斜斜的檯面 + 一排推桿 + 小燈
+  const b = new Bmp(64, 40);
+  box(b, 1, 10, 62, 28, 12, BLACK, DARK);
+  for (let i = 0; i < 9; i++) {
+    const x = 5 + i * 6;
+    b.vline(x + 1, 13, 7, '#1d1a2a');
+    b.rect(x, 13 + ((i * 5) % 6), 3, 2, i % 3 === 0 ? PINK.hi : STEEL.hi);
+    b.px(x + 1, 11, [GREEN.hi, GOLD.hi, PINK.hi][i % 3]);
+  }
+  b.rect(8, 2, 22, 9, DARK.mid); b.rect(9, 3, 20, 7, '#1d2050');
+  for (let x = 10; x < 28; x += 2) b.vline(x, 9 - ((x * 3) % 6), (x * 3) % 6 + 1, CYAN.hi);   // 音量條
+  b.rect(36, 2, 22, 9, DARK.mid); b.rect(37, 3, 20, 7, '#1d2050');
+  for (let x = 38; x < 56; x++) b.px(x, 6 + Math.round(Math.sin(x / 2) * 2), GREEN.hi);           // 聲波
+  return outline(b);
+}
+function monitorWall() {                                // 四格螢幕牆
+  const b = new Bmp(64, 48);
+  b.rect(1, 1, 62, 40, BLACK.mid); b.hline(1, 1, 62, BLACK.hi);
+  const cols = [['#2b3a78', PINK.hi], ['#1d4a3a', GREEN.hi], ['#4a2b56', GOLD.hi], ['#1d2050', CYAN.hi]];
+  cols.forEach(([bg, fg], i) => {
+    const x = 4 + (i % 2) * 29, y = 4 + Math.floor(i / 2) * 18;
+    b.rect(x, y, 27, 15, bg);
+    star(b, x + 6, y + 7, 3, fg);
+    b.hline(x + 12, y + 5, 11, fg); b.hline(x + 12, y + 9, 8, mix(fg, -0.3));
+  });
+  b.rect(28, 41, 8, 3, BLACK.lo); b.rect(20, 44, 24, 2, BLACK.mid);
+  return outline(b);
+}
+function snsWall() {                                    // 大手機螢幕:愛心 + 留言泡泡
+  const b = new Bmp(64, 48);
+  b.rect(14, 1, 36, 46, BLACK.mid); b.rect(16, 4, 32, 38, '#fff6fb'); b.rect(28, 2, 8, 1, BLACK.lo);
+  b.rect(16, 4, 32, 6, PINK.mid); b.px(19, 6, '#ffffff'); b.hline(22, 7, 10, '#ffffff');
+  b.map(26, 13, ['.11.11.', '1111111', '1111111', '.11111.', '..111..', '...1...'], { 1: PINK.mid });
+  for (let i = 0; i < 3; i++) { b.rect(19, 23 + i * 6, 26 - i * 5, 4, [CYAN.hi, GOLD.hi, GREEN.hi][i]); b.px(19, 26 + i * 6, [CYAN.mid, GOLD.mid, GREEN.mid][i]); }
+  b.rect(30, 43, 4, 1, '#3a3548');
+  for (const [x, y] of [[4, 8], [56, 14], [6, 30], [55, 34]]) b.map(x, y, ['1.1', '111', '.1.'], { 1: PINK.hi });   // 飄出來的小愛心
+  return outline(b);
+}
+function heartSign() {
+  const b = new Bmp(32, 32);
+  b.rect(2, 2, 28, 28, '#2a2140');
+  b.map(6, 7, ['.111...111.', '11111.11111', '11111111111', '11111111111', '.111111111.', '..1111111..', '...11111...', '....111....', '.....1.....'].map(r => r + '         '), { 1: PINK.hi });
+  b.px(9, 9, '#ffffff'); b.px(10, 9, '#ffffff');
+  b.hline(6, 25, 20, mix('#ff5ec4', 0.3));
+  return outline(b);
+}
+function redCarpet() {                                  // 紅地毯(可接續)
+  const b = new Bmp(96, 24), t = tone('#c8323f');
+  b.rect(0, 2, 96, 20, t.mid); b.hline(0, 2, 96, t.hi); b.hline(0, 21, 96, t.dk);
+  b.hline(0, 4, 96, GOLD.mid); b.hline(0, 19, 96, GOLD.mid);
+  for (let x = 4; x < 96; x += 12) b.px(x, 11, t.lo);
+  return b;
+}
+function awardTrophy() {                                // 金色小獎座(星星頂)
+  const b = new Bmp(16, 24);
+  star(b, 7, 4, 4, GOLD.hi, '#ffffff');
+  b.rect(6, 8, 4, 8, GOLD.mid); b.vline(6, 8, 8, GOLD.hi);
+  b.rect(3, 16, 10, 3, GOLD.lo); b.rect(2, 19, 12, 3, DARK.mid); b.hline(4, 20, 8, STEEL.hi);
+  return outline(b);
+}
+function confetti() {
+  const b = new Bmp(16, 16), cs = [PINK.hi, GOLD.hi, CYAN.hi, GREEN.hi, PURPLE.hi];
+  for (let i = 0; i < 12; i++) { const x = (i * 7) % 15, y = (i * 11) % 15; b.rect(x, y, i % 3 ? 2 : 1, i % 3 ? 1 : 2, cs[i % 5]); }
+  return b;
+}
+function albumCover({ color = '#ff5ec4' } = {}) {         // 方形唱片封面
+  const b = new Bmp(24, 24), t = tone(color);
+  b.rect(1, 1, 22, 22, t.mid); b.hline(1, 1, 22, t.hi); b.vline(1, 1, 22, t.hi);
+  b.oval(15, 12, 6, 6, '#2a2140'); b.oval(15, 12, 2, 2, t.hi); b.px(13, 9, '#ffffff');
+  star(b, 6, 6, 3, '#ffffff');
+  b.hline(3, 19, 8, '#ffffffaa');
+  return outline(b);
+}
+
 export const KIT = {
+  mixing_console:{w:64,h:40,tags:['公司大樓','製作部'],make:mixingConsole},
+  monitor_wall:{w:64,h:48,tags:['公司大樓','製作部'],make:monitorWall},
+  sns_wall:{w:64,h:48,tags:['公司大樓','SNS'],make:snsWall},
+  heart_sign:{w:32,h:32,tags:['公司大樓','SNS'],make:heartSign},
+  red_carpet:{w:96,h:24,tags:['頒獎典禮','可接續'],make:redCarpet},
+  award_trophy:{w:16,h:24,tags:['頒獎典禮'],make:awardTrophy},
+  confetti:{w:16,h:16,tags:['頒獎典禮'],make:confetti},
+  album_cover:{w:24,h:24,tags:['製作部'],make:albumCover},
   vanity:{w:32,h:48,tags:['公司大樓'],make:()=>officeProp('vanity',32,48)},
   clothes_rack:{w:64,h:48,tags:['公司大樓'],make:()=>officeProp('clothes_rack',64,48)},
   full_mirror:{w:32,h:64,tags:['公司大樓'],make:()=>officeProp('full_mirror',32,64)},

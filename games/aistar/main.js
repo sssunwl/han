@@ -92,6 +92,8 @@ const ROOMS = {
  talk:{color:'#b9a58c',kind:'wood', furniture:[['podcast_desk',18,32,1],['mic_stand',116,24,2],['podcast_desk',184,32,3]], spots:[[36,73],[66,73],[200,73],[232,73]]},
  cafe:{color:'#d0aa87',kind:'wood', furniture:[['food_counter',8,18,1],['dining_table',94,56,1],['dining_table',181,56,1],['fridge',250,9,2],['dining_table',10,58,3]], spots:[[108,72],[140,72],[195,72],[227,72]]},
  dorm:{color:'#8d8db5',kind:'carpet', furniture:[['bunk_bed',8,30,1],['bed',111,24,1],['bunk_bed',173,30,2],['plant_studio',252,27,3]], spots:[[36,71],[91,75],[143,73],[211,74]]},
+ production:{color:'#6d6a9e',kind:'studio', furniture:[['mixing_console',18,38,1],['monitor_wall',118,4,1],['desk_pc',200,30,2],['speaker',90,24,3]], spots:[[60,80],[150,80],[232,80],[110,82]]},
+ sns:{color:'#d79abd',kind:'carpet', furniture:[['sns_wall',14,4,1],['desk_pc',100,30,1],['heart_sign',188,10,2],['ring_light',240,28,3]], spots:[[64,80],[130,78],[200,80],[252,80]]},
  lounge:{color:'#9eb7b2',kind:'carpet', furniture:[['massage_chair',22,38,1],['sofa_mint',113,36,1],['foot_bath',210,57,2],['massage_chair',250,38,3]], spots:[[38,75],[128,75],[157,75],[225,76]]},
 };
 function layout(initial=false) {
@@ -202,7 +204,7 @@ function draw(now) {
 }
 function drawActor(st,a) {
   const act=a.act, type=act?.startsWith('job:') ? (playback?.R.opTypes?.[act.slice(4)] || E.opById(S,act.slice(4))?.type) : '';
-  let kind=act==='eat'?'eat':act==='sleep'||act==='rest'?'sleep':act==='relax'?'relax':act==='live'||type==='live'||type==='holo'?'live':act==='train:dance'||['short','duo'].includes(type)?'dance':act==='train:sing'?'sing':act==='train:talk'||type==='podcast'?'talk':'act';
+  let kind=act==='eat'?'eat':act==='sleep'||act==='rest'?'sleep':act==='relax'?'relax':act==='live'||type==='live'||type==='holo'?'live':act==='train:dance'||['short','duo'].includes(type)?'dance':act==='train:sing'||['own_album','group_album'].includes(type)?'sing':act==='train:talk'||['podcast','own_show'].includes(type)?'talk':'act';
   if(st.role&&act!=='eat')kind='staff';
   else if(act==='train:charm'||type==='fashion')kind='style';
   if((currentDay()?.sulkOf?.[st.id] ?? !!st.sulk) && !act.startsWith('job:') && !['eat','sleep'].includes(kind))kind='sulk';
@@ -271,7 +273,7 @@ function updateBubbles(now) {
   for (const [id, b] of bubOn) if (now > b.until || !actors.has(id)) { b.el.remove(); bubOn.delete(id); }
   if (bubOn.size < 3) for (const [id, q] of bubQ) {
     if (bubOn.size >= 3) break;
-    if (bubOn.has(id) || !q.length) continue;
+    if (bubOn.has(id) || !q.length || !actors.has(id)) continue;
     const f = q.shift(), st = E.starById(S, id); if (!st) continue;
     const el = document.createElement('div'); el.className = 'bub'; el.style.setProperty('--c', st.glow);
     let text = f.text.replace(new RegExp('^' + st.name + '[::]'), '');
@@ -281,7 +283,7 @@ function updateBubbles(now) {
     bubOn.set(id, { el, until: now + 2600 + text.length * 70 });
   }
   const placed = [], W = $('bubbles').clientWidth;
-  for (const [id, b] of [...bubOn].sort((p, q) => actors.get(q[0]).y - actors.get(p[0]).y)) {
+  for (const [id, b] of [...bubOn].filter(([id]) => actors.has(id)).sort((p, q) => actors.get(q[0]).y - actors.get(p[0]).y)) {
     const a = actors.get(id); if (!a) continue;
     const screen=cam.toScreen(a.x,a.y);
     b.el.style.display = a.hide || screen[1]<0 || screen[1]>cam.h+32 ? 'none' : '';
@@ -316,7 +318,9 @@ function render() {
     + (S.flags.cool ? `<span>📉 ${D.MEDIA[S.flags.cool.type].name}降溫</span>` : '')
     + `<span class="nx">下週 🔥${D.MEDIA[nx.hot].icon}${D.MEDIA[nx.hot].name}</span>`;
   renderGoal();
-  const open = S.ops.filter(o => o.status === 'open' && o.slots.some(s => !s.who)).length;
+  const open = S.ops.filter(o => o.status === 'open' && !o.project && o.slots.some(s => !s.who)).length;
+  const openProj = S.ops.filter(o => o.project && o.status === 'open' && !o.slots[0].who).length;
+  $('bProd').textContent = openProj || ''; $('bProd').style.display = openProj ? '' : 'none';
   $('bOps').textContent = open || ''; $('bOps').style.display = open ? '' : 'none';
   const newFeed = S.feed.filter(f => f.n > feedSeen).length;
   $('bFeed').textContent = newFeed > 99 ? '99+' : newFeed; $('bFeed').style.display = newFeed && tab !== 'feed' ? '' : 'none';
@@ -342,7 +346,7 @@ $('tabs').addEventListener('click', e => {
 });
 function renderTab() {
   const p = $('panel'), y = p.scrollTop;
-  p.innerHTML = tab === 'ops' ? opsHTML() : tab === 'sched' ? scheduleHTML() : tab === 'stars' ? starsHTML() : tab === 'feed' ? feedHTML() : coHTML();
+  p.innerHTML = tab === 'ops' ? opsHTML() : tab === 'sched' ? scheduleHTML() : tab === 'stars' ? starsHTML() : tab === 'prod' ? prodHTML() : tab === 'feed' ? feedHTML() : coHTML();
   if(playback) p.querySelectorAll('button').forEach(b=>b.disabled=true);
   p.scrollTop = y;
   if (tab === 'feed') { feedSeen = S.seq; $('bFeed').style.display = 'none'; }
@@ -358,6 +362,8 @@ function opTags(op) {
   if (op.big && op.type !== 'dome') t.push('<span class="tag big">大場面</span>');
   if (op.self) t.push('<span class="tag self">自己提的企劃</span>');
   if (D.MEDIA[op.type].temp) t.push('<span class="tag hot">🌐 限時平台</span>');
+  if (op.project) t.push('<span class="tag self">🎛 自家企劃</span>');
+  if (op.type === 'musicshow') t.push('<span class="tag hot">🎶 打歌</span>');
   return t.join(' ');
 }
 function opMeta(op) {
@@ -367,7 +373,7 @@ function opMeta(op) {
   return `${m.name} · ${m.pf} · ${op.weeks} 週，每週 ${op.days} 天 · ${sk}`;
 }
 function opsHTML() {
-  const open = S.ops.filter(o => o.status === 'open'), run = S.ops.filter(o => o.status === 'run');
+  const open = S.ops.filter(o => o.status === 'open' && !o.project), run = S.ops.filter(o => o.status === 'run' && !o.project);
   let h = '';
   if (S.event) h += `<div class="card2" style="background:#fff3c4"><b>📣 ${esc(S.event.title)}</b><div class="meta">要先決定怎麼處理,才能進到下一週。</div><button class="sbtn" data-ev="1">看事件</button></div>`;
   h += `<div class="sec">本週機會(沒人接的,下週會被別家公司接走)</div>`;
@@ -375,20 +381,21 @@ function opsHTML() {
   for (const op of open) h += opCard(op);
   if (run.length) {
     h += `<div class="sec" style="margin-top:14px">進行中</div>`;
-    for (const op of run) {
-      const ids = op.slots.map(s => s.who).filter(Boolean);
-      h += `<div class="card2 run"><h3>${D.MEDIA[op.type].icon} ${esc(op.title)}</h3><div class="meta">還有 ${op.left} 週 · ${ids.map(id => esc(E.starById(S, id)?.name || '')).join('、')}</div>
-        <div class="slots">${op.slots.map(s => `<span class="slot">${ptImg(E.starById(S, s.who))}${s.role}${s.who ? '' : ':—'}</span>`).join('')}</div></div>`;
-    }
+    for (const op of run) h += runCard(op);
   }
   return h;
 }
-function opCard(op) {
+function runCard(op) {
+  const ids = op.slots.map(s => s.who).filter(Boolean);
+  return `<div class="card2 run"><h3>${D.MEDIA[op.type].icon} ${esc(op.title)}</h3><div class="meta">還有 ${op.left} 週 · ${ids.map(id => esc(E.starById(S, id)?.name || '')).join('、')}</div>
+    <div class="slots">${op.slots.map(s => `<span class="slot">${ptImg(E.starById(S, s.who))}${s.role}${s.who ? '' : ':—'}</span>`).join('')}</div></div>`;
+}
+function opCard(op, extra = '') {
   const m = D.MEDIA[op.type], empty = op.slots.findIndex(s => !s.who);
   const mult = E.trendMult(S, op);
   let h = `<div class="card2"><h3>${m.icon} ${esc(op.title)} ${opTags(op)}</h3>
     <div class="meta">${opMeta(op)}</div>
-    <div class="rew"><span>💰 $${fmt(op.pay * mult)}</span><span>👥 +${fmt(op.fans * mult)}</span><span class="muted">(B 評價時)</span></div>`;
+    ${op.project ? `<div class="rew"><span>💿 上架後 8 週每週分潤</span><span class="muted">${D.BUDGETS[op.budget].name}預算</span></div>` : `<div class="rew"><span>💰 $${fmt(op.pay * mult)}</span><span>👥 +${fmt(op.fans * mult)}</span><span class="muted">(B 評價時)</span></div>`}`;
   if (op.slots.length > 1) h += `<div class="slots">${op.slots.map(s => `<span class="slot">${ptImg(E.starById(S, s.who))}${s.role}${s.who ? ':' + esc(E.starById(S, s.who).name) : ':—'}</span>`).join('')}</div>`;
   const bids = op.bids.filter(b => { const st = E.starById(S, b.id); return st && !st.gone; });
   if (bids.length) {
@@ -401,8 +408,9 @@ function opCard(op) {
     }
   } else h += `<div class="h4">還沒有人來搶 —— 可以直接指派</div>`;
   for (const y of op.yields) { const st = E.starById(S, y.id); if (st) h += `<div class="yield">💗 ${nameTag(st)}:${esc(y.text)}</div>`; }
-  if (empty >= 0) h += `<div class="acts"><button class="sbtn ghost" data-pick="${op.id}" data-slot="${empty}">👉 指派${op.slots.length > 1 ? op.slots[empty].role : ''}給其他人…</button>${empty > 0 ? '<span class="muted">(不選也可以,下週會自己開工)</span>' : ''}</div>`;
-  return h + '</div>';
+  if (empty >= 0) h += `<div class="acts"><button class="sbtn ghost" data-pick="${op.id}" data-slot="${empty}">👉 指派${op.slots.length > 1 ? op.slots[empty].role : ''}給${op.only ? '' : '其他人'}…</button>${empty > 0 ? '<span class="muted">(不選也可以,下週會自己開工)</span>' : ''}</div>`;
+  if (op.groupId && op.type === 'group_album' && empty === 0) h = h.replace('想搶這個的人', '想站 C 位的人');
+  return h + extra + '</div>';
 }
 
 function bar(v, c) { return `<div class="b"><i style="width:${Math.max(0, Math.min(100, v))}%;background:${c}"></i></div>`; }
@@ -464,11 +472,11 @@ function openInteract(id) {
 let evaluationOpen=false;
 $('roomClose').onclick=()=>{
  $('roomBox').classList.remove('on');
- if(evaluationOpen){evaluationOpen=false;if(S.endingPending)showEnding();else if(S.event)openEvent();}
+ if(evaluationOpen){evaluationOpen=false;postReport('eval');}
 };
 $('roomBody').onclick=e=>{
   const b=e.target.closest('button');if(!b||playback)return;const d=b.dataset;let err;
-  if(d.trainer||d.evalDebut)return;
+  if(d.trainer||d.evalDebut||'wiz' in d)return;
   if(d.roomUp!==undefined)err=E.upgradeFloor(S,+d.roomUp);
   if(d.roomBuild)err=E.buildFloor(S,d.roomBuild);
   if(d.roomStar){$('roomBox').classList.remove('on');openStar(d.roomStar);return;}
@@ -491,7 +499,7 @@ function starCard(st, full = false) {
   const plans = `<button class="miniSched" data-schedule="1" aria-label="查看七天行程">${st.sched.map(v=>`<span>${actIcon(v)}</span>`).join('')}</button>`;
   return `<div class="card2"><div class="star"><img class="pt big" data-open="${st.id}" style="--g:${st.glow}33" src="${portrait(st).url}" alt="">
     <div class="body"><div class="nm" style="color:${st.glow}">${st.emoji} ${esc(st.name)} <span class="tag">${st.traits.map(t => D.TRAITS[t].icon + D.TRAITS[t].name).join(' · ')}</span></div>
-    <div class="meta">${careerTag(st)} · 潛力 ${E.potentialStars(st)}</div><div class="sk">${sk}</div>
+    <div class="meta">${careerTag(st)} · 潛力 ${E.potentialStars(st)}${(g => g ? ` · 👯 ${esc(g.name)}${g.center === st.id ? '・C 位' : ''}` : '')(E.groupOf(S, st.id))}</div><div class="sk">${sk}</div>
     <div class="bars"><div>${moodFace(st.mood)} 心情${bar(st.mood, '#ff8fb1')}</div><div>⚡ 體力${bar(st.energy, st.energy < 25 ? '#ff6f6f' : '#7fdc8a')}</div><div>💗 歸屬${bar(st.loyalty, st.loyalty < 30 ? '#ff6f6f' : '#b98cff')}</div></div>
     <div class="wish">👥 粉絲 ${fmt(st.fans)}${st.wish ? ` · 💭 ${esc(E.wishText(S, st))}(剩 ${st.wish.left} 週)` : ''}${st.lost >= 2 ? ` · 連續 ${st.lost} 次沒選上` : ''}</div>
     ${fr.length || rv.length ? `<div class="rels">${fr.map(o => '🤝' + esc(o.name)).join(' ')} ${rv.map(o => '⚔️' + esc(o.name)).join(' ')}</div>` : ''}
@@ -544,11 +552,18 @@ function coHTML() {
 
 // 分頁裡的按鈕(事件委派)
 $('panel').addEventListener('click', e => {
-  const b = e.target.closest('[data-hire],[data-fire],[data-scout-sign],[data-scout-no],[data-debut],[data-assign],[data-pick],[data-plan],[data-talk],[data-outfit],[data-meet],[data-up],[data-floor],[data-build],[data-day],[data-auto],[data-schedule],[data-sign],[data-skipaud],[data-aud],[data-ng],[data-backup],[data-open],[data-ev]');
+  const b = e.target.closest('[data-proj-new],[data-proj-cancel],[data-grp-new],[data-grp-album],[data-grp-disband],[data-sns],[data-gotobuild],[data-hire],[data-fire],[data-scout-sign],[data-scout-no],[data-debut],[data-assign],[data-pick],[data-plan],[data-talk],[data-outfit],[data-meet],[data-up],[data-floor],[data-build],[data-day],[data-auto],[data-schedule],[data-sign],[data-skipaud],[data-aud],[data-ng],[data-backup],[data-open],[data-ev]');
   if (!b || !S || playback) return;
   const d = b.dataset;
   let err = null;
-  if(d.hire) {if(d.hire==='trainer'){openTrainer();return;} err=E.hire(S,d.hire);}
+  if(d.projNew) {openProjectWizard();return;}
+  else if(d.projCancel) {if(confirm('取消這個企劃?會退一半預算。'))err=E.cancelProject(S,d.projCancel);}
+  else if(d.grpNew) {openGroupWizard();return;}
+  else if(d.grpAlbum) {openProjectWizard('group_album',d.grpAlbum);return;}
+  else if(d.grpDisband) {if(confirm('確定要解散這個團體嗎?'))err=E.disbandGroup(S,d.grpDisband);}
+  else if(d.sns) {err=E.setSnsStrategy(S,d.sns);if(!err)sfx.tap();}
+  else if(d.gotobuild) {openBuild();return;}
+  else if(d.hire) {if(d.hire==='trainer'){openTrainer();return;} err=E.hire(S,d.hire);}
   else if(d.fire) {if(confirm('謝謝你，再見。確定要讓這位員工離職嗎?'))E.fireStaff(S,d.fire);}
   else if(d.scoutSign) err=E.signScouted(S,d.scoutSign);
   else if(d.scoutNo) E.dismissScouted(S,d.scoutNo);
@@ -591,7 +606,7 @@ function openPicker(opId, slot) {
   pickCtx = { opId, slot };
   $('pickTitle').textContent = `${D.MEDIA[op.type].icon} ${op.title}${op.slots.length > 1 ? ' · ' + op.slots[slot].role : ''}`;
   $('pickHow').textContent = '沒來搶的人也可以指派,不過如果他沒興趣,心情會差一點。';
-  const free = E.team(S).filter(st=>E.isFree(st,op)).map(st => ({ st, g: E.estimate(S, st, op, slot), bid: op.bids.some(b => b.id === st.id) }))
+  const free = E.team(S).filter(st=>E.isFree(st,op) && (!op.only || op.only.includes(st.id))).map(st => ({ st, g: E.estimate(S, st, op, slot), bid: op.bids.some(b => b.id === st.id) }))
     .sort((a, b) => 'SABC'.indexOf(a.g.g) - 'SABC'.indexOf(b.g.g));
   $('pickList').innerHTML = free.length ? free.map(({ st, g, bid }) => `<div class="bid">${ptImg(st)}<div class="say" style="--c:${st.glow}">${nameTag(st)} ${bid ? '<span class="tag hot">想要</span>' : ''}
     <div class="why">${D.SKILL_IDS.map(k => D.SKILLS[k].icon + st.skills[k].toFixed(1)).join(' ')} · ⚡${Math.round(st.energy)} · ${moodFace(st.mood)}</div></div>
@@ -694,9 +709,7 @@ $('repMore').addEventListener('click', () => { $('repList').classList.add('all')
 $('repGo').addEventListener('click', () => {
   $('repBox').classList.remove('on'); sfx.tap();
   render();
-  if(S.report?.evaluation?.length) openEvaluation(S.report);
-  else if (S.endingPending) showEnding();
-  else if (S.event) openEvent();
+  postReport('report');
 });
 
 // ---------- 結局 ----------
@@ -856,7 +869,7 @@ requestAnimationFrame(frame);
 
 // 開發用:自動玩家、快轉
 if (import.meta.env?.DEV !== false) window.AS = {   // 開發用(正式版沒有;Node 假 DOM 測試也要用)
-  get S() { return S; }, openEvaluation, openTrainer, actors, cam, view, E, D, play, skip, render, save, boot, showEnding, openEvent, refreshStart, loadBest: () => loadBest(SAVE_KEY),
+  get S() { return S; }, openEvaluation, openTrainer, openAwards, openProjectWizard, openGroupWizard, actors, cam, view, E, D, play, skip, render, save, boot, showEnding, openEvent, refreshStart, loadBest: () => loadBest(SAVE_KEY),
   next() { $('nextBtn').click(); }, closeReport() { $('repGo').click(); },
   // 窗格在背景時 requestAnimationFrame 不跑:手動推進 sec 秒的畫格
   tick(sec = 1) { const t0 = performance.now(); for (let t = 0; t < sec; t += 0.05) { step(0.05); updateBubbles(t0 + t * 1000); } draw(t0 + sec * 1000); updateBubbles(t0 + sec * 1000); },
@@ -900,3 +913,143 @@ function openCompany(section) {
  tab='co';for(const b of $('tabs').children)b.classList.toggle('on',b.dataset.tab===tab);
  render();if(section)$(section)?.scrollIntoView?.({block:'nearest'});
 }
+
+// ============================================================
+//  第 3 階段:🎛 製作分頁(企劃、排行、上架作品、團體、SNS)、頒獎典禮
+// ============================================================
+function prodHTML() {
+  const lv = E.roomLv(S, 'production');
+  let h = `<div class="card2"><b>🎛 製作部</b>`;
+  if (!lv) h += `<div class="meta">先蓋 🎛 製作部,就能自己做單曲、短劇、綜藝和團體專輯。做好了每週都有播放分潤。</div><button class="sbtn" data-gotobuild="1">🏗 去蓋樓層</button></div>`;
+  else h += `<div class="meta">Lv${lv} · 同時可以做 ${E.projectSlots(S)} 個企劃(現在 ${E.projectsRunning(S)} 個)</div><button class="sbtn" data-proj-new="1" ${E.projectsRunning(S) >= E.projectSlots(S) ? 'disabled' : ''}>＋ 新企劃</button></div>`;
+  for (const op of S.ops.filter(o => o.project)) h += op.status === 'open' ? opCard(op, `<div class="acts"><button class="sbtn ghost" data-proj-cancel="${op.id}">取消企劃(退一半預算)</button></div>`) : runCard(op);
+  // 音樂排行
+  if (S.chart?.length) h += `<div class="card2"><b>🎵 本週音樂排行</b><ul class="chart">${S.chart.map((c, i) => `<li class="${c.mine ? 'me' : ''}"><span class="no">${i + 1}</span><span class="ti">${esc(c.title)} <span class="muted">${esc(c.artist)}</span></span><span class="ar">${c.prev ? (c.prev > i + 1 ? '▲' : c.prev < i + 1 ? '▼' : '－') : 'NEW'}</span></li>`).join('')}</ul><div class="meta">上架 6 週內的歌會上榜;上「🎶 打歌舞台」(在機會分頁)可以加分。</div></div>`;
+  // 上架作品
+  const rel = (S.releases || []).filter(r => r.weeksLeft > 0 || S.week - r.week < 12).slice(-6).reverse();
+  if (rel.length) h += `<div class="card2"><b>💿 上架中的作品</b>${rel.map(r => {
+    const g = D.GRADES.find(x => x.g === r.grade), grp = r.groupId && E.groupById(S, r.groupId);
+    return `<div class="floorRow"><div>${D.MEDIA[r.type].icon} ${esc(r.title)} ${gradeChip(g)}<div class="meta">${grp ? esc(grp.name) : r.artists.map(id => esc(E.starById(S, id)?.name || '')).join('、')} · ${r.weeksLeft > 0 ? `分潤還有 ${r.weeksLeft} 週` : '分潤結束'} · 累計 $${fmt(r.total.money)}、粉絲 +${fmt(r.total.fans)}${r.wins ? ` · 🏆 一位 ${r.wins} 次` : ''}</div></div></div>`;
+  }).join('')}</div>`;
+  // 團體
+  h += `<div class="card2"><b>👯 團體</b>`;
+  for (const g of S.groups || []) {
+    const tw = E.teamwork(S, g), c = D.CONCEPTS[g.concept];
+    h += `<div class="card2" style="background:#f7f4ff;box-shadow:none;margin:8px 0 0"><b>${c.icon} ${esc(g.name)}</b> <span class="tag">${c.name}風</span>
+      <div class="members">${g.members.map(id => E.starById(S, id)).filter(st => st && !st.gone).map(st => `<span title="${esc(st.name)}">${ptImg(st)}${g.center === st.id ? '⭐' : ''}</span>`).join('')}</div>
+      <div class="meta">默契 ${tw}<div class="twbar"><i style="width:${tw}%"></i></div>團體粉絲 ${fmt(g.fans)} · 專輯 ${g.albums || 0} 張${g.wins ? ` · 一位 ${g.wins} 次` : ''}${g.center ? ` · 上次 C 位:${esc(E.starById(S, g.center)?.name || '')}` : ''}</div>
+      <div class="acts"><button class="sbtn" data-grp-album="${g.id}">💽 做新專輯</button><button class="sbtn ghost" data-grp-disband="${g.id}">解散</button></div></div>`;
+  }
+  const can = E.debuted(S).filter(st => !E.groupOf(S, st.id)).length;
+  h += `<div class="meta">選 3~5 位已出道的明星組團,團員感情越好默契越高;做專輯時大家會搶 C 位!</div><button class="sbtn" data-grp-new="1" ${can < 3 ? 'disabled' : ''}>＋ 成立新團體($${fmt(D.GROUP_COST)})</button>${can < 3 ? '<span class="muted"> 沒有團的已出道明星要 3 位以上</span>' : ''}</div>`;
+  // SNS
+  h += `<div class="card2"><b>📱 SNS</b>`;
+  if (!E.roomLv(S, 'sns')) h += `<div class="meta">蓋 📱 SNS 部門之後,每週選一種貼文策略,大家會被動漲粉。</div><button class="sbtn" data-gotobuild="1">🏗 去蓋樓層</button>`;
+  else h += `<div class="meta">這週的貼文策略(SNS 部門 Lv${E.roomLv(S, 'sns')}):</div><div class="snsOpts">${Object.entries(D.SNS).map(([k, v]) => `<button data-sns="${k}" class="${S.sns.strategy === k ? 'on' : ''}">${v.icon} ${v.name}<div class="muted">${v.desc}</div></button>`).join('')}</div>`;
+  h += (S.posts || []).slice(0, 6).map(p => { const st = E.starById(S, p.id); return st ? `<div class="post">${ptImg(st)}<div><b style="color:${st.glow}">${esc(st.name)}</b> <span class="muted">第 ${p.week} 週</span><div>${esc(p.text)}</div><div class="lk">♥ ${fmt(p.likes)}</div></div></div>` : ''; }).join('');
+  return h + '</div>';
+}
+
+// ---------- 新企劃精靈(類型 → 預算 → 團體) ----------
+let wiz = null;
+function openProjectWizard(type = null, groupId = null) {
+  wiz = { type, groupId: groupId || (S.groups[0] && S.groups[0].id) || null };
+  wizStep();
+  $('roomBox').classList.add('on');
+}
+function wizStep() {
+  if (!wiz.type) {
+    $('roomTitle').textContent = '🎛 新企劃:要做什麼?';
+    $('roomBody').innerHTML = D.PROJECTS.map(t => {
+      const m = D.MEDIA[t], why = E.canStartProject(S, t, 'small', wiz.groupId);
+      const blocked = why && !/預算/.test(why);
+      return `<button class="choice" data-wiz="type" data-v="${t}" ${blocked ? 'disabled' : ''}>${m.icon} ${m.name}<div class="muted">${m.weeks} 週、每週 ${m.days} 天 · 看${Object.keys(m.w).map(k => D.SKILLS[k].icon).join('')}${t === 'group_album' ? '(依團體風格)' : ''}${blocked ? ' · ' + why : ''}</div></button>`;
+    }).join('');
+    return;
+  }
+  if (wiz.type === 'group_album' && !wiz.groupOk && S.groups.length > 1) {
+    $('roomTitle').textContent = '💽 哪一團要出專輯?';
+    $('roomBody').innerHTML = S.groups.map(g => `<button class="choice" data-wiz="group" data-v="${g.id}">${D.CONCEPTS[g.concept].icon} ${esc(g.name)}<div class="muted">默契 ${E.teamwork(S, g)} · 粉絲 ${fmt(g.fans)}</div></button>`).join('');
+    return;
+  }
+  $('roomTitle').textContent = `${D.MEDIA[wiz.type].icon} ${D.MEDIA[wiz.type].name}:預算多少?`;
+  $('roomBody').innerHTML = `<p class="txt" style="font-size:13px">預算越高,作品品質加越多,上架後的分潤也越多。</p>` + Object.entries(D.BUDGETS).map(([k, b]) => {
+    const why = E.canStartProject(S, wiz.type, k, wiz.groupId);
+    return `<button class="choice" data-wiz="budget" data-v="${k}" ${why ? 'disabled' : ''}>${b.name}預算 $${fmt(b.cost)}<div class="muted">品質 +${b.bonus} · 分潤 ×${b.mult}${why ? ' · ' + why : ''}</div></button>`;
+  }).join('');
+}
+
+// ---------- 成立團體 ----------
+let grpConcept = 'cute', grpSuggest = '';
+function openGroupWizard() {
+  grpConcept = 'cute'; grpSuggest = E.randomGroupName(S);
+  const pool = E.debuted(S).filter(st => !E.groupOf(S, st.id));
+  $('roomTitle').textContent = '👯 成立新團體';
+  $('roomBody').innerHTML = `<div class="meta">選 3~5 位團員(感情好的人放一起,默契比較高)</div><div class="picklist">${pool.map(st => `<label><input type="checkbox" data-member="${st.id}">${ptImg(st)}<span><b style="color:${st.glow}">${esc(st.name)}</b> <span class="muted">${careerTag(st)} · ${D.SKILL_IDS.map(k => D.SKILLS[k].icon + st.skills[k].toFixed(0)).join(' ')}</span></span></label>`).join('')}</div>
+    <input id="grpName" maxlength="10" placeholder="團名(不填就用:${esc(grpSuggest)})">
+    <div class="meta">風格:</div><div class="snsOpts" id="grpConcepts">${Object.entries(D.CONCEPTS).map(([k, c]) => `<button data-wiz="concept" data-v="${k}" class="${k === grpConcept ? 'on' : ''}">${c.icon} ${c.name}<div class="muted">看${Object.keys(c.w).map(x => D.SKILLS[x].icon + D.SKILLS[x].name).join('、')}</div></button>`).join('')}</div>
+    <button class="btn wide" data-wiz="grpok" style="margin-top:10px">成立!($${fmt(D.GROUP_COST)})</button>`;
+  $('roomBox').classList.add('on');
+}
+$('roomBody').addEventListener('click', e => {
+  const b = e.target.closest('[data-wiz]'); if (!b || playback) return;
+  const k = b.dataset.wiz, v = b.dataset.v;
+  if (k === 'type') { wiz.type = v; sfx.tap(); wizStep(); return; }
+  if (k === 'group') { wiz.groupId = v; wiz.groupOk = true; sfx.tap(); wizStep(); return; }
+  if (k === 'budget') {
+    const err = E.startProject(S, wiz.type, v, wiz.groupId);
+    if (err) { toast('⚠ ' + err); sfx.bad(); return; }
+    sfx.pick(); $('roomBox').classList.remove('on'); toast(`🎛 企劃開始了!到「🎛 製作」選人`);
+    tab = 'prod'; for (const x of $('tabs').children) x.classList.toggle('on', x.dataset.tab === tab);
+    save(); render(); return;
+  }
+  if (k === 'concept') { grpConcept = v; for (const x of $('grpConcepts').children) x.classList.toggle('on', x.dataset.v === v); sfx.tap(); return; }
+  if (k === 'grpok') {
+    const ids = [...$('roomBody').querySelectorAll('[data-member]')].filter(x => x.checked).map(x => x.dataset.member);
+    const err = E.formGroup(S, $('grpName').value.trim() || grpSuggest, grpConcept, ids);
+    if (err) { toast('⚠ ' + err); sfx.bad(); return; }
+    fanfare(); $('roomBox').classList.remove('on'); toast('👯 新團體成立了!');
+    save(); render();
+  }
+});
+
+// ---------- 週報之後:評鑑 → 頒獎 → 結局 / 事件 ----------
+function postReport(from) {
+  const R = S.report;
+  if (from === 'report' && R?.evaluation?.length) { openEvaluation(R); return; }
+  if ((from === 'report' || from === 'eval') && R?.awards?.length) { openAwards(R); return; }
+  if (S.endingPending) showEnding();
+  else if (S.event) openEvent();
+}
+
+// ---------- 頒獎典禮 ----------
+let award = null;
+function openAwards(R) {
+  award = { list: R.awards, i: 0, shown: false };
+  $('awardImg').src = spr('red_carpet').toDataURL();
+  renderAward();
+  $('awardBox').classList.add('on');
+}
+function renderAward() {
+  const a = award.list[award.i];
+  $('awardTitle').textContent = `🏆 年度頒獎典禮 · ${a.icon} ${a.name}`;
+  const noms = a.nominees.map(n => {
+    const st = n.id && E.starById(S, n.id), win = award.shown && n.label === a.winner.label && n.value === a.winner.value;   // 存檔讀回來不是同一個物件,用內容比
+    return `<div class="nom ${win ? 'win' : ''}"><span>${st ? ptImg(st) : ''}${n.mine ? '⭐ ' : ''}${esc(n.label)}</span><span class="v">${award.shown ? (win ? '🏆 得獎!' : '') : '入圍'}</span></div>`;
+  }).join('');
+  $('awardBody').innerHTML = `<div class="meta">入圍名單(⭐ 是我們公司的)</div>${noms}${award.shown ? `<p class="txt" style="margin:6px 0 0">${a.winner.mine ? '🎉 恭喜!' : a.nominees.some(n => n.mine) ? '這次沒拿到,下次再加油!' : '這個獎我們沒有入圍,明年加油!'}</p>` : ''}`;
+  $('awardGo').textContent = !award.shown ? '揭曉!' : award.i < award.list.length - 1 ? '下一個獎 ▶' : '典禮結束';
+  $('awardConfetti').innerHTML = '';
+  if (award.shown && a.winner.mine) {
+    $('awardConfetti').innerHTML = Array.from({ length: 30 }, (_, k) => `<span style="left:${(k * 37) % 100}%;top:${-(k % 5) * 6}px;background:${['#ffd25a', '#ff5ec4', '#6fe0ff', '#7fdc8a'][k % 4]};animation-delay:${(k % 7) * 0.08}s"></span>`).join('');
+    fanfare();
+  } else if (award.shown) sfx.lose();
+}
+$('awardGo').addEventListener('click', () => {
+  if (!award) return;
+  if (!award.shown) { award.shown = true; renderAward(); return; }
+  if (award.i < award.list.length - 1) { award.i++; award.shown = false; sfx.tap(); renderAward(); return; }
+  closeAwards();
+});
+$('awardSkip').addEventListener('click', closeAwards);
+function closeAwards() { $('awardBox').classList.remove('on'); award = null; render(); postReport('awards'); }

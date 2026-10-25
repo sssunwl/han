@@ -65,7 +65,8 @@
   .tabs { flex:none; display:flex; background:#1d1748; border-bottom:2px solid #3b3180; }
   .tabs button { flex:1; font:inherit; font-size:13px; padding:8px 2px 7px; background:none; border:none; color:var(--dim2); cursor:pointer; position:relative; border-bottom:3px solid transparent; }
   .tabs button.on { color:#fff; border-bottom-color:var(--pink); font-weight:bold; }
-  .tabs .badge { position:absolute; top:2px; right:calc(50% - 30px); background:var(--pink); color:#fff; border-radius:9px; font-size:10px; padding:0 5px; line-height:16px; }
+  .tabs button i { font-style:normal; display:block; font-size:16px; line-height:1.1; }
+  .tabs .badge { position:absolute; top:2px; right:calc(50% - 24px); background:var(--pink); color:#fff; border-radius:9px; font-size:10px; padding:0 5px; line-height:16px; }
   .panel { flex:1; min-height:0; overflow-y:auto; touch-action:pan-y; padding:10px 10px 14px; -webkit-overflow-scrolling:touch; }
   .next { flex:none; padding:8px calc(10px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left)); background:#1d1748; border-top:2px solid #3b3180; }
   .next .btn { width:100%; font-size:18px; padding:12px; background:linear-gradient(90deg,#ff5ec4,#7a5cff); }
@@ -192,7 +193,31 @@
   .miniSched {display:flex;width:100%;justify-content:space-around;border:0;border-radius:8px;background:#f2ecff;padding:7px 0;margin-top:6px;cursor:pointer;}
   .floorRow {display:flex;gap:7px;align-items:center;border-top:1px solid #e5daee;padding:8px 0;font-size:12px;}
   .floorRow > div {flex:1;}
-  @media(max-width:560px){ .panel {padding:7px 4px;} .tabs button {font-size:12px;} }
+  /* 第 3 階段:製作分頁、排行、貼文、頒獎 */
+  .chart { list-style:none; } .chart li { display:flex; gap:8px; align-items:center; padding:5px 6px; border-radius:8px; font-size:13px; }
+  .chart li.me { background:#ffe9f7; font-weight:bold; } .chart .no { width:18px; text-align:center; font-weight:bold; color:#7a5cff; }
+  .chart .ti { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .chart .ar { font-size:11px; width:28px; text-align:right; }
+  .post { display:flex; gap:8px; background:#f7f4ff; border-radius:12px; padding:7px 8px; margin-top:6px; font-size:13px; line-height:1.45; }
+  .post .pt { width:24px; height:32px; } .post .lk { color:#ff5e8a; font-size:12px; margin-top:2px; }
+  .snsOpts { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:6px; }
+  .snsOpts button { font:inherit; font-size:12px; text-align:left; border:2px solid #e6def5; background:#fff; border-radius:10px; padding:6px 8px; cursor:pointer; }
+  .snsOpts button.on { border-color:var(--pink); background:#ffe9f7; font-weight:bold; }
+  .twbar { height:6px; border-radius:3px; background:#eee8fa; overflow:hidden; margin-top:3px; } .twbar i { display:block; height:100%; background:linear-gradient(90deg,#7fdc8a,#ffd25a); }
+  .members { display:flex; gap:4px; flex-wrap:wrap; margin:4px 0; } .members .pt { width:30px; height:40px; }
+  .picklist label { display:flex; gap:8px; align-items:center; padding:5px 4px; border-bottom:1px dashed #eadcf5; font-size:14px; }
+  .picklist input { width:20px; height:20px; }
+  #grpName { font:inherit; font-size:15px; padding:7px 10px; border-radius:10px; border:2px solid #eadcf5; width:100%; margin:6px 0; }
+  .award { text-align:center !important; }
+  .awardStage { position:relative; background:linear-gradient(180deg,#2a1440,#120e2c); border-radius:14px; height:110px; overflow:hidden; margin-bottom:8px; }
+  .awardStage img { position:absolute; left:0; right:0; bottom:0; width:100%; height:36px; image-rendering:pixelated; }
+  .awardStage::before, .awardStage::after { content:''; position:absolute; top:-10px; width:70px; height:140px; background:linear-gradient(180deg,#fff6c055,transparent); transform:skewX(-14deg); }
+  .awardStage::before { left:22%; } .awardStage::after { right:22%; transform:skewX(14deg); }
+  #awardConfetti span { position:absolute; width:5px; height:8px; animation:fall 1.6s linear forwards; }
+  @keyframes fall { from { transform:translateY(-20px) rotate(0); } to { transform:translateY(130px) rotate(360deg); } }
+  .nom { display:flex; gap:8px; align-items:center; justify-content:space-between; padding:7px 10px; margin:5px 0; border-radius:12px; background:#f5f1ff; font-size:14px; text-align:left; }
+  .nom.win { background:linear-gradient(90deg,#fff3c4,#ffe9f7); font-weight:bold; box-shadow:0 0 0 2px #ffd25a; }
+  .nom .v { font-variant-numeric:tabular-nums; color:#7a6d92; font-size:12px; }
+  @media(max-width:560px){ .panel {padding:7px 4px;} .tabs button {font-size:11px; padding:5px 0 4px;} .tabs button i {font-size:15px;} }
 </style>
 </head>
 <body>
@@ -235,11 +260,12 @@
       </div>
       <div class="right">
         <div class="tabs" id="tabs">
-          <button data-tab="ops" class="on">📋 機會<span class="badge" id="bOps"></span></button>
-          <button data-tab="sched">📅 行程</button>
-          <button data-tab="stars">⭐ 明星</button>
-          <button data-tab="feed">💬 訊息<span class="badge" id="bFeed"></span></button>
-          <button data-tab="co">🏢 公司<span class="badge" id="bCo"></span></button>
+          <button data-tab="ops" class="on"><i>📋</i>機會<span class="badge" id="bOps"></span></button>
+          <button data-tab="sched"><i>📅</i>行程</button>
+          <button data-tab="stars"><i>⭐</i>明星</button>
+          <button data-tab="prod"><i>🎛</i>製作<span class="badge" id="bProd"></span></button>
+          <button data-tab="feed"><i>💬</i>訊息<span class="badge" id="bFeed"></span></button>
+          <button data-tab="co"><i>🏢</i>公司<span class="badge" id="bCo"></span></button>
         </div>
         <div class="panel" id="panel"></div>
         <div class="next"><button class="btn" id="nextBtn">▶ 開始這週</button></div>
@@ -272,6 +298,8 @@
       <div id="codeMsg"></div>
       <div class="btnrow"><button class="btn" id="codeGo">複製</button><button class="btn ghost" id="codeClose">關閉</button></div>
   </div></div>
+  <div class="modal" id="awardBox"><div class="card award"><div class="awardStage"><img id="awardImg" alt=""><div id="awardConfetti"></div></div><h2 id="awardTitle"></h2><div id="awardBody"></div>
+    <div class="btnrow"><button class="btn" id="awardGo">揭曉!</button><button class="btn ghost" id="awardSkip">全部跳過</button></div></div></div>
   <div class="modal" id="roomBox"><div class="card"><h2 id="roomTitle"></h2><div id="roomBody"></div><button class="btn ghost wide" id="roomClose" style="margin-top:10px">關閉</button></div></div>
   <div id="toast"></div>
 
