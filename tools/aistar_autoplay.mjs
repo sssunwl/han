@@ -21,6 +21,8 @@ export function botWeek(S, style = 'mix') {
     if (S.event) E.chooseEvent(S, ev.choices.length - 1);   // 錢不夠被擋 → 選最後一個
   }
   if (style === 'lazy' && S.event && S.event.id === 'leave') E.chooseEvent(S, 2);
+  for(const st of E.team(S).filter(st=>st.trainee&&st.evaluation?.canDebut)) E.debut(S,st.id);
+  for(const st of S.scouted.slice().sort((a,b)=>b.pot-a.pot)) if(S.money>1300) E.signScouted(S,st.id);
   E.autoArrangeAll(S);
   const fair = style === 'fair' || (style === 'mix' && S.week % 2 === 0);
   // 2. 機會:巨蛋優先,其他照酬勞大的先
@@ -29,7 +31,7 @@ export function botWeek(S, style = 'mix') {
   if (dome) {
     // 巨蛋:每個角色找最適合的人,預估平均夠高才報名;不然先練那個角色要的技能
     const pickd = [], est = [];
-    dome.slots.forEach((s, i) => { const c = E.team(S).filter(st => !pickd.includes(st) && st.energy >= 40).sort((a, b) => E.perf(S, b, dome, i, false) - E.perf(S, a, dome, i, false))[0]; pickd.push(c); est.push(c ? E.perf(S, c, dome, i, false, pickd.map(x => x && x.id)) : 0); });
+    dome.slots.forEach((s, i) => { const c = E.debuted(S).filter(st => !pickd.includes(st) && st.energy >= 40).sort((a, b) => E.perf(S, b, dome, i, false) - E.perf(S, a, dome, i, false))[0]; pickd.push(c); est.push(c ? E.perf(S, c, dome, i, false, pickd.map(x => x && x.id)) : 0); });
     const avg = est.reduce((a, b) => a + b, 0) / est.length;
     if (avg >= 72 && pickd.every(c => c && E.isFree(c, dome))) pickd.forEach((c, i) => E.assign(S, dome.id, i, c.id));
     S._domePlan = pickd.map(c => c && c.id);
@@ -65,17 +67,23 @@ export function botWeek(S, style = 'mix') {
   }
   // 5. 花錢:升公司 > 試鏡 > 設施
   if (!E.canUpgrade(S)) E.upgradeCompany(S);
-  if (S.audition) {
+  if (S.audition && !E.team(S).some(st=>st.trainee)) {
     const best = S.audition.map((c, i) => [i, Math.max(...Object.values(c.skills))]).sort((a, b) => b[1] - a[1])[0];
     if (E.sign(S, best[0])) E.skipAudition(S);
-  } else if (E.team(S).length < D.LEVELS[S.lv].max && S.money > D.auditionCost(E.team(S).length) + 3000) E.auditionNow(S);
+  } else if (E.debuted(S).length < D.LEVELS[S.lv].max && S.money > D.auditionCost(E.debuted(S).length) + 3000) E.auditionNow(S);
+  for(const role of ['chef','manager','trainer','scout','stylist']) if(!S.staff.some(st=>st.role===role)) {
+    const counts=Object.fromEntries(D.SKILL_IDS.map(k=>[k,E.team(S).filter(st=>st.spec===k).length]));
+    const skill=D.SKILL_IDS.slice().sort((a,b)=>counts[b]-counts[a])[0];
+    if(S.money>600+300*S.staff.length+3000) E.hire(S,role,skill);
+    break;
+  }
   const nx = D.LEVELS[S.lv + 1];
   const reserve = nx ? nx.cost * 0.6 : 0;
-  for(const type of ['sing','act','talk','lounge']) if(!E.roomLv(S,type)) {
+  for(const type of ['style','scout','sing','act','talk','lounge']) if(!E.roomLv(S,type)) {
     if(S.money>E.floorCost(S,type)+reserve+2000) E.buildFloor(S,type);
     break;
   }
-  for(const type of ['dance','sing','act','talk','cafe','dorm','studio']) {
+  for(const type of ['dance','sing','act','talk','style','scout','cafe','dorm','studio']) {
     const i=S.floors.findIndex(f=>f.type===type && f.lv<3);
     if(i>=0 && S.money>E.upgradeCost(S,i)+reserve+2000) E.upgradeFloor(S,i);
   }
@@ -105,6 +113,7 @@ export function run(seed, style = 'mix', maxWeeks = 200, log = false) {
   } catch (e) { out.errors.push(e.stack.split('\n').slice(0, 3).join(' | ')); }
   out.goals = S.goalWeek || {};
   out.week = S.week; out.fans = E.totalFans(S); out.left = S.stats.left; out.team = E.team(S).length; out.saveSize = JSON.stringify(S).length;
+  out.careers=E.debuted(S).filter(st=>st.careerStep===3).length;out.debuted=E.debuted(S).length;out.newDebuts=S.stars.filter(st=>st.debutWeek).length;
   out.S = S;
   return out;
 }
@@ -113,7 +122,7 @@ function compare(seeds) {
   for (const seed of seeds) {
     const S = E.newGame({ seed });
     console.log(`\n==================== 種子 ${seed} ====================`);
-    for (const st of S.stars) console.log(`${st.emoji} ${st.name}  性格:${st.traits.map(t => D.TRAITS[t].icon + D.TRAITS[t].name).join(' + ')}  專長:${D.SKILLS[st.spec].name}  喜歡:${D.TOPICS.find(t => t.id === st.topic).name}  夢想:${D.MEDIA[st.dream].name}  口頭禪「${st.catch}」  配件:${st.acc}`);
+    for (const st of S.stars) console.log(`${st.emoji} ${st.name}  性格:${st.traits.map(t => D.TRAITS[t].icon + D.TRAITS[t].name).join(' + ')}  專長:${D.SKILLS[st.spec].name}  喜歡:${D.TOPICS.find(t => t.id === st.topic).name}  夢想:${D.MEDIA[st.dream].name}  大目標:${D.CAREERS[st.career].name}  口頭禪「${st.catch}」  配件:${st.acc}`);
     const t = E.team(S), rels = [];
     for (let i = 0; i < t.length; i++) for (let j = i + 1; j < t.length; j++) { const v = E.rel(S, t[i].id, t[j].id); if (v >= 40 || v <= -30) rels.push(`${t[i].name}${v >= 40 ? '🤝' : '⚔️'}${t[j].name}`); }
     console.log('關係:' + rels.join('  '));
@@ -138,14 +147,19 @@ function compare(seeds) {
 }
 
 function migrateTest() {
-  const S=E.newGame({seed:222});
-  botWeek(S); S.v=1; S.fac={gym:2,lounge:1,edit:2}; delete S.floors;
-  for(const st of [...S.stars,...(S.audition||[])]) { st.job=st.jobs[0]||null; st.plan='train:'+E.bestSkill(st); delete st.sched; delete st.jobs; delete st.trust; delete st.done; }
-  for(const op of S.ops) {delete op.days;delete op.log;op.weeks=3;op.left=3;}
+ for(const v of [1,2]) {
+  const S=E.newGame({seed:222});botWeek(S);S.v=v;delete S.staff;delete S.scouted;
+  for(const st of [...S.stars,...(S.audition||[])]) {delete st.skills.charm;delete st.career;delete st.careerStep;delete st.pot;delete st.trainee;delete st.stat.byType;delete st.stat.roles;}
+  if(v===1) {
+   S.fac={gym:2,lounge:1,edit:2};delete S.floors;
+   for(const st of [...S.stars,...(S.audition||[])]) {st.job=st.jobs[0]||null;st.plan='train:'+E.bestSkill(st);delete st.sched;delete st.jobs;delete st.trust;delete st.done;}
+   for(const op of S.ops){delete op.days;delete op.log;op.weeks=3;op.left=3;}
+  }
   E.migrate(S);
-  if(S.v!==2 || S.fac || S.stars.some(st=>st.sched.length!==7||st.job!==undefined)) throw Error('遷移失敗');
-  for(let w=0;w<10;w++) {botWeek(S); const r=E.endWeek(S); if(!r||r.timeline.length!==7) throw Error('遷移後結算失敗');}
-  console.log('v1 → v2 遷移後 10 週：0 錯誤');
+  if(S.v!==3||S.fac||S.stars.some(st=>st.sched.length!==7||!st.skills.charm||!st.career))throw Error('遷移失敗');
+  for(let w=0;w<10;w++){botWeek(S);const r=E.endWeek(S);if(!r||r.timeline.length!==7)throw Error('遷移後結算失敗');}
+  console.log(`v${v} → v3 遷移後 10 週：0 錯誤`);
+ }
 }
 
 if (typeof process !== 'undefined' && process.argv[1] && process.argv[1].endsWith('aistar_autoplay.mjs')) {
@@ -155,7 +169,7 @@ if (typeof process !== 'undefined' && process.argv[1] && process.argv[1].endsWit
     const N = Number(process.argv[2] || 3), style = process.argv[3] || 'mix', MAX = Number(process.argv[4] || 200);
     for (let i = 0; i < N; i++) {
       const r = run(1000 + i * 7919, style, MAX, process.env.LOG === '1');
-      console.log(`種子 ${r.seed} [${style}] 結局:${r.ending ? r.ending.icon + r.ending.name + ' 第 ' + r.ending.week + ' 週' : '沒到(停在第 ' + r.week + ' 週)'}  目標週:${Object.entries(r.goals).map(([k, v]) => k + '=' + v).join(' ')}  粉絲 ${fmt(r.fans)}  最低存款 $${fmt(r.minMoney)}  離開 ${r.left} 人  剩 ${r.team} 人  存檔 ${(r.saveSize / 1024).toFixed(1)}KB  錯誤 ${r.errors.length}${r.errors.length ? ' ' + r.errors.slice(0, 3).join(' / ') : ''}`);
+      console.log(`種子 ${r.seed} [${style}] 結局:${r.ending ? r.ending.icon + r.ending.name + ' 第 ' + r.ending.week + ' 週' : '沒到(停在第 ' + r.week + ' 週)'}  目標週:${Object.entries(r.goals).map(([k, v]) => k + '=' + v).join(' ')}  粉絲 ${fmt(r.fans)}  最低存款 $${fmt(r.minMoney)}  離開 ${r.left} 人  剩 ${r.team} 人  大目標 ${r.careers}/${r.debuted}  練習生出道 ${r.newDebuts}  存檔 ${(r.saveSize / 1024).toFixed(1)}KB  錯誤 ${r.errors.length}${r.errors.length ? ' ' + r.errors.slice(0, 3).join(' / ') : ''}`);
     }
   }
 }

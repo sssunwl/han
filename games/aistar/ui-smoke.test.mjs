@@ -41,3 +41,12 @@ AS.tick(10);AS.skip();assert.equal(document.getElementById('nextBtn').disabled,f
 S.money=100000;S.lv=4;for(const type of ['sing','act','talk','lounge'])E.buildFloor(S,type);AS.render();AS.tick(1);
 assert.equal(AS.cam.worldH,S.floors.length*96+128);
 console.log('假 DOM 煙霧測試：五個分頁、大樓繪製、播放、跳過及擴樓可執行（未做瀏覽器視覺驗收）');
+
+S.money=100000;S.lv=4;E.buildFloor(S,'style');E.buildFloor(S,'scout');E.hire(S,'trainer','charm');E.hire(S,'manager');E.hire(S,'chef');
+S.floors.find(f=>f.type==='scout').lv=3;E.scoutWeek(S);const candidate=S.scouted[0];E.signScouted(S,candidate.id);
+for(const b of document.getElementById('tabs').children){document.getElementById('tabs').fire('click',{target:{closest:()=>b}});if(b.dataset.tab==='co'){assert.match(document.getElementById('panel').innerHTML,/星探發掘/);assert.match(document.getElementById('panel').innerHTML,/員工/);}if(b.dataset.tab==='stars')assert.match(document.getElementById('panel').innerHTML,/下次評鑑/);}
+AS.tick(1);AS.openTrainer();assert.match(document.getElementById('roomBody').innerHTML,/魅力/);
+S.week=4;candidate.joined=1;const evaluation={week:4,items:[]};E.evaluate(S,evaluation);AS.openEvaluation(evaluation);assert.match(document.getElementById('roomBody').innerHTML,/分/);
+console.log('第二階段假 DOM：星探、員工、明星分區、魅力訓練師及評鑑視窗可 render');
+
+botWeek(S);const workersReport=E.endWeek(S);AS.play(workersReport);AS.tick(27);AS.skip();console.log('員工白天、中午、下班與隔日移動：假 DOM 執行通過');

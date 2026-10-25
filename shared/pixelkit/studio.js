@@ -419,8 +419,34 @@ function micHand() {const b=new Bmp(8,10);b.rect(2,1,5,4,STEEL.mid);b.rect(3,5,2
 function notes() {const b=new Bmp(8,8);b.vline(4,0,6,CYAN.mid);b.hline(4,0,4,CYAN.mid);b.rect(1,5,4,3,PINK.mid);return outline(b);}
 function roofSign() {const b=new Bmp(96,24);box(b,1,1,94,20,3,PURPLE);b.rect(4,5,88,12,DARK.lo);b.rect(13,21,4,3,STEEL.mid);b.rect(79,21,4,3,STEEL.mid);return outline(b);}
 
+// 公司第二階段家具，沿用 Bmp 與既有木框、金屬配色。
+function officeProp(kind,w,h) {
+ const b=new Bmp(w,h);
+ if(kind==='vanity'||kind==='full_mirror') {
+  box(b,3,2,w-6,h-18,3,WOOD);b.rect(6,5,w-12,h-25,CYAN.mid);b.hline(8,7,w-17,WHITE.hi);
+  if(kind==='vanity') {box(b,1,h-19,w-2,8,3,WOOD);for(let y=5;y<h-20;y+=7){b.rect(3,y,2,2,GOLD.hi);b.rect(w-5,y,2,2,GOLD.hi);}}
+  b.rect(5,h-11,3,10,WOOD.lo);b.rect(w-8,h-11,3,10,WOOD.lo);
+ } else if(kind==='clothes_rack') {
+  b.rect(3,4,w-6,3,STEEL.mid);b.rect(4,4,3,h-5,STEEL.lo);b.rect(w-7,4,3,h-5,STEEL.lo);
+  for(let i=0;i<4;i++){const x=10+i*12;b.rect(x+3,7,2,5,STEEL.mid);b.rect(x,12,11,23,[PINK.mid,CYAN.mid,PURPLE.mid,GREEN.mid][i]);b.rect(x-2,13,15,6,[PINK.lo,CYAN.lo,PURPLE.lo,GREEN.lo][i]);}
+ } else if(kind==='runway') {box(b,1,4,w-2,h-6,5,PURPLE);for(let x=5;x<w-3;x+=9)b.rect(x,h-6,3,2,GOLD.hi);}
+ else if(kind==='desk_pc') {box(b,2,28,w-4,12,4,WOOD);box(b,18,2,28,23,3,DARK);b.rect(21,5,22,14,CYAN.mid);b.rect(29,25,7,3,STEEL.mid);b.rect(18,30,29,4,STEEL.lo);b.rect(6,40,4,8,WOOD.lo);b.rect(w-10,40,4,8,WOOD.lo);}
+ else if(kind==='phone_desk') {box(b,2,19,w-4,11,3,WOOD);box(b,7,10,18,9,2,DARK);b.rect(5,7,22,5,BLACK.mid);for(let y=13;y<18;y+=2)for(let x=13;x<21;x+=3)b.px(x,y,WHITE.hi);}
+ else if(kind==='visitor_sign') {box(b,1,1,14,13,2,PURPLE);b.rect(6,3,5,2,WHITE.hi);b.rect(9,5,2,3,WHITE.hi);b.rect(6,7,4,2,WHITE.hi);b.px(7,11,WHITE.hi);}
+ else {box(b,1,1,w-2,h-2,3,WOOD);b.rect(4,4,w-8,h-8,kind==='score_board'?DARK.lo:WHITE.mid);for(let i=0;i<6;i++){const x=8+i%3*(w/3-2),y=8+Math.floor(i/3)*15;b.rect(x,y,12,10,[CYAN.mid,PINK.mid,GREEN.mid][i%3]);b.px(x+5,y,GOLD.mid);}}
+ return outline(b);
+}
 /** 清單:預覽頁與匯出工具都讀這個 */
 export const KIT = {
+  vanity:{w:32,h:48,tags:['公司大樓'],make:()=>officeProp('vanity',32,48)},
+  clothes_rack:{w:64,h:48,tags:['公司大樓'],make:()=>officeProp('clothes_rack',64,48)},
+  full_mirror:{w:32,h:64,tags:['公司大樓'],make:()=>officeProp('full_mirror',32,64)},
+  runway:{w:96,h:24,tags:['公司大樓'],make:()=>officeProp('runway',96,24)},
+  desk_pc:{w:64,h:48,tags:['公司大樓'],make:()=>officeProp('desk_pc',64,48)},
+  phone_desk:{w:32,h:32,tags:['公司大樓'],make:()=>officeProp('phone_desk',32,32)},
+  whiteboard_map:{w:64,h:40,tags:['公司大樓'],make:()=>officeProp('whiteboard_map',64,40)},
+  score_board:{w:96,h:48,tags:['公司大樓'],make:()=>officeProp('score_board',96,48)},
+  visitor_sign:{w:16,h:16,tags:['公司大樓'],make:()=>officeProp('visitor_sign',16,16)},
   bunk_bed: { w:64, h:48, tags:['公司大樓'], make:() => bed({bunk:true}) },
   bed: { w:32, h:48, tags:['公司大樓'], make:bed },
   dining_table: { w:64, h:32, tags:['公司大樓'], make:diningTable },

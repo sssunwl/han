@@ -13,7 +13,7 @@ function opportunity(S,type,id='test') {
 }
 {
   const S=fresh(), st=S.stars[0];S.ops=[];
-  assert.equal(S.v,2);assert.equal(S.floors.length,5);assert.equal(st.sched.length,7);assert.equal(st.sched[6],'rest');
+  assert.equal(S.v,3);assert.equal(S.floors.length,5);assert.equal(st.sched.length,7);assert.equal(st.sched[6],'rest');
   const one=opportunity(S,'short'), two=opportunity(S,'voice','test2');
   assert.equal(E.assign(S,one.id,0,st.id),null);assert.equal(E.assign(S,two.id,0,st.id),null);
   assert.deepEqual(st.jobs,['test','test2']);assert.equal(E.freeDays(st),4);assert.equal(st.sched[6],'rest');
@@ -61,9 +61,9 @@ function opportunity(S,type,id='test') {
   S.ops=[];const op=opportunity(S,'dome');op.weeks=op.left=3;
   for(const [i,st] of S.stars.entries()){st.job=i===0?op.id:null;st.plan='train:talk';delete st.jobs;delete st.sched;delete st.trust;delete st.done;}
   op.slots[0].who=S.stars[0].id;op.status='run';
-  E.migrate(S);assert.equal(S.v,2);assert.equal(S.floors.length,9);assert.equal(op.left,2);assert.equal(op.days,5);
+  E.migrate(S);assert.equal(S.v,3);assert.equal(S.floors.length,9);assert.equal(op.left,2);assert.equal(op.days,5);
   assert.equal(S.stars[0].sched.filter(v=>v==='job:test').length,5);assert.equal(S.floors[1].lv,3);assert.equal(E.roomLv(S,'dance'),3);
-  assert.equal(S.stars[1].sched[0],'train:talk');assert.equal(S.stars[1].sched[6],'rest');assert.equal(S.fac,undefined);
+  assert.ok(E.ACT_NAMES[S.stars[1].sched[0]]);assert.equal(S.stars[1].sched[6],'rest');assert.equal(S.fac,undefined);
   const same=JSON.stringify(S);E.migrate(S);assert.equal(JSON.stringify(S),same);
   for(let i=0;i<10;i++){botWeek(S);assert.ok(settle(S));}
 }
@@ -94,3 +94,62 @@ function opportunity(S,type,id='test') {
   assert.notDeepEqual(KIT.elevator_door.make({open:0}).d,KIT.elevator_door.make({open:1}).d);
 }
 console.log('引擎規則、互動、樓層、多週工作、遷移及固定種子：通過');
+
+{
+ const S=fresh(911);assert.equal(D.SKILL_IDS.length,5);assert.ok(S.stars.every(st=>st.skills.charm>=1&&st.career&&!st.trainee&&st.pot===1));
+ S.money=100000;S.lv=4;E.buildFloor(S,'style');E.buildFloor(S,'scout');
+ assert.equal(E.floorFor(S,'train:charm'),S.floors.findIndex(f=>f.type==='style'));
+ const fashion=opportunity(S,'fashion');assert.equal(E.floorFor(S,'job:'+fashion.id),E.floorFor(S,'train:charm'));
+ E.hire(S,'trainer','charm');E.hire(S,'stylist');assert.equal(E.trainingStaff(S,'charm'),1.15*1.2);
+ E.hire(S,'manager');assert.equal(E.staffEffect(S,'manager',[.1,.15,.2]),.1);
+ E.hire(S,'chef');assert.equal(E.staffEffect(S,'chef',[4,6,8]),4);
+ assert.equal(D.staffSalary(S.staff[0]),80);assert.ok(S.staff.every(st=>st.look.cloth==='#4a5a8a'));
+ S.ops=[];const rent=D.LEVELS[S.lv].rent,salary=S.stars.reduce((a,st)=>a+D.salary(st),0),staffSalary=S.staff.reduce((a,st)=>a+D.staffSalary(st),0),money=S.money;
+ const R=settle(S);assert.equal(S.money,money-rent-salary-staffSalary);assert.ok(R.items.some(it=>it.text.includes('員工薪水')));
+ for(const st of S.staff)st.weeks=7;settle(S);assert.ok(S.staff.every(st=>st.lv===2));
+ const id=S.staff[0].id;E.fireStaff(S,id);assert.ok(!S.staff.some(st=>st.id===id));
+}
+{
+ const S=fresh(900);S.money=100000;S.lv=4;S.ops=[];E.buildFloor(S,'scout');const fi=S.floors.findIndex(f=>f.type==='scout');S.floors[fi].lv=3;
+ E.scoutWeek(S);assert.ok(S.scouted.length);const candidate=S.scouted[0];assert.ok(candidate.pot>=.95&&candidate.pot<=1.4);
+ assert.equal(E.signScouted(S,candidate.id),null);assert.equal(D.salary(candidate),30);assert.equal(E.traineeCapacity(S),4);
+ const op=opportunity(S,'drama');assert.equal(E.isFree(candidate,op),false);assert.ok(E.assign(S,op.id,0,candidate.id));
+ const short=opportunity(S,'short','small');assert.equal(E.isFree(candidate,short),true);assert.equal(E.assign(S,short.id,0,candidate.id),null);
+ candidate.jobs=[];candidate.sched=Array(7).fill('rest');S.ops=[];
+ Object.keys(candidate.skills).forEach(k=>candidate.skills[k]=8);S.week=4;candidate.joined=1;
+ const R={items:[]};E.evaluate(S,R);assert.equal(R.evaluation[0].canDebut,true);assert.ok(['S','A'].includes(R.evaluation[0].grade));
+ S.lv=1;assert.ok(E.debut(S,candidate.id).includes('名額滿了'));S.lv=2;S.money=999;assert.ok(E.debut(S,candidate.id));S.money=1000;
+ assert.equal(E.debut(S,candidate.id),null);assert.equal(candidate.trainee,false);assert.equal(S.money,0);assert.ok(S.trophies.some(t=>t.id==='first_debut'));
+ E.scoutWeek(S);S.week=20;const expired=S.scouted.map(st=>st.id);E.scoutWeek(S);assert.ok(expired.every(id=>!S.scouted.some(st=>st.id===id)));assert.ok(S.feed.some(f=>f.text.includes('被別家公司簽走了')));
+}
+{
+ const S=fresh(),st=S.stars[0],R={items:[]};st.career='singer';st.careerStep=0;st.skills.sing=8;
+ st.stat.roles=[{type:'concert',role:'伴舞',grade:'S',sing:.2},{type:'duo',role:'搭檔',grade:'B',sing:.5}];E.checkCareer(S,st,R);assert.equal(st.careerStep,0);
+ st.stat.roles.push({type:'concert',role:'主唱',grade:'A',sing:.8});E.checkCareer(S,st,R);assert.equal(st.careerStep,3);assert.equal(R.items.length,3);
+ assert.ok(S.feed.some(f=>f.text.includes('歌手')));
+ for(const s of S.stars){s.careerStep=3;}assert.equal(E.computeEnding(S).kind,'dreams');
+ assert.ok(E.computeEnding(S).lines.every(l=>l.text.includes('夢想達成')));
+}
+{
+ for(const k of ['vanity','clothes_rack','full_mirror','runway','desk_pc','phone_desk','whiteboard_map','score_board','visitor_sign']){
+  const item=KIT[k],b=item.make();assert.equal(b.w,item.w);assert.equal(b.h,item.h);assert.ok(b.d.some(v=>v>0));
+ }
+}
+console.log('第二階段：魅力、角色里程碑、練習生限制、評鑑出道、候選過期、員工效果薪水名額及新家具：通過');
+
+{
+ const S=fresh(822);S.ops=[];const op=opportunity(S,'fashion');E.assign(S,op.id,0,S.stars[0].id);
+ const boosted=structuredClone(S);boosted.staff=[{id:'employee',name:'文青',role:'manager',lv:1,weeks:0},{id:'stylist',name:'美晴',role:'stylist',lv:1,weeks:0}];
+ const a=settle(S), b=settle(boosted), pay=R=>Number(R.items.find(it=>it.op==='test'&&it.grade).text.match(/!\$([\d,]+)/)[1].replaceAll(',',''));
+ assert.ok(Math.abs(pay(b)-pay(a)*1.15)<=1);assert.equal(a.grades[0],b.grades[0]);
+ const before=S.stars.length;S.money=100000;S.lv=4;E.buildFloor(S,'scout');S.floors.find(f=>f.type==='scout').lv=3;
+ while(E.team(S).filter(st=>st.trainee).length<E.traineeCapacity(S)){E.scoutWeek(S);for(const st of S.scouted.slice())E.signScouted(S,st.id);}
+ E.scoutWeek(S);assert.ok(E.signScouted(S,S.scouted[0].id).includes('名額滿了'));assert.equal(E.debuted(S).length,before);
+}
+
+{
+ const S=fresh(),st=S.stars[0];st.trainee=true;st.joined=1;for(const k of D.SKILL_IDS)st.skills[k]=1;
+ for(const week of [4,8,12]){S.week=week;E.evaluate(S,{items:[]});}assert.equal(st.evalDoubt,true);
+ E.beginWeek(S);assert.equal(S.event.id,'leave');assert.equal(S.event.star,st.id);assert.match(S.event.text,/再一起想想/);
+ E.chooseEvent(S,0);assert.equal(S.event,null);assert.equal(st.gone,undefined);
+}

@@ -247,3 +247,10 @@ kind:['你今天也辛苦了，記得吃飯喔。','{friend}今天很努力，�
 proud:['你有看到我剛才那個帥氣的動作嗎？','{wish}，我想做好準備再登場。','{rival}今天表現不錯，下次換我閃亮！','有{friend}支持，站上舞台更有信心。'],
 solo:['安靜練習的時候，我最能專心。','{wish}，我有自己的準備方法。','{friend}懂我，坐著不說話也自在。','{rival}很有實力，我尊重他的努力。'],
 };
+
+export const CAREER_STEP={_:['離{career}的夢想又近一步!第 {step} 個里程碑達成!'],comp:['第 {step} 步完成!我要繼續挑戰{career}!'],shy:['我也做到了……離{career}更近了。'],hot:['往{career}的夢想衝啊!'],chill:['慢慢來，我又往{career}前進了~']};
+export const EVAL={S:{_:['我做到了!'],shy:['真的……是 S!'],comp:['努力有成果了!']},A:{_:['再努力一點，就能站上舞台了!'],hot:['下一次挑戰 S!']},B:{_:['我會繼續練習!'],chill:['一步一步來~']},C:{_:['下個月我會更好!'],shy:['我會再試試看的。'],hot:['再加油!明天繼續練!']}};
+export const DEBUT={_:['謝謝大家!我的第一個舞台，要開始了!'],shy:['有大家陪著我，我會勇敢站上舞台。'],comp:['出道了!新的挑戰才剛開始!'],chill:['哇~終於輪到我上台了~']};
+REASON.career={_:['我想成為{career}!'],shy:['我……也想朝{career}的夢想前進。'],hot:['我要成為{career}!選我吧!']};
+WISH.career=['想往{career}的目標前進!'];
+for(const lines of Object.values(CHAT_BOSS)) lines.push('我想成為{career}，今天也有好好練習喔!');

@@ -41,7 +41,7 @@ export const starById = (S, id) => S.stars.find(s => s.id === id);
 export const team = S => S.stars.filter(s => !s.gone);
 export const totalFans = S => team(S).reduce((a, s) => a + s.fans, 0);
 export const freeDays = st => (st.sched || []).filter(v => !v.startsWith('job:')).length;
-export const isFree = (st, op = null) => !st.gone && freeDays(st) - (st.sickDays || []).filter(d=>!st.sched[d].startsWith('job:')).length >= (op?.days || 1) && (!op || !(st.jobs || []).includes(op.id));
+export const isFree = (st, op = null) => !st.gone && (!op || !st.trainee || ['short','live'].includes(op.type)) && freeDays(st) - (st.sickDays || []).filter(d=>!st.sched[d].startsWith('job:')).length >= (op?.days || 1) && (!op || !(st.jobs || []).includes(op.id));
 export const opById = (S, id) => S.ops.find(o => o.id === id);
 const nameOf = (S, id) => (starById(S, id) || {}).name || '';
 const topicName = id => TOPICS.find(t => t.id === id).name;
@@ -109,7 +109,9 @@ function makeStar(S) {
   const spec = pick(S, D.SKILL_IDS);
   skills[spec] = +(skills[spec] + 2.4 + rnd(S) * 1.2).toFixed(2);
   const usedAcc = team(S).map(s => s.acc), usedGlow = team(S).map(s => s.glow);
+  const career = drawCareer(S, {skills});
   return {
+    career, careerStep:0, trainee:false, pot:1,
     id: 's' + S.nextId++, name, look,
     acc: pick(S, ACCESSORIES.filter(a => !usedAcc.includes(a)).concat(usedAcc.length >= ACCESSORIES.length ? ACCESSORIES : [])),
     glow: pick(S, D.GLOWS.filter(g => !usedGlow.includes(g)).concat(usedGlow.length >= D.GLOWS.length ? D.GLOWS : [])),
@@ -118,7 +120,7 @@ function makeStar(S) {
     topic: pick(S, TOPICS).id, dream: pick(S, ['drama', 'concert', 'contest', 'short', 'podcast', 'voice', 'live', 'ad']),
     mood: 65, energy: 90, loyalty: 72, fans: ri(S, 60, 260),
     wish: null, wishIn: ri(S, 2, 5), lost: 0, sulk: 0, motivated: 0, jobs: [], sched: null, trust: 40, done: {},
-    trained: {}, talked: 0, joined: S.week, stat: { ops: 0, S: 0, best: null },
+    trained: {}, talked: 0, joined: S.week, stat: { ops: 0, S: 0, best: null, byType:{}, roles:[] },
   };
 }
 export const bestSkill = st => D.SKILL_IDS.reduce((a, k) => (st.skills[k] > st.skills[a] ? k : a), D.SKILL_IDS[0]);
@@ -126,7 +128,7 @@ export const bestSkill = st => D.SKILL_IDS.reduce((a, k) => (st.skills[k] > st.s
 // ---------- 開新局 ----------
 export function newGame({ seed = (Date.now() % 2147483647) | 0, company = '星光 AI 娛樂', ng = 0, mentor = null, trophies = [] } = {}) {
   const S = {
-    v: 2, seed, rs: seed, week: 1, ng, company, lv: 1, floors: initialFloors(), money: 2500,
+    v: 3, staff:[], scouted:[], seed, rs: seed, week: 1, ng, company, lv: 1, floors: initialFloors(), money: 2500,
     stars: [], rel: {}, everRival: [], ops: [], nextId: 1, feed: [], seq: 0, trend: null, nextTrend: null,
     rivals: D.RIVALS.map(r => ({ ...r, fans: Math.round(r.fans * (1 + 0.6 * ng)), g: r.g * (1 + 0.12 * ng) })),
     goals: [], trophies: trophies.slice(), mentor, teamups: [], temp: [], flags: {}, event: null,
@@ -186,6 +188,7 @@ const hasLead = op => op.slots.some(s => D.LEAD_ROLES.includes(s.role));
 
 function wishMatches(S, st, op) {
   const w = st.wish; if (!w) return false;
+  if (w.type === 'career') return careerLikes(st,op.type);
   if (w.type === 'media') return op.type === w.media;
   if (w.type === 'lead') return hasLead(op);
   if (w.type === 'trend') return isHot(S, op) || isTopic(S, op);
@@ -197,6 +200,7 @@ function wishMatches(S, st, op) {
 export function interest(S, st, op) {
   const fit = bestFit(st, op), f = {};
   let v = 20 + fit * 4.5 + (st.mood - 50) * 0.15;
+  if (careerLikes(st,op.type)) { const bonus=st.career==='idol'?5:15; v+=bonus; f.career=bonus; }
   if (fit >= 5) f.skill = (fit - 4) * 4;
   const T = t => has(st, t);
   if (T('comp')) { v += op.big ? 12 : 6; if (op.big) f.big = 10; }
@@ -249,7 +253,7 @@ function computeBids(S, op) {
   }
   op.bids = cands.map(c => {
     const st = c.st, m = MEDIA[op.type];
-    const vars = { media: m.name, skill: D.SKILLS[mainSkill(op)].name, topic: TOPICS.find(t => t.id === op.topic).name, rival: c.rival, friend: c.friend, op: op.title };
+    const vars = { career:D.CAREERS[st.career].name, media: m.name, skill: D.SKILLS[mainSkill(op)].name, topic: TOPICS.find(t => t.id === op.topic).name, rival: c.rival, friend: c.friend, op: op.title };
     const open = pick(S, L.OPEN[voice(st)]);
     const reason = fill(pickLine(S, st, L.REASON[c.reason] || L.REASON.generic), vars);
     const end = /[!?。~…]$/.test(reason) ? '' : voice(st) === 'shy' ? '……' : voice(st) === 'chill' ? '~' : '!';
@@ -289,6 +293,7 @@ export const estimate = (S, st, op, slot = 0) => D.gradeOf(perf(S, st, op, slot,
 
 // ---------- 每週開始 ----------
 export function beginWeek(S) {
+  scoutWeek(S);
   S.trend = S.nextTrend || genTrend(S);
   if (S.flags.cool && --S.flags.cool.weeks <= 0) delete S.flags.cool;
   S.temp = S.temp.filter(t => --t.weeks > 0 || (feed(S, null, `🌐 限時平台「${MEDIA[t.type].name}」結束了。`, 'sys'), false));
@@ -333,14 +338,14 @@ export function beginWeek(S) {
   chatter(S);
   // 事件
   S.event = null;
-  const leaver = team(S).filter(s => s.loyalty < 25 && !s.promise).sort((a, b) => a.loyalty - b.loyalty)[0];
-  if (leaver && team(S).length > 2) S.event = leaveEvent(S, leaver);
+  const leaver = team(S).filter(s => (s.loyalty < 25 || s.evalDoubt) && !s.promise).sort((a, b) => a.loyalty - b.loyalty)[0];
+  if (leaver && team(S).length > 2) { S.event = leaveEvent(S, leaver); delete leaver.evalDoubt; }
   else if (S.week > 1 && chance(S, 0.5)) S.event = randomEvent(S);
   if (S.event) feed(S, null, `📣 ${S.event.title}`, 'event');
   // 試鏡
   if (--S.auditionIn <= 0) {
     S.auditionIn = 6;
-    if (team(S).length < LEVELS[S.lv].max) openAudition(S);
+    if (debuted(S).length < LEVELS[S.lv].max) openAudition(S);
   }
 }
 
@@ -358,7 +363,7 @@ function chatter(S) {
 // ---------- 心願 ----------
 function newWish(S, st) {
   const fr = friendsOf(S, st);
-  const opts = [['media', 3], ['train', 2], ['rest', st.energy < 60 ? 3 : 1], ['outfit', 1.5], ['meet', st.fans > 800 ? 1.5 : 0.3], ['trend', 1.5]];
+  const opts = [['career',2], ['media', 3], ['train', 2], ['rest', st.energy < 60 ? 3 : 1], ['outfit', 1.5], ['meet', st.fans > 800 ? 1.5 : 0.3], ['trend', 1.5]];
   if (fr.length) opts.push(['with', 2]);
   if (has(st, 'proud') || has(st, 'comp') || has(st, 'dream')) opts.push(['lead', 2.5]);
   const type = weighted(S, opts), w = { type, left: 6 };
@@ -366,11 +371,12 @@ function newWish(S, st) {
   if (type === 'train') w.skill = pick(S, D.SKILL_IDS);
   if (type === 'with') w.friend = pick(S, fr).id;
   st.wish = w;
-  say(S, st, { _: L.WISH[type] }, { media: w.media && MEDIA[w.media].name, skill: w.skill && D.SKILLS[w.skill].name, friend: w.friend && nameOf(S, w.friend) }, 'wish');
+  say(S, st, { _: L.WISH[type] }, { career:D.CAREERS[st.career].name, media: w.media && MEDIA[w.media].name, skill: w.skill && D.SKILLS[w.skill].name, friend: w.friend && nameOf(S, w.friend) }, 'wish');
 }
 export function wishText(S, st) {
   const w = st.wish; if (!w) return '';
   switch (w.type) {
+    case 'career': return `想往${D.CAREERS[st.career].name}的目標前進`;
     case 'media': return `想接${MEDIA[w.media].icon}${MEDIA[w.media].name}`;
     case 'with': return `想跟${nameOf(S, w.friend)}一起工作`;
     case 'train': return `想練${D.SKILLS[w.skill].icon}${D.SKILLS[w.skill].name}`;
@@ -452,7 +458,7 @@ function loseReaction(S, st, op, winner) {
 }
 
 export const DAY_NAMES = ['一','二','三','四','五','六','日'];
-export const ACT_NAMES = { rest:'🛏 休息', off:'🎉 放假', live:'🔴 直播', 'train:sing':'🎤 練唱', 'train:dance':'💃 練舞', 'train:act':'🎭 練演技', 'train:talk':'🎙 練口才' };
+export const ACT_NAMES = { rest:'🛏 休息', off:'🎉 放假', live:'🔴 直播', 'train:sing':'🎤 練唱', 'train:dance':'💃 練舞', 'train:act':'🎭 練演技', 'train:talk':'🎙 練口才', 'train:charm':'💄 練魅力' };
 export const PLAN_NAMES = ACT_NAMES;
 const initialFloors = () => ['lobby','studio','dance','cafe','dorm'].map(type => ({type,lv:1}));
 export const roomLv = (S, type) => Math.max(0, ...S.floors.filter(f => f.type === type).map(f => f.lv));
@@ -480,7 +486,7 @@ export function autoArrange(S,id) {
   const ks = D.SKILL_IDS.slice().sort((a,b)=>st.skills[b]-st.skills[a]);
   const free = [6,0,1,2,3,4,5].filter(d=>!st.sched[d].startsWith('job:'));
   let n=0;
-  for (const d of free) st.sched[d] = 'train:' + (st.wish?.type === 'train' ? st.wish.skill : ks[n++ % 2]);
+  for (const d of free) st.sched[d] = 'train:' + (st.wish?.type === 'train' ? st.wish.skill : (st.trainee ? ks[n++ % 3] : D.CAREERS[st.career]?.skill || ks[n++ % 2]));
   if (free.length) st.sched[free[0]] = st.wish?.type === 'rest' ? 'off' : 'rest';
   if (st.energy < 40) for (const d of free.filter(d=>d!==6).slice(0,2)) st.sched[d]='rest';
   for (const d of st.sickDays || []) if (!st.sched[d].startsWith('job:')) st.sched[d]='rest';
@@ -494,6 +500,7 @@ export function floorFor(S, value, op = null) {
     if (['concert','contest','dome'].includes(op?.type)) return -1;
     if (['short','duo','holo'].includes(op?.type)) type='dance';
   }
+  if(type==='charm' || op?.type==='fashion') type='style';
   let i = S.floors.findIndex(f=>f.type===type);
   return i < 0 ? Math.max(0,S.floors.findIndex(f=>f.type==='studio')) : i;
 }
@@ -511,7 +518,16 @@ export function upgradeFloor(S,i) {
   S.money-=cost; f.lv++; feed(S,null,`${D.FLOORS[f.type].icon} ${i+1}F 升到 Lv${f.lv}！`,'good'); return null;
 }
 export function migrate(S) {
-  if (S.v !== 1) return S;
+  if(S.v===3) return S;
+  if(S.v===2) {
+    S.staff=[]; S.scouted=[];
+    for(const st of [...S.stars,...(S.audition||[])]) {
+      st.skills.charm=+(1+rnd(S)*1.4).toFixed(2); st.career=drawCareer(S,st); st.careerStep=0; st.trainee=false; st.pot=1;
+      st.stat.byType={}; st.stat.roles=[];
+    }
+    S.v=3; return S;
+  }
+  if(S.v!==1) return S;
   const fac=S.fac || {}; S.floors=initialFloors();
   if(S.lv>=2) S.floors.push({type:'sing',lv:1});
   if(S.lv>=3) S.floors.push({type:'act',lv:1},{type:'talk',lv:1});
@@ -526,7 +542,7 @@ export function migrate(S) {
     if(st.job) { const op=opById(S,st.job); if(op) scheduleJob(st,op); }
     delete st.job; delete st.plan;
   }
-  S.v=2; return S;
+  S.v=2; return migrate(S);
 }
 
 // ---------- 購買 ----------
@@ -582,7 +598,7 @@ export function interact(S,id,kind) {
   if(kind==='talk') return talk(S,id);
   if(kind==='snack' && S.money<60) return '點心要 $60';
   st.done[kind]=true;
-  if(kind==='chat') { st.mood=clamp(st.mood+4,0,100); st.trust=clamp(st.trust+3,0,100); return say(S,st,L.CHAT_BOSS,{friend:friendsOf(S,st)[0]?.name||'大家',rival:rivalsOf(S,st)[0]?.name||'其他夥伴',wish:wishText(S,st)||'找到新目標'},'chat'); }
+  if(kind==='chat') { st.mood=clamp(st.mood+4,0,100); st.trust=clamp(st.trust+3,0,100); return say(S,st,L.CHAT_BOSS,{friend:friendsOf(S,st)[0]?.name||'大家',rival:rivalsOf(S,st)[0]?.name||'其他夥伴',career:D.CAREERS[st.career].name,wish:wishText(S,st)||'找到新目標'},'chat'); }
   if(kind==='snack') { S.money-=60; st.energy=clamp(st.energy+10,0,100); }
   if(kind==='cheer') { st.mood=clamp(st.mood+6,0,100); st.trust=clamp(st.trust+2,0,100); }
   feed(S,id,kind==='snack'?'🍪 謝謝點心！充滿活力了！':'👏 謝謝鼓勵，我會加油！','good'); return null;
@@ -596,8 +612,8 @@ function openAudition(S) {
 export function sign(S, i) {
   const st = S.audition && S.audition[i];
   if (!st) return '沒有試鏡';
-  if (team(S).length >= LEVELS[S.lv].max) return `公司最多 ${LEVELS[S.lv].max} 位,要先升級`;
-  const cost = D.auditionCost(team(S).length);
+  if (debuted(S).length >= LEVELS[S.lv].max) return `公司最多 ${LEVELS[S.lv].max} 位,要先升級`;
+  const cost = D.auditionCost(debuted(S).length);
   if (S.money < cost) return `簽約金要 $${fmt(cost)}`;
   S.money -= cost; delete st.intro; st.joined = S.week;
   for (const o of team(S)) S.rel[relKey(o.id, st.id)] = ri(S, -10, 20);
@@ -608,7 +624,7 @@ export function sign(S, i) {
 export function skipAudition(S) { S.audition = null; }
 export function auditionNow(S) {
   if (S.audition) return null;
-  if (team(S).length >= LEVELS[S.lv].max) return `公司最多 ${LEVELS[S.lv].max} 位,要先升級`;
+  if (debuted(S).length >= LEVELS[S.lv].max) return `公司最多 ${LEVELS[S.lv].max} 位,要先升級`;
   if (S.auditionIn > 0) return `還要 ${S.auditionIn} 週才能再辦試鏡`;
   openAudition(S); S.auditionIn = 6; return null;
 }
@@ -616,7 +632,7 @@ export function auditionNow(S) {
 // ---------- 事件 ----------
 function leaveEvent(S, st) {
   return {
-    id: 'leave', star: st.id, title: `${st.name} 收到別家公司的邀請`, text: withCatch(S, st, fill(pickLine(S, st, L.LEAVE), {})),
+    id: 'leave', star: st.id, title: st.evalDoubt?`${st.name} 想找老闆聊聊`:`${st.name} 收到別家公司的邀請`, text: st.evalDoubt?'我是不是不適合……我想聽聽你的建議，再一起想想下一步。':withCatch(S, st, fill(pickLine(S, st, L.LEAVE), {})),
     choices: [
       { label: `☕ 好好談心($${D.TALK_COST * 2})`, cost: D.TALK_COST * 2 },
       { label: st.wish ? `🤞 答應他的心願:${wishText(S, st)}(4 週內)` : '🤞 答應下次給他好機會(4 週內)' },
@@ -840,19 +856,20 @@ export function endWeek(S) {
         }
         st.energy-=8;
       } else if(value.startsWith('train:') && !st.sulk) {
-        const k=value.slice(6), rooms=S.floors.filter(f=>f.type===k), lv=roomLv(S,k), capacity=rooms.reduce((a,f)=>a+f.lv+1,0);
+        const k=value.slice(6), room=k==='charm'?'style':k, rooms=S.floors.filter(f=>f.type===room), lv=roomLv(S,room), capacity=rooms.reduce((a,f)=>a+f.lv+1,0);
         used[k]=(used[k]||0)+1;
         let seat=used[k];
-        for(let fi=0;fi<S.floors.length;fi++) if(S.floors[fi].type===k) {floorOf[st.id]=fi;seat-=S.floors[fi].lv+1;if(seat<=0)break;}
+        for(let fi=0;fi<S.floors.length;fi++) if(S.floors[fi].type===room) {floorOf[st.id]=fi;seat-=S.floors[fi].lv+1;if(seat<=0)break;}
         let mult=(lv?1+0.2*(lv-1):0.5)*(0.7+st.mood/170)*(T('hot')?1.3:1)*(T('chill')?0.8:1)*(st.motivated?1.5:1)*(S.mentor?1.15:1);
-        if(lv && used[k]>capacity) {mult*=0.5; if(!R.items.some(i=>i.crowded===k)) R.items.push({crowded:k,text:`${D.FLOORS[k].name}太擠了，部分練習效果減半。`});}
+        mult*=st.pot*trainingStaff(S,k);
+        if(lv && used[k]>capacity) {mult*=0.5; if(!R.items.some(i=>i.crowded===k)) R.items.push({crowded:k,text:`${D.FLOORS[room].name}太擠了，部分練習效果減半。`});}
         if(st.energy<20) mult*=0.5; if(S.flags.power) mult=0;
         st.skills[k]=Math.min(10,st.skills[k]+LEARNING.training*mult*(1-st.skills[k]/11)); st.trained[k]=S.week;
         st.energy-=T('hot')?12:10;
         if(st.wish?.type==='train' && st.wish.skill===k && mult) wishDone(S,st);
       }
       // 每天只因同桌朋友增加一次心情。
-      st.energy+=roomLv(S,'cafe') ? 2+4*roomLv(S,'cafe') : 3;
+      st.energy+=(roomLv(S,'cafe') ? 2+4*roomLv(S,'cafe') : 3)+staffEffect(S,'chef', [4,6,8]);
       if(value!=='off' && friendsOf(S,st).some(fr=>fr.sched[d]!=='off')) st.mood++;
       const dorm=roomLv(S,'dorm'), lounge=roomLv(S,'lounge');
       if(dorm) st.energy+=4+4*dorm;
@@ -905,10 +922,14 @@ export function endWeek(S) {
     const d = st.mood - mood0[st.id];
     if (d <= -12) R.items.push({ id: st.id, text: `😞 ${st.name}這週心情變差了(${Math.round(d)})` });
   }
+  for(const st of team(S)) checkCareer(S,st,R);
+  evaluate(S,R);
+  for(const st of S.staff) {st.weeks++; if(st.weeks%8===0 && st.lv<3) {st.lv++;feed(S,null,`${st.name}升到 Lv${st.lv}!` ,'good');}}
   // 6. 房租、薪水
   const rent = LEVELS[S.lv].rent, pay = team(S).reduce((a, s) => a + D.salary(s), 0);
-  S.money -= rent + pay;
-  R.items.push({ text: `🏢 房租 $${fmt(rent)} + 薪水 $${fmt(pay)}` });
+  const staffPay=S.staff.reduce((a,st)=>a+D.staffSalary(st),0);
+  S.money -= rent + pay + staffPay;
+  R.items.push({ text: `🏢 房租 $${fmt(rent)} + 明星薪水 $${fmt(pay)} + 員工薪水 $${fmt(staffPay)}` });
   // 7. 別家公司
   for (const r of S.rivals) r.fans = Math.round(r.fans * (1 + r.g * (0.7 + rnd(S) * 0.6)) + 60);
   // 8. 季度星光榜(每 12 週)
@@ -919,6 +940,7 @@ export function endWeek(S) {
     feed(S, null, `📊 季度星光榜公布:${S.company} 第 ${rk} 名!`, 'good');
   }
   checkGoals(S, R);
+  if(S.endingPending) S.endingPending=computeEnding(S);
   R.money1 = S.money; R.fans1 = totalFans(S);
   for (const st of team(S)) if (st.fans > (st.stat.peak || 0)) st.stat.peak = st.fans;
   S.report = R;
@@ -952,17 +974,20 @@ function finishOp(S, op, R) {
   const fame = m.fame ? 1 + ids.reduce((a, id) => a + starById(S, id).fans, 0) / 20000 : 1;
   const pull = ids.reduce((a, id) => a + starById(S, id).fans, 0) * 0.03;     // 越紅的明星,作品帶來越多新粉絲
   const sat = 1 / (1 + totalFans(S) / 250000);                                 // 全國就這麼多人,越後面越難漲
-  const money = Math.round(op.pay * OUTPUT.pay * mult * fame), fans = Math.round((op.fans + pull) * OUTPUT.fans * mult * fanMult * sat);
+  const money = Math.round(op.pay * OUTPUT.pay * mult * fame * (1+staffEffect(S,'manager',[0.1,0.15,0.2])+(['fashion','ad'].includes(op.type)?staffEffect(S,'stylist',[0.05,0.08,0.1]):0))), fans = Math.round((op.fans + pull) * OUTPUT.fans * mult * fanMult * sat);
   S.money += money;
   ids.forEach(id => {
     const st = starById(S, id), i = op.slots.findIndex(s => s.who === id);
     st.fans += Math.round(fans * shares[i] / wsum);
+    st.stat.byType[op.type]=(st.stat.byType[op.type]||0)+1;
+    st.stat.roles.push({type:op.type,role:op.slots[i].role,grade:g.g,sing:(slotW(op,i).sing||0),first:op.type==='contest'&&g.g==='S'});
     st.stat.ops++; if (g.g === 'S') st.stat.S++;
     if (!st.stat.best || 'SABC'.indexOf(g.g) < 'SABC'.indexOf(st.stat.best)) st.stat.best = g.g;
     st.jobs = st.jobs.filter(id => id !== op.id);
     st.mood = clamp(st.mood + ({ S: 14, A: 8, B: 2, C: -8 })[g.g], 0, 100);
     if (g.g === 'S' || g.g === 'A') st.loyalty = clamp(st.loyalty + 2, 0, 100);
   });
+  for(const id of ids) checkCareer(S,starById(S,id),R);
   // 同場的人:關係變化
   for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
     const a = ids[i], b = ids[j];
@@ -1019,7 +1044,9 @@ export function computeEnding(S) {
   for (let i = 0; i < t.length; i++) for (let j = i + 1; j < t.length; j++) { avg += rel(S, t[i].id, t[j].id); n++; }
   avg = n ? avg / n : 0;
   const all = D.NORMAL_MEDIA.every(k => (S.stats.goodType || {})[k]);
-  if (rf) { kind = 'rivals'; [a, b] = rf.split('|').map(id => nameOf(S, id)); }
+  const debuted=t.filter(st=>!st.trainee);
+  if(debuted.length && debuted.filter(st=>st.careerStep===3).length/debuted.length>=0.6) kind='dreams';
+  else if (rf) { kind = 'rivals'; [a, b] = rf.split('|').map(id => nameOf(S, id)); }
   else if (top && top.fans >= f * 0.45) { kind = 'superstar'; a = top.name; }
   else if (!S.stats.left && avg >= 15) kind = 'family';
   else if (all) kind = 'allround';
@@ -1030,7 +1057,7 @@ export function computeEnding(S) {
       let text = '';
       for (let k = 0; k < 6 && (!text || used.has(text)); k++) text = fill(pickLine(S, st, L.ENDING_LINE));
       used.add(text);
-      return { id: st.id, text: withCatch(S, st, text, 0.5) };
+      return { id: st.id, text: withCatch(S, st, text, 0.5)+` (${D.CAREERS[st.career].icon} ${st.careerStep===3?D.CAREERS[st.career].name+'夢想達成!':'離'+D.CAREERS[st.career].name+'還差一點，會繼續加油'})` };
     }),
   };
 }
@@ -1047,4 +1074,74 @@ export function newSeason(S, mentorId, seed) {
   const m = starById(S, mentorId);
   const mentor = m ? { name: m.name, look: m.look, acc: m.acc, glow: m.glow, emoji: m.emoji, traits: m.traits } : null;
   return newGame({ seed, company: S.company, ng: S.ng + 1, mentor, trophies: S.trophies });
+}
+
+export const debuted=S=>team(S).filter(st=>!st.trainee);
+export const traineeCapacity=S=>2+2*S.floors.filter(f=>f.type==='dorm').length;
+export const potentialStars=st=>'★'.repeat(st.pot<1?1:st.pot<1.2?2:3);
+export const careerLikes=(st,type)=>st.career==='idol'||D.CAREERS[st.career]?.media.includes(type);
+function drawCareer(S,st) {const r=rnd(S); return r<0.6?Object.keys(D.CAREERS).find(k=>D.CAREERS[k].skill===bestSkill(st)):r<0.8?'idol':pick(S,Object.keys(D.CAREERS));}
+export function checkCareer(S,st,R) {
+ const b=st.stat.byType||{}, roles=st.stat.roles||[], n=(...types)=>types.reduce((a,k)=>a+(b[k]||0),0), a=roles.some(r=>['S','A'].includes(r.grade)&&['concert','dome'].includes(r.type)&&r.role==='主唱');
+ const conditions={
+ singer:[roles.filter(r=>r.sing>=0.5).length>=2,st.skills.sing>=7,a],
+ actor:[n('drama')>=2,st.skills.act>=7,roles.some(r=>r.type==='drama'&&r.role==='主角'&&r.grade==='S')],
+ dancer:[n('short','duo')>=3,st.skills.dance>=7,roles.some(r=>r.first||(r.type==='dome'&&r.role==='主舞'&&['S','A'].includes(r.grade)))],
+ variety:[n('podcast','live')>=3,st.skills.talk>=7,st.fans>=20000],
+ model:[n('fashion','ad','game')>=2,st.skills.charm>=7,roles.some(r=>r.type==='fashion'&&r.grade==='S')],
+ idol:[Object.keys(b).filter(k=>b[k]>0).length>=4,D.SKILL_IDS.every(k=>st.skills[k]>=5),st.fans>=30000&&team(S).every(o=>o.fans<=st.fans)]};
+ while(st.careerStep<3 && conditions[st.career][st.careerStep]) {
+  st.careerStep++;st.mood=clamp(st.mood+15,0,100);st.loyalty=clamp(st.loyalty+10,0,100);st.trust=clamp(st.trust+5,0,100);
+  const text=say(S,st,L.CAREER_STEP,{career:D.CAREERS[st.career].name,step:st.careerStep},'good');
+  R?.items.push({id:st.id,text:`${st.name}：${text}`,big:true});
+ }
+}
+export const staffEffect=(S,role,values)=>Math.max(0,...S.staff.filter(st=>st.role===role).map(st=>values[st.lv-1]));
+export const trainingStaff=(S,k)=>(1+Math.max(0,...S.staff.filter(st=>st.role==='trainer'&&st.skill===k).map(st=>[0.15,0.25,0.35][st.lv-1])))*(k==='charm'?1+staffEffect(S,'stylist',[0.2,0.3,0.4]):1);
+export function canHire(S,role) {
+ if(!D.STAFF_ROLES[role])return '找不到職業';
+ if(S.staff.length>=1+S.lv)return '員工名額滿了';
+ const floor={chef:'cafe',scout:'scout',stylist:'style'}[role];
+ if(floor&&!roomLv(S,floor))return '要先蓋'+D.FLOORS[floor].name;
+ if(S.money<600+300*S.staff.length)return '錢不夠';return null;
+}
+export function hire(S,role,skill) {
+ const err=canHire(S,role);if(err)return err;
+ if(role==='trainer'&&!D.SKILLS[skill])return '請選科目';
+ const name=pick(S,D.STAFF_NAMES.filter(n=>!S.staff.some(st=>st.name===n))); if(!name)return '暫時沒有人應徵';
+ const look=randomLook(ri(S,1,2e9)); look.cloth=pick(S,CLOTH_COLORS.filter(c=>c==='#4a5a8a'));
+ S.money-=600+300*S.staff.length; S.staff.push({id:'e'+S.nextId++,name,role,skill,lv:1,weeks:0,look});feed(S,null,`${D.STAFF_ROLES[role].icon} ${name}加入公司!`,'good');return null;
+}
+export function fireStaff(S,id) {S.staff=S.staff.filter(st=>st.id!==id);}
+export function scoutWeek(S) {
+ S.scouted=S.scouted.filter(st=>{if(S.week-st.found<=2)return true;feed(S,null,`${st.name} 被別家公司簽走了`,'sys');return false;});
+ const lv=roomLv(S,'scout');if(!lv)return;
+ const bonus=S.staff.some(st=>st.role==='scout')?0.25:0;
+ const count=(chance(S,(lv===1?0.5:1)+bonus)?1:0)+(lv===3&&chance(S,0.5+bonus)?1:0);
+ for(let i=0;i<count&&S.scouted.length<3;i++) {
+  const st=makeStar(S);st.trainee=true;st.pot=+(0.95+rnd(S)*0.45).toFixed(2);st.found=S.week;
+  st.intro=fill(pickLine(S,st,L.INTRO),{name:st.name,media:MEDIA[st.dream].name});S.scouted.push(st);
+ }
+}
+export function signScouted(S,id) {
+ const st=S.scouted.find(st=>st.id===id);if(!st)return '新人已經離開了';
+ if(team(S).filter(st=>st.trainee).length>=traineeCapacity(S))return '練習生名額滿了';
+ if(S.money<300)return '簽約金要 $300';S.money-=300;st.joined=S.week;S.stars.push(st);S.scouted=S.scouted.filter(st=>st.id!==id);autoArrange(S,id);feed(S,id,`${st.name}成為練習生，一起加油!`,'good');return null;
+}
+export function dismissScouted(S,id) {S.scouted=S.scouted.filter(st=>st.id!==id);}
+export function evaluate(S,R) {
+ if(S.week%4)return; R.evaluation=[];
+ for(const st of team(S).filter(st=>st.trainee)) {
+  const weeks=S.week-st.joined+1, skills=Object.values(st.skills).sort((a,b)=>b-a),score=20+skills.slice(0,3).reduce((a,b)=>a+b,0)/3*7+(st.mood-55)*0.1,grade=D.gradeOf(score).g;
+  st.evaluation={id:st.id,score,grade,canDebut:score>=63&&weeks>=4,weeks};R.evaluation.push({...st.evaluation});
+  say(S,st,L.EVAL[grade],{},grade==='C'?'say':'good');st.evalCs=grade==='C'?(st.evalCs||0)+1:0;
+  if(st.evalCs>=3) {st.evalDoubt=true;st.loyalty=clamp(st.loyalty-10,0,100);feed(S,st.id,'我是不是不適合……我想跟老闆聊聊，再試試看。','sad');}
+ }
+}
+export function debut(S,id) {
+ const st=starById(S,id);if(!st?.trainee||!st.evaluation?.canDebut)return '還要再練習，等下次評鑑!';
+ if(debuted(S).length>=LEVELS[S.lv].max)return '名額滿了，公司升級後才能出道';
+ if(S.money<1000)return '出道舞台要 $1,000';S.money-=1000;st.trainee=false;st.debutWeek=S.week;st.fans+=500;st.mood=clamp(st.mood+20,0,100);
+ const text=say(S,st,L.DEBUT,{},'good');S.report?.items.push({id,text:`🎉 ${st.name}出道!${text}`,big:true});
+ if(!S.trophies.some(t=>t.id==='first_debut'))S.trophies.push({id:'first_debut',name:'第一位出道',icon:'🎉',week:S.week,ng:S.ng});return null;
 }

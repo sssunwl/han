@@ -82,6 +82,6 @@ export async function decodeSave(code) {
     throw mine ? e : new Error('存檔碼不完整,可能沒有複製到整串');
   }
   const obj = parse(new TextDecoder().decode(bytes));
-  if (!obj || (obj.v !== 1 && obj.v !== 2) || !Array.isArray(obj.stars) || !obj.rel) throw new Error('存檔碼壞掉了,讀不出公司');
+  if (!obj || (obj.v !== 1 && obj.v !== 2 && obj.v !== 3) || !Array.isArray(obj.stars) || !obj.rel) throw new Error('存檔碼壞掉了,讀不出公司');
   return migrate(obj);
 }

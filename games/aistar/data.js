@@ -7,6 +7,7 @@ export const SKILLS = {
   dance: { name: '舞蹈', icon: '💃' },
   act: { name: '演技', icon: '🎭' },
   talk: { name: '口才', icon: '🎙' },
+  charm: { name: '魅力', icon: '💄' },
 };
 export const SKILL_IDS = Object.keys(SKILLS);
 
@@ -14,14 +15,15 @@ export const SKILL_IDS = Object.keys(SKILLS);
    w = 看哪些技能(加起來 1;sw = 每個角色各看什麼,沒寫就跟 w 一樣)、weeks = 做幾週、pay/fans = 基本酬勞與粉絲、
    slots = 角色(第一個是主要的,一定要有人)、lv = 公司幾級才會出現、big = 大場面 */
 export const MEDIA = {
+  fashion: { name:'時尚走秀', icon:'📸', pf:'星光伸展台', w:{charm:0.7,dance:0.3}, days:2,weeks:1,pay:900,fans:650,slots:['模特'],lv:1 },
   short:   { name: '短影音挑戰', icon: '📱', pf: '閃拍', w: { dance: 0.6, talk: 0.4 }, days: 1, weeks: 1, pay: 320, fans: 420, slots: ['挑戰者'], lv: 1 },
   drama:   { name: 'AI 短劇', icon: '🎬', pf: '星劇場', w: { act: 1 }, days: 4, weeks: 1, pay: 1000, fans: 950, slots: ['主角', '配角'], lv: 1, big: true },
   live:    { name: '直播', icon: '🔴', pf: '直播島', w: { talk: 0.8, sing: 0.2 }, days: 1, weeks: 1, pay: 300, fans: 300, slots: ['主持'], lv: 1 },
   podcast: { name: 'Podcast', icon: '🎧', pf: '耳朵電台', w: { talk: 1 }, days: 1, weeks: 1, pay: 380, fans: 260, slots: ['主持'], lv: 1 },
   voice:   { name: 'AI 繪本配音', icon: '📖', pf: '故事盒子', w: { talk: 0.6, act: 0.4 }, days: 2, weeks: 1, pay: 520, fans: 280, slots: ['配音'], lv: 1 },
   duo:     { name: '雙人企劃', icon: '👯', pf: '閃拍', w: { dance: 0.5, sing: 0.5 }, days: 2, weeks: 1, pay: 700, fans: 750, slots: ['搭檔', '搭檔'], lv: 1 },
-  ad:      { name: '廣告', icon: '📺', pf: '電視', w: { sing: 0.25, dance: 0.25, act: 0.25, talk: 0.25 }, days: 2, weeks: 1, pay: 1700, fans: 220, slots: ['代言人'], lv: 2 },
-  game:    { name: '遊戲代言', icon: '🎮', pf: '遊戲公司', w: { talk: 0.5, act: 0.5 }, days: 1, weeks: 1, pay: 2000, fans: 260, slots: ['代言人'], lv: 2, fame: true },
+  ad:      { name: '廣告', icon: '📺', pf: '電視', w: { charm:0.4, sing:0.2, dance:0.2, act:0.2 }, days: 2, weeks: 1, pay: 1700, fans: 220, slots: ['代言人'], lv: 2 },
+  game:    { name: '遊戲代言', icon: '🎮', pf: '遊戲公司', w: { talk:0.4, act:0.3, charm:0.3 }, days: 1, weeks: 1, pay: 2000, fans: 260, slots: ['代言人'], lv: 2, fame: true },
   contest: { name: '選秀節目', icon: '🏆', pf: '星光擂台', w: null, days: 3, weeks: 1, pay: 700, fans: 1900, slots: ['參賽者'], lv: 2, big: true },
   concert: { name: '虛擬演唱會', icon: '🎤', pf: '元宇宙舞台', w: { sing: 0.6, dance: 0.4 }, days: 4, weeks: 2, pay: 4200, fans: 6000, slots: ['主唱', '伴舞'], sw: [{ sing: 0.8, dance: 0.2 }, { dance: 0.8, sing: 0.2 }], lv: 3, big: true },
   // 限時新平台(事件帶出來)
@@ -35,6 +37,7 @@ export const NORMAL_MEDIA = Object.keys(MEDIA).filter(k => !MEDIA[k].temp && !ME
 export const LEAD_ROLES = ['主角', '主唱'];
 
 export const TITLES = {
+  fashion:['{t}主題走秀','{t}時尚雜誌封面','{t}童裝型錄'],
   short: ['#{t}舞蹈挑戰', '#{t}變裝挑戰', '#{t}搞笑對嘴', '#{t}一秒變身'],
   drama: ['《{t}偵探社》', '《我的{t}同學》', '《{t}大冒險》', '《穿越到{t}世界》', '《{t}學園》'],
   live: ['{t}聊天直播', '{t}開箱直播', '一起畫{t}直播'],
@@ -88,9 +91,11 @@ export const LEVELS = [null,
   { name: '小工作室', max: 4, floors: 5, ops: 3, rent: 150, cost: 0, fans: 0 },
   { name: '攝影棚', max: 6, floors: 7, ops: 4, rent: 350, cost: 4000, fans: 5000 },
   { name: '媒體大樓', max: 8, floors: 9, ops: 5, rent: 700, cost: 15000, fans: 25000 },
-  { name: '星光塔', max: 9, floors: 12, ops: 6, rent: 1200, cost: 40000, fans: 80000 },
+  { name: '星光塔', max: 10, floors: 12, ops: 6, rent: 1200, cost: 40000, fans: 80000 },
 ];
 export const FLOORS = {
+  style:{name:'造型室',icon:'💄',build:1800,cost:[1200,3000],desc:'魅力練習 ×1/1.2/1.4，容納 2/3/4 人'},
+  scout:{name:'星探部',icon:'🔭',build:2000,cost:[1500,4000],desc:'每週去街上、網路、學校找新人(Lv 越高找越多、越會看潛力)'},
   lobby: { name:'大廳', icon:'🏢', desc:'新人試鏡與出入口；Lv3 每週機會 +1', build:0, cost:[1500,4000] },
   studio: { name:'攝影棚', icon:'🎬', desc:'拍攝與 AI 剪輯；酬勞、粉絲 +0/10/20%', build:0, cost:[2000,5000] },
   dance: { name:'舞蹈室', icon:'💃', desc:'舞蹈練習 ×1/1.2/1.4，容納 2/3/4 人', build:1500, cost:[1200,3000] },
@@ -101,7 +106,7 @@ export const FLOORS = {
   dorm: { name:'宿舍', icon:'🛏', desc:'每日晚上體力 +8/12/16', build:1200, cost:[1000,2500] },
   lounge: { name:'休息室', icon:'🧖', desc:'沒工作的晚上體力 +8/10/12、心情 +3', build:2500, cost:[2000,5000] },
 };
-export const salary = st => Math.round(60 + st.fans / 160);
+export const salary = st => st.trainee ? 30 : Math.round(60 + st.fans / 160);
 export const auditionCost = n => 800 + n * 250;
 export const OUTFIT_COST = 300, MEET_COST = 500, TALK_COST = 150;
 
@@ -129,9 +134,28 @@ export const GOALS = [
 ];
 
 export const ENDINGS = {
+  dreams:{icon:'🌈',name:'夢想成真結局',text:'每個人都朝自己的夢想前進，而且大部分都實現了!'},
   family: { icon: '🤝', name: '大家庭結局', text: '沒有人離開,大家感情都好好。這間公司像一個大家庭,每個人都在這裡發光。' },
   rivals: { icon: '⚔️', name: '宿敵變戰友結局', text: '{a} 和 {b} 從競爭對手變成最好的戰友。互相比較、互相幫忙,才讓彼此變得更強。' },
   superstar: { icon: '👑', name: '超級巨星結局', text: '{a} 成為全國最紅的 AI 明星,一個人就撐起半間公司!' },
   allround: { icon: '🌈', name: '全能公司結局', text: '短劇、直播、Podcast、演唱會……每一種媒體都拿過 S,你們是最全能的公司。' },
   star: { icon: '✨', name: '星光結局', text: '一路上有歡笑也有不服氣,最後大家一起站上了星光巨蛋。' },
 };
+
+export const CAREERS = {
+ singer:{name:'歌手',icon:'🎤',skill:'sing',media:['concert','duo','live']},
+ actor:{name:'演員',icon:'🎭',skill:'act',media:['drama','voice','pet']},
+ dancer:{name:'舞者',icon:'💃',skill:'dance',media:['short','duo','holo']},
+ variety:{name:'綜藝人',icon:'🎙',skill:'talk',media:['podcast','live','voice']},
+ model:{name:'模特',icon:'📸',skill:'charm',media:['fashion','ad','game']},
+ idol:{name:'全能偶像',icon:'🌟',media:[]},
+};
+export const STAFF_NAMES=['文青','大山','小禾','阿松','美晴','家豪','曉彤','明軒','采芸','立平','子晴','信宏','佩珊','佳穎','俊文','怡君'];
+export const STAFF_ROLES={
+ manager:{name:'經紀人',icon:'🧑‍💼',floor:'lobby',desc:'所有作品酬勞 +10/15/20%'},
+ trainer:{name:'訓練師',icon:'🏋',desc:'指定科目練習 ×1.15/1.25/1.35'},
+ chef:{name:'廚師',icon:'🧑‍🍳',floor:'cafe',desc:'午餐體力再 +4/6/8'},
+ scout:{name:'星探',icon:'🔭',floor:'scout',desc:'發掘新人機率 +25%，Lv3 看得到最強技能'},
+ stylist:{name:'造型師',icon:'💄',floor:'style',desc:'魅力練習 ×1.2/1.3/1.4，走秀與廣告酬勞 +5/8/10%'},
+};
+export const staffSalary = st => 80+40*(st.lv-1);

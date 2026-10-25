@@ -60,12 +60,13 @@ function portrait(st, dir = 'down', col = 'idle0') {
   if (!ptCache.has(k)) {
     const b = new Bmp(FW, FH);
     b.blit(makeFrame(st.look, dir, col), 0, 0);
-    if (dir !== 'up') b.blit(makeAccessory(st.acc, st.glow), 0, (col === 'walk1' || col === 'walk3') ? 1 : 0, dir === 'right');
+    if (!st.role && dir !== 'up') b.blit(makeAccessory(st.acc, st.glow), 0, (col === 'walk1' || col === 'walk3') ? 1 : 0, dir === 'right');
     const c = toCanvas(b);
     ptCache.set(k, { canvas: c, url: dir === 'down' && col === 'idle0' ? c.toDataURL() : null });
   }
   return ptCache.get(k);
 }
+const careerTag=st=>`${D.CAREERS[st.career].icon} ${D.CAREERS[st.career].name} ${'●'.repeat(st.careerStep)}${'○'.repeat(3-st.careerStep)}`;
 const ptImg = (st, cls = 'pt') => st ? `<img class="${cls}" style="--g:${st.glow}22" src="${portrait(st).url}" alt="">` : '';
 const nameTag = st => `<b style="--c:${st.glow};color:${st.glow}">${esc(st.name)}</b>`;
 
@@ -81,6 +82,8 @@ const floorY = i => 128 + (S.floors.length-1-i)*96;
 const roomIndex = type => S.floors.findIndex(f=>f.type===type);
 // 每種房間都有四個可用站位；家具按等級累加。
 const ROOMS = {
+ style:{color:'#bc93af',kind:'wood',furniture:[['vanity',16,25,1],['clothes_rack',90,27,1],['full_mirror',205,7,2],['runway',101,70,3],['spotlight',250,18,3]],spots:[[45,78],[95,80],[164,78],[224,80]]},
+ scout:{color:'#8fa9b2',kind:'wood',furniture:[['desk_pc',24,26,1],['whiteboard_map',125,14,1],['desk_pc',204,28,2],['phone_desk',92,44,3]],spots:[[48,77],[102,80],[165,79],[231,78]]},
  lobby:{color:'#7889b2',kind:'studio', furniture:[['reception',18,30,1],['sofa',112,44,1],['plant_studio',236,24,2],['trophy_case',204,12,3]], spots:[[94,76],[160,78],[202,76],[238,80]]},
  studio:{color:'#7476aa',kind:'studio', furniture:[['green_screen',6,9,1],['camera',78,30,1],['ring_light',245,28,1],['podcast_desk',124,28,1],['stream_desk',206,30,2],['neon_sign',104,4,3]], spots:[[40,77],[146,74],[190,76],[236,78]]},
  dance:{color:'#b68eb8',kind:'wood', furniture:[['dance_mirror',12,5,1],['speaker',224,23,2],['dance_mirror',116,5,3],['neon_sign',180,0,3]], spots:[[40,78],[94,80],[150,78],[202,81]]},
@@ -119,6 +122,7 @@ function buildBg() {
 }
 function currentDay() {return playback?.R.timeline[Math.min(6,Math.floor(playback.t/4))];}
 function targetOf(st,idx) {
+  if(st.role) return staffTarget(st,idx);
   const day=currentDay(), p=playback?(playback.t%4)/4:0.3;
   let act=day?.acts[st.id] || st.sched[0], fi=day?.floorOf[st.id] ?? E.floorFor(S,act);
   if(playback && p>=0.45 && p<0.60 && fi!==-1) {act='eat';fi=roomIndex('cafe');if(fi<0)fi=day.floorOf[st.id];}
@@ -138,10 +142,10 @@ function targetOf(st,idx) {
   return {fi,x:outside?10:sulk?266:x+Math.floor(idx/spots.length)*9,y:floorY(fi)+y,act,outside};
 }
 function placeActors(snap=false) {
-  const team=E.team(S),used={};
+  const team=[...E.team(S),...S.staff],used={};
   for(const id of actors.keys())if(!team.some(st=>st.id===id))actors.delete(id);
   for(const st of team) {
-    const fi=currentDay()?.floorOf[st.id] ?? E.floorFor(S,st.sched[0]);
+    const fi=currentDay()?.floorOf[st.id] ?? E.floorFor(S,st.sched?.[0]||'rest');
     const idx=used[fi]||0;used[fi]=idx+1;
     const dest=targetOf(st,idx);
     let a=actors.get(st.id);
@@ -192,12 +196,15 @@ function draw(now) {
     ctx.drawImage(sprCache[key],288,floorY(i)+24);
   });
   S.floors.forEach((f,i)=>{for(const [k,x,y,lv] of ROOMS[f.type].furniture) if(k==='camera' && f.lv>=lv){ctx.fillStyle=Math.floor(sceneTime*3)%2?'#ff5969':'#542d45';ctx.fillRect(x+8,floorY(i)+y+15,3,3);}});
-  for(const [id,a] of [...actors].sort((a,b)=>a[1].y-b[1].y)) {const st=E.starById(S,id);if(st && !a.hide)drawActor(st,a,now);}
+  for(const [id,a] of [...actors].sort((a,b)=>a[1].y-b[1].y)) {const st=E.starById(S,id)||S.staff.find(st=>st.id===id);if(st && !a.hide)drawActor(st,a,now);}
+  if(S.scouted.length){const st=S.scouted[0];ctx.drawImage(portrait(st).canvas,66,floorY(0)+48);ctx.drawImage(spr('visitor_sign'),70,floorY(0)+30);}
   ctx.globalAlpha=1;
 }
 function drawActor(st,a) {
   const act=a.act, type=act?.startsWith('job:') ? (playback?.R.opTypes?.[act.slice(4)] || E.opById(S,act.slice(4))?.type) : '';
   let kind=act==='eat'?'eat':act==='sleep'||act==='rest'?'sleep':act==='relax'?'relax':act==='live'||type==='live'||type==='holo'?'live':act==='train:dance'||['short','duo'].includes(type)?'dance':act==='train:sing'?'sing':act==='train:talk'||type==='podcast'?'talk':'act';
+  if(st.role&&act!=='eat')kind='staff';
+  else if(act==='train:charm'||type==='fashion')kind='style';
   if((currentDay()?.sulkOf?.[st.id] ?? !!st.sulk) && !act.startsWith('job:') && !['eat','sleep'].includes(kind))kind='sulk';
   const moving=a.moving, col=moving?['walk0','walk1','walk2','walk3'][Math.floor(a.t*8)%4]:'idle0';
   const dance=kind==='dance'&&!moving, jump=dance?-Math.abs(Math.sin(a.t*Math.PI/0.4))*3:0;
@@ -206,13 +213,21 @@ function drawActor(st,a) {
   if(kind==='sleep'&&!moving){ctx.rotate(-Math.PI/2);ctx.drawImage(portrait(st,'down',col).canvas,-12,-22);ctx.fillStyle='#7fbee2';ctx.fillRect(-10,-7,20,19);}
   else ctx.drawImage(portrait(st,moving?a.dir:'down',col).canvas,-12,-30);
   if(!moving) {
+    if(kind==='staff') {
+      ctx.fillStyle='#e7e4ff';
+      if(st.role==='manager'){ctx.fillRect(9,-22,3,7);}
+      else if(st.role==='trainer'){ctx.fillRect(10,-18-Math.round(Math.sin(a.t*8)*3),5,3);}
+      else if(st.role==='chef'){ctx.drawImage(spr('bowl'),8,-12);}
+      else {ctx.fillStyle=Math.floor(a.t*4)%2?'#a3f2ea':'#638ca6';ctx.fillRect(8,-13,8,3);}
+    }
     if(kind==='sing')ctx.drawImage(spr('mic_hand'),7,-18);
     if(kind==='eat'){ctx.drawImage(spr('bowl'),-6,-12);}                 // 餐桌是背景家具,這裡只疊碗
     if(kind==='relax'){ctx.fillStyle='#625176';ctx.fillRect(-13,-10,6,9);ctx.fillRect(7,-10,6,9);ctx.drawImage(spr('foot_bath'),-16,-5);}
     if(kind==='act'){ctx.drawImage(spr('clapper'),14,-13);ctx.fillStyle=Math.floor(a.t*3)%2?'#ff5260':'#542e42';ctx.fillRect(18,-25,3,3);}
-    const particle={dance:'💦',sing:'♪',act:'🎬',talk:'…',live:'♥',eat:'♨',sleep:'zzz',relax:'✨',sulk:'💢'}[kind];
+    const particle={dance:'💦',sing:'♪',act:'🎬',talk:'…',live:'♥',eat:'♨',sleep:'zzz',relax:'✨',sulk:'💢',staff:st.role==='manager'?'…':st.role==='trainer'?'♪':'·',style:'✨'}[kind];
     const phase=(a.t%1.6)/1.6;ctx.globalAlpha=1-phase;ctx.fillStyle=kind==='live'?'#ff69aa':'#fff';ctx.font='10px sans-serif';ctx.textAlign='center';ctx.fillText(particle,10,-32-phase*15);
   }
+  if(st.role){ctx.globalAlpha=1;ctx.font='11px sans-serif';ctx.fillText(D.STAFF_ROLES[st.role].icon,0,-35);}
   ctx.restore();
 }
 let lastT=performance.now();
@@ -234,7 +249,8 @@ $('speedBtn').onclick=()=>{speed=speed===4?1:speed*2;$('speedBtn').textContent=`
 $('skipBtn').onclick=skip;
 bindPointer(cv,cam,{blocked:()=>!S,onTap:(x,y)=>{
   if(playback)return;
-  for(const [id,a] of actors)if(!a.hide&&Math.abs(a.x-x)<17&&Math.abs(a.y-16-y)<21){openInteract(id);return;}
+  if(S.scouted.length&&Math.abs(x-78)<20&&Math.abs(y-floorY(0)-65)<35){openCompany('scouted');return;}
+  for(const [id,a] of actors)if(!a.hide&&Math.abs(a.x-x)<17&&Math.abs(a.y-16-y)<21){if(E.starById(S,id))openInteract(id);else openCompany();return;}
   if(y<96 && S.floors.length<D.LEVELS[S.lv].floors){openBuild();return;}
   const i=S.floors.length-1-Math.floor((y-128)/96);if(i>=0&&i<S.floors.length)openFloor(i);
 }});
@@ -332,7 +348,7 @@ function renderTab() {
   if (tab === 'feed') { feedSeen = S.seq; $('bFeed').style.display = 'none'; }
 }
 
-const REASONS = { skill: '最拿手', dream: '夢想', rival: '不想輸給對手', topic: '喜歡這個話題', revenge: '上次沒選上', friend: '想跟朋友一起', wish: '心願', trend: '追流行', big: '想要大舞台', lead: '想當主角', generic: '想試試看' };
+const REASONS = { career:'大目標', skill: '最拿手', dream: '夢想', rival: '不想輸給對手', topic: '喜歡這個話題', revenge: '上次沒選上', friend: '想跟朋友一起', wish: '心願', trend: '追流行', big: '想要大舞台', lead: '想當主角', generic: '想試試看' };
 const gradeChip = g => `<span class="gr" style="background:${g.color}">${g.g}</span>`;
 function opTags(op) {
   const t = [];
@@ -396,7 +412,7 @@ function estimateEnergy(st) {
   let e=st.energy;
   for(const v of st.sched) {
     e+=v.startsWith('job:')?(E.has(st,'hot')?-18:-15):v.startsWith('train:')?(E.has(st,'hot')?-12:-10):v==='rest'?(E.has(st,'chill')?40:30):v==='off'?25:-8;
-    e+=E.roomLv(S,'cafe')?2+4*E.roomLv(S,'cafe'):3;
+    e+=(E.roomLv(S,'cafe')?2+4*E.roomLv(S,'cafe'):3)+E.staffEffect(S,'chef',[4,6,8]);
     if(E.roomLv(S,'dorm'))e+=4+4*E.roomLv(S,'dorm');
     if(E.roomLv(S,'lounge')&&!v.startsWith('job:'))e+=6+2*E.roomLv(S,'lounge');
     e=Math.max(0,Math.min(100,e));
@@ -427,7 +443,7 @@ function floorListHTML() {
 }
 function openFloor(i) {
   const f=S.floors[i], def=D.FLOORS[f.type];
-  const here=[...actors].filter(([,a])=>a.fi===i&&!a.hide).map(([id])=>E.starById(S,id).name);
+  const here=[...actors].filter(([,a])=>a.fi===i&&!a.hide).map(([id])=>(E.starById(S,id)||S.staff.find(st=>st.id===id)).name);
   $('roomTitle').textContent=`${i+1}F ${def.icon} ${def.name} Lv${f.lv}`;
   $('roomBody').innerHTML=`<p class="txt">${def.desc}</p><p class="txt">今天在這層：${here.map(esc).join('、')||'大家都去別處忙了'}</p>${f.lv<3?`<button class="choice" data-room-up="${i}" ${S.money<E.upgradeCost(S,i)?'disabled':''}>升級 $${fmt(E.upgradeCost(S,i))}${S.money<E.upgradeCost(S,i)?'（錢不夠）':''}</button>`:'<p class="muted">已經是最高級！</p>'}`;
   $('roomBox').classList.add('on');
@@ -441,13 +457,18 @@ function openBuild() {
   }).join('');$('roomBox').classList.add('on');
 }
 function openInteract(id) {
-  const st=E.starById(S,id);$('roomTitle').textContent=`${st.emoji} ${st.name} · 信任 ${Math.round(st.trust)}`;
+  const st=E.starById(S,id);$('roomTitle').textContent=`${st.emoji} ${st.name} · ${careerTag(st)} · 信任 ${Math.round(st.trust)}`;
   $('roomBody').innerHTML=`<div style="text-align:center">${ptImg(st)}</div>`+[['chat','💬 聊天'],['snack','🍪 點心 $60'],['cheer','👏 鼓勵'],['talk','☕ 談心 $150']].map(([kind,label])=>`<button class="choice" data-interact="${kind}" data-id="${id}" ${st.done[kind]?'disabled':''}>${label}${st.done[kind]?'（這週做過了）':''}</button>`).join('')+`<button class="choice" data-room-star="${id}">📋 資料</button>`;
   $('roomBox').classList.add('on');
 }
-$('roomClose').onclick=()=>$('roomBox').classList.remove('on');
+let evaluationOpen=false;
+$('roomClose').onclick=()=>{
+ $('roomBox').classList.remove('on');
+ if(evaluationOpen){evaluationOpen=false;if(S.endingPending)showEnding();else if(S.event)openEvent();}
+};
 $('roomBody').onclick=e=>{
   const b=e.target.closest('button');if(!b||playback)return;const d=b.dataset;let err;
+  if(d.trainer||d.evalDebut)return;
   if(d.roomUp!==undefined)err=E.upgradeFloor(S,+d.roomUp);
   if(d.roomBuild)err=E.buildFloor(S,d.roomBuild);
   if(d.roomStar){$('roomBox').classList.remove('on');openStar(d.roomStar);return;}
@@ -458,8 +479,9 @@ $('roomBody').onclick=e=>{
 };
 
 function starsHTML() {
-  let h = `<div class="sec">旗下明星 ${E.team(S).length} / ${D.LEVELS[S.lv].max}</div>`;
-  for (const st of E.team(S)) h += starCard(st);
+  let h = `<div class="sec">已出道明星 ${E.debuted(S).length} / ${D.LEVELS[S.lv].max}</div>`;
+  h += '<div class="sec">⭐ 已出道</div>'+E.debuted(S).map(st=>starCard(st)).join('');
+  h += `<div class="sec">🌱 練習生(下次評鑑:第 ${Math.ceil(S.week/4)*4} 週)</div>`+E.team(S).filter(st=>st.trainee).map(st=>starCard(st)).join('');
   if (S.mentor) h += `<div class="card2"><b>🧑‍🏫 前輩 ${esc(S.mentor.name)}</b><div class="meta">上一季留下來的前輩,不搶工作,教大家練習(練習效果 +15%、演出 +3)。</div></div>`;
   return h;
 }
@@ -469,7 +491,7 @@ function starCard(st, full = false) {
   const plans = `<button class="miniSched" data-schedule="1" aria-label="查看七天行程">${st.sched.map(v=>`<span>${actIcon(v)}</span>`).join('')}</button>`;
   return `<div class="card2"><div class="star"><img class="pt big" data-open="${st.id}" style="--g:${st.glow}33" src="${portrait(st).url}" alt="">
     <div class="body"><div class="nm" style="color:${st.glow}">${st.emoji} ${esc(st.name)} <span class="tag">${st.traits.map(t => D.TRAITS[t].icon + D.TRAITS[t].name).join(' · ')}</span></div>
-    <div class="sk">${sk}</div>
+    <div class="meta">${careerTag(st)} · 潛力 ${E.potentialStars(st)}</div><div class="sk">${sk}</div>
     <div class="bars"><div>${moodFace(st.mood)} 心情${bar(st.mood, '#ff8fb1')}</div><div>⚡ 體力${bar(st.energy, st.energy < 25 ? '#ff6f6f' : '#7fdc8a')}</div><div>💗 歸屬${bar(st.loyalty, st.loyalty < 30 ? '#ff6f6f' : '#b98cff')}</div></div>
     <div class="wish">👥 粉絲 ${fmt(st.fans)}${st.wish ? ` · 💭 ${esc(E.wishText(S, st))}(剩 ${st.wish.left} 週)` : ''}${st.lost >= 2 ? ` · 連續 ${st.lost} 次沒選上` : ''}</div>
     ${fr.length || rv.length ? `<div class="rels">${fr.map(o => '🤝' + esc(o.name)).join(' ')} ${rv.map(o => '⚔️' + esc(o.name)).join(' ')}</div>` : ''}
@@ -492,22 +514,23 @@ function feedHTML() {
 }
 function coHTML() {
   const lv = D.LEVELS[S.lv], nx = D.LEVELS[S.lv + 1], why = E.canUpgrade(S);
-  let h = `<div class="card2"><div class="lvbox"><div><b>🏢 Lv${S.lv} ${lv.name}</b><div class="meta">明星 ${E.team(S).length}/${lv.max} 位 · 每週 ${lv.ops} 個機會 · 房租 $${fmt(lv.rent)}/週</div></div>
+  let h = `<div class="card2"><div class="lvbox"><div><b>🏢 Lv${S.lv} ${lv.name}</b><div class="meta">明星 ${E.debuted(S).length}/${lv.max} 位 · 每週 ${lv.ops} 個機會 · 房租 $${fmt(lv.rent)}/週</div></div>
     ${nx ? `<button class="sbtn" data-up="1" ${why ? 'disabled' : ''}>升級 $${fmt(nx.cost)}</button>` : '<span class="tag">最高級</span>'}</div>
     ${nx ? `<div class="meta">下一級:${nx.name}(要粉絲 ${fmt(nx.fans)}、$${fmt(nx.cost)})→ ${nx.max} 位明星、每週 ${nx.ops} 個機會${S.lv + 1 === 3 ? '、解鎖虛擬演唱會和舞台' : S.lv + 1 === 2 ? '、解鎖廣告/遊戲代言/選秀' : ''}${why ? ' · <b>還差:' + why + '</b>' : ''}</div>` : ''}
     <div class="meta">可以蓋到 ${lv.floors} 層，目前 ${S.floors.length} 層。</div></div>`;
   h += `<div class="card2"><b>🏢 公司樓層</b>${floorListHTML()}<button class="sbtn" data-build="1">🏗 蓋新樓層</button></div>`;
+  h += recruitmentHTML();
   // 試鏡
   h += `<div class="card2"><b>🎙 試鏡</b>`;
   if (S.audition) {
-    h += `<div class="meta">簽約金 $${fmt(D.auditionCost(E.team(S).length))} · 名額 ${E.team(S).length}/${lv.max}</div>`;
+    h += `<div class="meta">簽約金 $${fmt(D.auditionCost(E.debuted(S).length))} · 名額 ${E.debuted(S).length}/${lv.max}</div>`;
     S.audition.forEach((c, i) => {
       h += `<div class="bid"><img class="pt" style="--g:${c.glow}22" src="${portrait(c).url}" alt=""><div class="say" style="--c:${c.glow}">${nameTag(c)}:${esc(c.intro || '')}
-        <div class="why">${c.traits.map(t => D.TRAITS[t].icon + D.TRAITS[t].name).join(' ')} · 專長 ${D.SKILLS[c.spec].icon}${D.SKILLS[c.spec].name} ${c.skills[c.spec].toFixed(1)}</div></div>
+        <div class="why">${c.traits.map(t => D.TRAITS[t].icon + D.TRAITS[t].name).join(' ')} · ${careerTag(c)}<br>${D.SKILL_IDS.map(k=>D.SKILLS[k].icon+c.skills[k].toFixed(1)).join(' ')}</div></div>
         <div class="act"><button class="sbtn" data-sign="${i}">簽約</button></div></div>`;
     });
     h += `<button class="sbtn ghost" data-skipaud="1" style="margin-top:6px">這次都不要</button>`;
-  } else h += `<div class="meta">${E.team(S).length >= lv.max ? '名額滿了,升級公司才能找新人。' : S.auditionIn > 0 ? `${S.auditionIn} 週後可以再辦試鏡。` : '可以辦試鏡了!'}</div>${E.team(S).length < lv.max && S.auditionIn <= 0 ? '<button class="sbtn" data-aud="1">辦試鏡</button>' : ''}`;
+  } else h += `<div class="meta">${E.debuted(S).length >= lv.max ? '名額滿了,升級公司才能找新人。' : S.auditionIn > 0 ? `${S.auditionIn} 週後可以再辦試鏡。` : '可以辦試鏡了!'}</div>${E.debuted(S).length < lv.max && S.auditionIn <= 0 ? '<button class="sbtn" data-aud="1">辦試鏡</button>' : ''}`;
   h += '</div>';
   // 排行
   h += `<div class="card2"><b>📊 公司排行(粉絲數)</b><ul class="rank">${E.ranking(S).map((r, i) => `<li class="${r.me ? 'me' : ''}">${i + 1}. ${r.icon} ${esc(r.name)}<span class="f">${fmt(r.fans)}</span></li>`).join('')}</ul><div class="meta">每 12 週公布「季度星光榜」,前幾名有獎金。</div></div>`;
@@ -521,11 +544,16 @@ function coHTML() {
 
 // 分頁裡的按鈕(事件委派)
 $('panel').addEventListener('click', e => {
-  const b = e.target.closest('[data-assign],[data-pick],[data-plan],[data-talk],[data-outfit],[data-meet],[data-up],[data-floor],[data-build],[data-day],[data-auto],[data-schedule],[data-sign],[data-skipaud],[data-aud],[data-ng],[data-backup],[data-open],[data-ev]');
+  const b = e.target.closest('[data-hire],[data-fire],[data-scout-sign],[data-scout-no],[data-debut],[data-assign],[data-pick],[data-plan],[data-talk],[data-outfit],[data-meet],[data-up],[data-floor],[data-build],[data-day],[data-auto],[data-schedule],[data-sign],[data-skipaud],[data-aud],[data-ng],[data-backup],[data-open],[data-ev]');
   if (!b || !S || playback) return;
   const d = b.dataset;
   let err = null;
-  if (d.assign) { err = doAssign(d.assign, +d.slot, d.star); }
+  if(d.hire) {if(d.hire==='trainer'){openTrainer();return;} err=E.hire(S,d.hire);}
+  else if(d.fire) {if(confirm('謝謝你，再見。確定要讓這位員工離職嗎?'))E.fireStaff(S,d.fire);}
+  else if(d.scoutSign) err=E.signScouted(S,d.scoutSign);
+  else if(d.scoutNo) E.dismissScouted(S,d.scoutNo);
+  else if(d.debut) err=E.debut(S,d.debut);
+  else if (d.assign) { err = doAssign(d.assign, +d.slot, d.star); }
   else if (d.pick) { openPicker(d.pick, +d.slot); return; }
   else if (d.plan) { err = E.setPlan(S, d.star, d.plan); if (!err) sfx.tap(); }
   else if (d.talk) { err = E.talk(S, d.talk); if (!err) sfx.pick(); }
@@ -666,7 +694,8 @@ $('repMore').addEventListener('click', () => { $('repList').classList.add('all')
 $('repGo').addEventListener('click', () => {
   $('repBox').classList.remove('on'); sfx.tap();
   render();
-  if (S.endingPending) showEnding();
+  if(S.report?.evaluation?.length) openEvaluation(S.report);
+  else if (S.endingPending) showEnding();
   else if (S.event) openEvent();
 });
 
@@ -827,8 +856,47 @@ requestAnimationFrame(frame);
 
 // 開發用:自動玩家、快轉
 if (import.meta.env?.DEV !== false) window.AS = {   // 開發用(正式版沒有;Node 假 DOM 測試也要用)
-  get S() { return S; }, actors, cam, view, E, D, play, skip, render, save, boot, showEnding, openEvent, refreshStart, loadBest: () => loadBest(SAVE_KEY),
+  get S() { return S; }, openEvaluation, openTrainer, actors, cam, view, E, D, play, skip, render, save, boot, showEnding, openEvent, refreshStart, loadBest: () => loadBest(SAVE_KEY),
   next() { $('nextBtn').click(); }, closeReport() { $('repGo').click(); },
   // 窗格在背景時 requestAnimationFrame 不跑:手動推進 sec 秒的畫格
   tick(sec = 1) { const t0 = performance.now(); for (let t = 0; t < sec; t += 0.05) { step(0.05); updateBubbles(t0 + t * 1000); } draw(t0 + sec * 1000); updateBubbles(t0 + sec * 1000); },
 };
+
+function staffTarget(st,idx) {
+ const p=playback?(playback.t%4)/4:0.3;
+ let type=st.role==='trainer'?(st.skill==='charm'?'style':st.skill):D.STAFF_ROLES[st.role].floor;
+ let fi=roomIndex(type);if(fi<0)fi=0;
+ const outside=!!playback&&p>=0.85;
+ if(outside)fi=0;
+ else if(playback&&p>=0.45&&p<0.60){fi=Math.max(0,roomIndex('cafe'));}
+ let [x,y]=ROOMS[S.floors[fi].type].spots[idx%4];
+ if(!(playback&&p>=0.45&&p<0.60)){[x,y]=st.role==='chef'?[40,59]:st.role==='manager'?[85,78]:st.role==='trainer'?[244,79]:st.role==='scout'?[48,73]:[42,77];}
+ return {fi,x:outside?10:x,y:floorY(fi)+y,act:p>=0.45&&p<0.60?'eat':'staff',outside};
+}
+function recruitmentHTML() {
+ const lv=E.roomLv(S,'scout'), reveal=lv>=3||S.staff.some(st=>st.role==='scout'&&st.lv===3);
+ return `<div class="card2" id="scouted"><b>🔭 星探發掘</b><div class="meta">練習生 ${E.team(S).filter(st=>st.trainee).length}/${E.traineeCapacity(S)} 位${lv?'':' · 蓋星探部就能找新人'}</div>`+S.scouted.map(st=>`<div class="bid">${ptImg(st)}<div class="say">${nameTag(st)}<div class="why">${st.traits.map(t=>D.TRAITS[t].name).join(' · ')}<br>${careerTag(st)} · 潛力 ${lv>=2?E.potentialStars(st):'?'}${reveal?' · 專長 '+D.SKILLS[E.bestSkill(st)].name:''}<br>${esc(st.intro)}</div><button class="sbtn" data-scout-sign="${st.id}">簽成練習生 $300</button> <button class="sbtn ghost" data-scout-no="${st.id}">不用了</button></div></div>`).join('')+`</div><div class="card2"><b>👥 員工 (${S.staff.length}/${1+S.lv})</b>`+S.staff.map(st=>`<div class="floorRow"><div>${D.STAFF_ROLES[st.role].icon} ${esc(st.name)} Lv${st.lv}${st.skill?' · '+D.SKILLS[st.skill].name:''}<div class="meta">${D.STAFF_ROLES[st.role].desc} · 週薪 $${D.staffSalary(st)}</div></div><button class="sbtn ghost" data-fire="${st.id}">謝謝你，再見</button></div>`).join('')+`<div class="h4">請人 $${600+300*S.staff.length}</div>`+Object.entries(D.STAFF_ROLES).map(([role,r])=>{const why=E.canHire(S,role);return `<button class="choice" data-hire="${role}" ${why?'disabled':''}>${r.icon} ${r.name}<div class="meta">${r.desc}${why?' · '+why:''}</div></button>`;}).join('')+'</div>';
+}
+function openTrainer() {
+ $('roomTitle').textContent='🏋 訓練師要教哪一科?';
+ $('roomBody').innerHTML=D.SKILL_IDS.map(k=>`<button class="choice" data-trainer="${k}">${D.SKILLS[k].icon} ${D.SKILLS[k].name}</button>`).join('');$('roomBox').classList.add('on');
+}
+$('roomBody').addEventListener('click',e=>{
+ const b=e.target.closest('[data-trainer],[data-eval-debut]');if(!b||playback)return;
+ const err=b.dataset.trainer?E.hire(S,'trainer',b.dataset.trainer):E.debut(S,b.dataset.evalDebut);
+ if(err)toast(err);else if(b.dataset.trainer)$('roomBox').classList.remove('on');
+ else openEvaluation(S.report); saveSoon();render();
+});
+function openEvaluation(R) {
+ evaluationOpen=true;
+ $('roomTitle').textContent='🌱 月末評鑑 · 第 '+R.week+' 週';
+ $('roomBody').innerHTML=`<div style="text-align:center"><img width="192" height="96" src="${spr('score_board').toDataURL()}" alt="評鑑分數板"></div>`+R.evaluation.map(ev=>{
+ const st=E.starById(S,ev.id),why=E.debuted(S).length>=D.LEVELS[S.lv].max?'名額滿了，公司升級後才能出道':S.money<1000?'出道舞台要 $1,000':'';
+ return `<div class="bid">${ptImg(st)}<div class="say"><b>${esc(st.name)}</b> · 練習 ${ev.weeks} 週<div><strong style="font-size:36px;color:${D.GRADES.find(g=>g.g===ev.grade).color}">${ev.grade}</strong> ${ev.score.toFixed(1)} 分</div>${!st.trainee?'🎉 已出道!':ev.canDebut?`<button class="choice" data-eval-debut="${st.id}" ${why?'disabled':''}>${why||'🎉 出道! $1,000'}</button>`:'繼續練習，下次再加油!'}</div></div>`;
+ }).join('');$('roomBox').classList.add('on');
+}
+
+function openCompany(section) {
+ tab='co';for(const b of $('tabs').children)b.classList.toggle('on',b.dataset.tab===tab);
+ render();if(section)$(section)?.scrollIntoView?.({block:'nearest'});
+}
