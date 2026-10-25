@@ -587,8 +587,7 @@ function startDay() {
 }
 function makeChallenge() {
   const ids = stocked();
-  const k = Y.weightedPick([['flavor', 2], ['three', 1], ['seated', 1], ['five', 1], ['cups', 1], ...(settings.math ? [['math', 1]] :
-    [])], rnd);
+  const k = Y.weightedPick([['flavor', 2], ['three', 1], ['seated', 1], ['five', 1], ['cups', 1]], rnd);
   return {
     kind: k,
     flavor: ids[Math.floor(rnd() * ids.length)],
@@ -772,7 +771,9 @@ function submit(made = craft, auto = false, answer = true) {
   dirtyUI = true;
   const cash = rnd() < .3 ? g.bill : [10, 20, 50, 100].find(n => n >= g.bill) || Math.ceil(g.bill / 100) * 100;
   g.cash = cash;
-  if (!auto && settings.math && cash > g.bill) {
+  // 流程要短:一般客人做好就自動收錢,只有 ✨ 特別客人才出一題找錢(設定可關)
+  const quiz = settings.math && g.special && cash > g.bill;
+  if (!auto && quiz) {
     pendingChange = g;
     $('change').hidden = false;
     $('changeQuestion').textContent = `收到 $${cash}，雪糕 $${g.bill}，要找多少？`;
@@ -788,7 +789,7 @@ function submit(made = craft, auto = false, answer = true) {
     $('changeOpts').innerHTML = [...opts].sort(() => rnd() - .5).map(v => `<button data-change="${v}">$${v}</button>`).join('');
     return true;
   }
-  completePay(g, auto && settings.math && cash > g.bill ? answer : null);
+  completePay(g, auto && quiz ? answer : null);
   return true;
 }
 function answerChange(n) {
@@ -2274,7 +2275,7 @@ function showSettings() {
 }
 function renderSettings() {
   $('settingsBody').innerHTML = [
-    `<div class="row"><button data-setting="math">找錢練習：${settings.math ? '開' :
+    `<div class="row"><button data-setting="math">✨特別客人找錢題：${settings.math ? '開' :
       '關'}</button><button data-setting="sfx">音效：${audioPrefs.sfx ? '開' : '關'}`,
     `</button><button data-setting="music">音樂：${audioPrefs.music === 'off' ? '關' : '開'}</button></div>`
   ].join('');
