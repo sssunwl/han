@@ -337,9 +337,8 @@ export function beginWeek(S) {
 
   for (const st of team(S)) {
     st.talkedThisWeek = false; st.done = {};
-    if (!st.sched) autoArrange(S, st.id);
-    else st.sched = st.sched.map(v => v.startsWith('job:') ? 'train:' + bestSkill(st) : v);
-    st.jobs = [];
+    st.jobs = []; st.sched = Array(7).fill('rest');
+    if (st.planAuto !== false || !ACT_NAMES[st.plan]) autoArrange(S, st.id); else applyPlan(S, st);
     if (st.cold) { st.sched[0] = st.sched[1] = 'rest'; st.cold = false; st.sickDays = [0,1]; say(S, st, L.TIRED, {}, 'sad'); }
     else st.sickDays = [];
     if(st.restUntil>S.week){st.sched=Array(7).fill('rest');st.sickDays=[0,1,2,3,4,5,6];}else if(st.travelUntil>S.week){st.sched=Array(7).fill('off');st.sickDays=[0,1,2,3,4,5,6];}
@@ -420,7 +419,7 @@ export function assign(S, opId, slotIdx, starId) {
   if(!isFree(st,op)) return `${st.name}這週排不下，要留 ${op.days} 天空檔`;
   const slot = op.slots[slotIdx];
   if (!slot || slot.who) return '這個角色已經有人了';
-  slot.who = st.id; st.jobs.push(op.id); scheduleJob(st, op);
+  slot.who = st.id; st.jobs.push(op.id); scheduleJob(st, op); applyPlan(S, st);
   completePlans(S,st,op,slotIdx);
   const bid = op.bids.find(b => b.id === st.id);
   if (op.groupId && slotIdx === 0 && op.type === 'group_album') {
@@ -506,24 +505,39 @@ export function setDay(S, id, d, value) {
   if (!ACT_NAMES[value]) return '不能排這種行程';
   st.sched[d] = value; return null;
 }
-// 保留舊呼叫介面，事件與外部自動玩家也能使用。
+// v4:每週只選一個安排(st.plan)。工作天照預約,其他週一~六做這件事,週日固定休息;體力低時自動插一天休息。
+export const PLAN_OPTIONS = ['train:sing','train:dance','train:act','train:talk','train:charm','live','rest','off'];
+export function applyPlan(S, st) {
+  if (!st || st.gone) return;
+  st.sched ||= Array(7).fill('rest');
+  if (st.travelUntil > S.week) { st.sched = Array(7).fill('off'); return; }
+  if (st.restUntil > S.week) { st.sched = Array(7).fill('rest'); return; }
+  const plan = ACT_NAMES[st.plan] ? st.plan : 'train:' + bestSkill(st);
+  const free = [0,1,2,3,4,5,6].filter(d => !st.sched[d].startsWith('job:'));
+  for (const d of free) st.sched[d] = d === 6 ? (plan === 'off' || st.needOff || st.wish?.type === 'rest' ? 'off' : 'rest') : plan;
+  const busy = plan.startsWith('train:') || plan === 'live';
+  const jobs = st.sched.filter(v => v.startsWith('job:')).length;
+  if (busy && (st.energy < 45 || jobs >= 3)) { const d = free.find(d => d >= 2 && d < 6) ?? free.find(d => d < 6); if (d != null) st.sched[d] = 'rest'; }
+  if (busy && st.energy < 25) { const d = free.find(d => d < 6 && st.sched[d] !== 'rest'); if (d != null) st.sched[d] = 'rest'; }
+  for (const d of st.sickDays || []) if (!st.sched[d].startsWith('job:')) st.sched[d] = 'rest';
+}
+export function restWeek(S, st) { for (let d = 0; d < 7; d++) if (!st.sched[d].startsWith('job:')) st.sched[d] = 'rest'; }
 export function setPlan(S,id,value) {
   const st = starById(S,id); if (!st || !ACT_NAMES[value]) return '行程不正確';
-  for (let d=0; d<7; d++) if (!st.sched[d].startsWith('job:')) setDay(S,id,d,value);
+  st.plan = value; st.planAuto = false; applyPlan(S, st);
   return null;
+}
+export function autoPlan(S, st) {
+  const ks = D.SKILL_IDS.slice().sort((a,b)=>st.skills[b]-st.skills[a]);
+  if (st.energy < 30) return 'rest';
+  if (st.sprint) return 'train:' + st.sprint.skill;
+  if (st.wish?.type === 'train') return 'train:' + st.wish.skill;
+  if (st.trainee) return 'train:' + ks[(S.week + st.id.length) % 3];
+  return 'train:' + (D.CAREERS[st.career]?.skill || ks[0]);
 }
 export function autoArrange(S,id) {
   const st = starById(S,id); if (!st || st.gone) return;
-  st.sched ||= Array(7).fill('rest');
-  if(st.travelUntil>S.week){st.sched=Array(7).fill('off');return;}
-  if(st.restUntil>S.week){st.sched=Array(7).fill('rest');return;}
-  const ks = D.SKILL_IDS.slice().sort((a,b)=>st.skills[b]-st.skills[a]);
-  const free = [6,0,1,2,3,4,5].filter(d=>!st.sched[d].startsWith('job:'));
-  let n=0;
-  for (const d of free) st.sched[d] = 'train:' + (st.sprint ? st.sprint.skill : st.wish?.type === 'train' ? st.wish.skill : (st.trainee ? ks[n++ % 3] : D.CAREERS[st.career]?.skill || ks[n++ % 2]));
-  if (free.length) st.sched[free[0]] = st.wish?.type === 'rest' ? 'off' : 'rest';
-  if (st.energy < 40) for (const d of free.filter(d=>d!==6).slice(0,2)) st.sched[d]='rest';
-  for (const d of st.sickDays || []) if (!st.sched[d].startsWith('job:')) st.sched[d]='rest';
+  st.plan = autoPlan(S, st); st.planAuto = true; applyPlan(S, st);
 }
 export function autoArrangeAll(S) { for (const st of team(S)) autoArrange(S,st.id); }
 export function floorFor(S, value, op = null) {
@@ -556,8 +570,13 @@ export function upgradeFloor(S,i) {
   const cost=upgradeCost(S,i); if (S.money<cost) return `要 $${fmt(cost)}`;
   S.money-=cost; f.lv++; feed(S,null,`${D.FLOORS[f.type].icon} ${i+1}F 升到 Lv${f.lv}！`,'good'); return null;
 }
+// 舊存檔沒有 st.plan:從現有行程挑最多的那個當這週的安排,下週照自動排
+function guessPlan(st) {
+  const n = {}; for (const v of (st.sched || []).slice(0,6)) if (ACT_NAMES[v]) n[v] = (n[v]||0) + 1;
+  st.plan = Object.keys(n).sort((a,b)=>n[b]-n[a])[0] || 'rest'; st.planAuto = true;
+}
 export function migrate(S) {
-  if(S.v===8) return S;
+  if(S.v===8) { for(const st of S.stars||[]) if(!ACT_NAMES[st.plan]) guessPlan(st); return S; }
   if(S.v===7) {
     S.pipeline=[]; S.pendingEvents=[]; S.eventHistory={};
     for(const st of [...S.stars,...(S.audition||[]),...(S.scouted||[]),...(S.walkins||[])]){st.sprint=null;st.expect=null;}
@@ -608,10 +627,10 @@ export function migrate(S) {
   for(const op of S.ops) { op.days=MEDIA[op.type].days; op.weeks=MEDIA[op.type].weeks; op.left=Math.min(op.left,op.weeks); op.log={}; }
   for(const st of [...S.stars,...(S.audition||[])]) {
     st.jobs=st.job?[st.job]:[]; st.trust=40; st.done={};
-    st.sched=null; st.sickDays=[];
+    st.sched=null; st.sickDays=[]; delete st.plan;
     autoArrange(S,st.id);                              // 沒工作的人照專長排練習、週日休息
     if(st.job) { const op=opById(S,st.job); if(op) scheduleJob(st,op); }
-    delete st.job; delete st.plan;
+    delete st.job;
   }
   S.v=2; return migrate(S);
 }
@@ -742,8 +761,8 @@ export const EVENTS = [
     ] },
   { id: 'cold', w: 0.8, when: S => pick(S, team(S).filter(s => !(s.jobs || []).length)), title: st => `${st.name} 感冒了`, text: st => '一直打噴嚏,聲音也啞了……',
     choices: st => [
-      {  hint: '會影響:體力 ↑ 錢 ↓',label: '🏥 帶去看醫生($200)', cost: 200, go: S => { st.energy = Math.max(st.energy, 60); setPlan(S, st.id, 'rest'); return `看完醫生好多了,這週先休息。`; } },
-      {  hint: '會影響:心情 ↓ 體力暫時受限 行程改休息',label: '🛌 在家休息', go: S => { st.energy = Math.min(st.energy, 30); setPlan(S, st.id, 'rest'); st.mood -= 4; return `${st.name}在家休息,體力恢復得比較慢。`; } },
+      {  hint: '會影響:體力 ↑ 錢 ↓',label: '🏥 帶去看醫生($200)', cost: 200, go: S => { st.energy = Math.max(st.energy, 60); restWeek(S, st); return `看完醫生好多了,這週先休息。`; } },
+      {  hint: '會影響:心情 ↓ 體力暫時受限 行程改休息',label: '🛌 在家休息', go: S => { st.energy = Math.min(st.energy, 30); restWeek(S, st); st.mood -= 4; return `${st.name}在家休息,體力恢復得比較慢。`; } },
     ] },
   { id: 'down', w: 0.7, when: S => true, title: () => '直播島伺服器當機!', text: () => '這週直播和 Podcast 都沒辦法播。',
     choices: () => [{  hint: '會影響:直播與 Podcast 收入 ↓',label: '😮 好吧', go: S => { S.flags.down = true; return '這週直播、Podcast 收入是 0,自己直播也不行。'; } }] },
@@ -767,7 +786,7 @@ export const EVENTS = [
     ] },
   { id: 'tired', w: 1, when: S => team(S).filter(s => s.energy < 45).sort((a, b) => a.energy - b.energy)[0], title: st => `${st.name} 太累了,想放假`, text: st => withCatch(S0, st, pick(S0, L.TIRED._)),
     choices: st => [
-      {  hint: '會影響:心情 ↑ 歸屬 ↑ 體力 ↑',label: '🏖 放假一週', go: S => { if (!st.jobs.length) setPlan(S, st.id, 'rest'); st.energy += 25; st.mood += 15; st.loyalty += 5; return `${st.name}好好休息,充飽電了。`; } },
+      {  hint: '會影響:心情 ↑ 歸屬 ↑ 體力 ↑',label: '🏖 放假一週', go: S => { if (!st.jobs.length) restWeek(S, st); st.energy += 25; st.mood += 15; st.loyalty += 5; return `${st.name}好好休息,充飽電了。`; } },
       {  hint: '會影響:心情 ↓ 歸屬 ↓',label: '💪 再撐一下', go: S => { st.mood -= 10; st.loyalty -= 6; return `${st.name}嘆了一口氣……`; } },
     ] },
   { id: 'snack', w: 0.8, when: S => true, title: () => '粉絲送來一大盒點心!', text: () => '是手作的餅乾,上面畫著每個人的臉。',
@@ -1332,7 +1351,7 @@ function fillGroupSlots(S, op) {
     if (op.slots.some(s => s.who === id)) continue;
     const slot = op.slots.find(s => !s.who), st = starById(S, id);
     if (!slot || !st || st.gone || !isFree(st, op)) continue;
-    slot.who = id; st.jobs.push(op.id); scheduleJob(st, op);
+    slot.who = id; st.jobs.push(op.id); scheduleJob(st, op); applyPlan(S, st);
   }
 }
 

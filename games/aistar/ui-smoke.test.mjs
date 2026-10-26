@@ -24,7 +24,7 @@ function node(id='') {
 }
 const document={getElementById:id=>{if(!nodes.has(id))nodes.set(id,node(id));return nodes.get(id);},createElement:()=>node(),addEventListener:noop};
 for(const match of readFileSync(new URL('./index.html',import.meta.url),'utf8').matchAll(/id="([^"]+)"/g))document.getElementById(match[1]);
-document.getElementById('tabs').children=['ops','sched','stars','prod','co'].map(tab=>Object.assign(node(),{dataset:{tab}}));
+document.getElementById('tabs').children=['ops','stars','prod','co'].map(tab=>Object.assign(node(),{dataset:{tab}}));
 globalThis.document=document;globalThis.devicePixelRatio=1;globalThis.ImageData=class {constructor(data,w,h){Object.assign(this,{data,width:w,height:h});}};
 const storage=new Map();
 const localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,String(v))};
@@ -62,7 +62,7 @@ AS.openNpc(AS.S.rivals[0].stars[0].id);assert.match(document.getElementById('roo
 console.log('第四階段假 DOM:合作公司/邀請卡、參觀 canvas、NPC 資料可 render');
 
 const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');
-assert.equal([...html.matchAll(/data-tab="/g)].length,5);assert.ok(!html.includes('data-tab="feed"'));assert.match(html,/id="logBtn"/);assert.match(html,/id="notifications"/);
+assert.equal([...html.matchAll(/data-tab="/g)].length,4);assert.ok(!html.includes('data-tab="feed"'));assert.match(html,/id="logBtn"/);assert.match(html,/id="notifications"/);
 const U=E.newGame({seed:777});U.money=100000;U.lv=4;U.district='harbor';while(!U.walkins.length)E.walkinWeek(U);AS.boot(U);AS.tick(1);
 AS.openWalkin(U.walkins[0].id);assert.match(document.getElementById('roomBody').innerHTML,/簽約/);assert.match(document.getElementById('roomBody').innerHTML,/婉拒/);assert.match(document.getElementById('roomBody').innerHTML,/潛力/);
 const rookie=U.walkins.find(st=>st.trainee);if(rookie)assert.match(AS.walkinHTML(rookie),/\?/);
@@ -79,12 +79,12 @@ console.log('v3-A 假 DOM:5 分頁、紀錄/紅點、3 則通知與到期、自�
 const B=E.newGame({seed:733});AS.boot(B);AS.openAssistant();assert.match(document.getElementById('roomBody').innerHTML,/教學提示:開/);assert.match(document.getElementById('roomBody').innerHTML,/3,000/);assert.ok(AS.actors.has('assistant'));
 assert.match(AS.adviceCard(),/本週建議/);B.adviceDismissedWeek=B.week;assert.equal(AS.adviceCard(),'');B.week++;assert.match(AS.adviceCard(),/本週建議/);
 // 關閉／重開遊戲保留已看過的教學，只有按知道了才記錄。
-const tip=document.getElementById('tutorialCard');tip.hidden=true;tip.innerHTML='';AS.showTip('ops');assert.equal(tip.hidden,false);document.getElementById('tipUnderstood').onclick();assert.ok(B.seenTips.includes('ops'));tip.hidden=true;tip.innerHTML='';AS.showTip('ops');assert.equal(tip.hidden,true);AS.showTip('sched');assert.match(tip.innerHTML,/點一天/);document.getElementById('tipUnderstood').onclick();
+const tip=document.getElementById('tutorialCard');tip.hidden=true;tip.innerHTML='';AS.showTip('ops');assert.equal(tip.hidden,false);document.getElementById('tipUnderstood').onclick();assert.ok(B.seenTips.includes('ops'));tip.hidden=true;tip.innerHTML='';AS.showTip('ops');assert.equal(tip.hidden,true);AS.showTip('sched');assert.match(tip.innerHTML,/每週選一件事/);document.getElementById('tipUnderstood').onclick();
 const bstar=B.stars[0];AS.openStar(bstar.id);assert.match(document.getElementById('starBody').innerHTML,/📈 發展分析/);assert.match(document.getElementById('starBody').innerHTML,/下一個目標/);assert.doesNotMatch(AS.analysisHTML(bstar),/🧭 適性/);
 B.assistant.lv=2;assert.match(AS.analysisHTML(bstar),/🧭 適性/);AS.openPicker(B.ops[0].id,0);assert.match(document.getElementById('pickList').innerHTML,/會影響:/);
 B.event={id:'test',title:'測試',text:'',choices:[{label:'休息',hint:'會影響:體力 ↑ 心情 ↑'}]};AS.openEvent();assert.match(document.getElementById('evChoices').innerHTML,/體力 ↑/);
 B.tipsOff=true;AS.openEvent();assert.doesNotMatch(document.getElementById('evChoices').innerHTML,/會影響/);AS.openPicker(B.ops[0].id,0);assert.doesNotMatch(document.getElementById('pickList').innerHTML,/會影響/);
-B.tipsOff=false;bstar.sched=Array(7).fill('rest');const prior=AS.scheduleHTML();assert.match(prior,/scheduleStats/);assert.match(prior,/🎤\d\.\d/);assert.match(prior,/<b>[\s\S]*?⚡/);assert.match(prior,/體力 ↑↑/);AS.cycleDay(bstar.id,0);assert.notEqual(AS.scheduleHTML(),prior);assert.match(AS.scheduleHTML(),/本週 .*? \+\d\.\d/);
+B.tipsOff=false;bstar.sched=Array(7).fill('rest');const prior=AS.scheduleHTML();assert.match(prior,/scheduleStats/);assert.match(prior,/🎤\d\.\d/);assert.match(prior,/<b>[\s\S]*?⚡/);assert.match(prior,/體力 ↑↑/);assert.match(prior,/data-plan="train:sing"/);assert.match(prior,/weekStrip/);AS.E.setPlan(B,bstar.id,'train:dance');assert.equal(bstar.sched[6],'rest');assert.equal(bstar.sched.filter(v=>v==='train:dance').length>=5,true);assert.notEqual(AS.scheduleHTML(),prior);assert.match(AS.scheduleHTML(),/本週 .*? \+\d\.\d/);assert.match(AS.scheduleHTML(),/class="on">💃/);
 assert.match(html,/repeat\(7,minmax\(34px/);B.week=30;B.assistant.lv=0;assert.equal(AS.adviceCard(),'');AS.openAssistant();assert.match(document.getElementById('roomBody').innerHTML,/升級成分析師/);
 console.log('v3-B 假 DOM:小助理、建議卡/收起、首次教學、事件/選人 hint 開關、分析頁與行程即時指數通過');
 // 實際小助理按鈕、候選揭露層級、推薦與日夜位置。

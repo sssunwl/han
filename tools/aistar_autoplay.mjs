@@ -77,7 +77,7 @@ export function botWeek(S, style = 'mix') {
   // 巨蛋未達到預估時，利用空檔補該角色的技能。
   if(dome) for(const [i,id] of (S._domePlan||[]).entries()) if(id && !E.starById(S,id).jobs.includes(dome.id)) {
     const st=E.starById(S,id), k=E.mainSkill({w:dome.sw[i]});
-    for(let d=0;d<6;d++) if(!st.sched[d].startsWith('job:')) E.setDay(S,id,d,'train:'+k);
+    E.setPlan(S,id,'train:'+k);
   }
   // 4. 照顧人:歸屬感低就談心,心願能買就買
   for (const st of style === 'lazy' ? [] : E.team(S)) {

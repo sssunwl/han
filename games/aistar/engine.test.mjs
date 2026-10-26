@@ -480,3 +480,19 @@ function showScheduled(S,id,st=S.stars[0]){
  for(const ev of added){const count=ev.choices(fresh().stars[0]).length;for(let i=0;i<count;i++){const S=fresh(9070);S.money=100000;showScheduled(S,ev.id);const result=E.chooseEvent(S,i);assert.equal(S.event,null,ev.id);assert.equal(typeof result,'string');for(const st of S.stars)for(const k of ['mood','loyalty','trust','energy','fans'])assert.ok(Number.isFinite(st[k]),ev.id+'.'+k);assert.ok(Number.isFinite(S.money));assert.doesNotThrow(()=>JSON.parse(JSON.stringify(S)));}}
  console.log('v3-C:新增 '+added.length+' 個事件('+added.filter(e=>!e.followup).length+' 個獨立事件),每個選項均可執行並存檔');
 }
+{
+ // v4:每週只選一件事
+ const S=E.newGame(4242), st=E.team(S)[0];
+ st.energy=90; st.sickDays=[]; st.sched=Array(7).fill('rest'); st.sched[1]='job:x';
+ assert.equal(E.setPlan(S,st.id,'train:dance'),null);
+ assert.equal(st.plan,'train:dance'); assert.equal(st.planAuto,false);
+ assert.equal(st.sched[1],'job:x'); assert.equal(st.sched[6],'rest');
+ assert.equal(st.sched.filter(v=>v==='train:dance').length,5);
+ st.energy=20; E.applyPlan(S,st);
+ assert.ok(st.sched.filter(v=>v==='rest').length>=3,'體力低要插休息');
+ assert.equal(E.setPlan(S,st.id,'off'),null); assert.equal(st.sched[6],'off');
+ E.autoArrange(S,st.id); assert.equal(st.planAuto,true); assert.ok(E.PLAN_OPTIONS.includes(st.plan));
+ st.planAuto=false; st.plan='live'; st.energy=90; E.endWeek(S); while(S.event)E.chooseEvent(S,0);
+ assert.equal(st.plan,'live','玩家選的安排下週保留');
+ console.log('v4:每週一件事、週日休息、低體力插休息、保留玩家選擇通過');
+}

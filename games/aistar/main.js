@@ -371,7 +371,7 @@ $('tabs').addEventListener('click', e => {
 });
 function renderTab() {
   const p = $('panel'), y = p.scrollTop;
-  p.innerHTML = tab === 'ops' ? opsHTML() : tab === 'sched' ? scheduleHTML() : tab === 'stars' ? starsHTML() : tab === 'prod' ? prodHTML() : coHTML();
+  p.innerHTML = tab === 'ops' ? opsHTML() : tab === 'stars' ? starsHTML() : tab === 'prod' ? prodHTML() : coHTML();
   if(playback) {                                   // 播放中:先看就好,只有「看事件」可以按
     p.innerHTML='<div class="card2" style="background:#efe9ff"><b>▶ 這週播放中</b><div class="meta">按下面的「⏭ 跳過播放」或右上角 ⏭ 就能馬上排下一週。</div></div>'+p.innerHTML;
     p.querySelectorAll('button:not([data-ev])').forEach(b=>b.disabled=true);
@@ -469,14 +469,27 @@ function estimateEnergy(st) {
   }
   return Math.round(e);
 }
-function scheduleHTML() {
-  return `<div class="card2"><button class="sbtn" data-auto="1">🪄 全部自動排</button><div class="meta">點格子換行程。工作已預約，週日記得休息!</div>${impact('🛏 休息 體力 ↑↑ · 🎉 放假 體力 ↑ 心情 ↑↑ · 練習 技能 ↑ 體力 ↓ · 🔴 直播 粉絲 ↑ 錢 ↑ 體力 ↓ · 🎬 工作 體力 ↓↓')}</div>`+E.team(S).map(st=>{
-    const e=estimateEnergy(st), rest=st.sched.some(v=>v==='rest'||v==='off');
-    return `<div class="scheduleRow"><div class="scheduleStats">${scheduleStats(st)}</div>${st.sprint?`<div class="scheduleNote">🎯 衝刺:${D.SKILLS[st.sprint.skill].name} ${st.skills[st.sprint.skill].toFixed(1)} → ${st.sprint.target}(${st.sprint.left} 週)</div>`:''}<div class="scheduleGrid"><div class="person">${ptImg(st)}${esc(st.name)}${bar(st.energy,'#61bb8b')}</div>${st.sched.map((v,d)=>`<button data-day="${d}" data-star="${st.id}" class="${v.startsWith('job:')?'job':''}" title="週${E.DAY_NAMES[d]} ${esc(E.ACT_NAMES[v]||'工作')}"><small>${E.DAY_NAMES[d]}</small>${actIcon(v)}</button>`).join('')}</div><div class="scheduleNote" style="color:${e<20||!rest?'#b83a4e':'#75658b'}">這週體力預估 ${e}${e<20?' · 😵 太累了':''}${!rest?' · ⚠ 沒有休息日':''} ${scheduleGains(st)}</div></div>`;
-  }).join('');
+const PLAN_LABEL={'train:sing':'🎤 唱','train:dance':'💃 舞','train:act':'🎭 演','train:talk':'🎙 說','train:charm':'💄 魅','live':'🔴 直播','rest':'🛏 休息','off':'🎉 放假'};
+let openCards=new Set();
+try{openCards=new Set(JSON.parse(localStorage.getItem('aistar-open-cards')||'[]'));}catch{}
+function toggleCard(id){openCards.has(id)?openCards.delete(id):openCards.add(id);try{localStorage.setItem('aistar-open-cards',JSON.stringify([...openCards]));}catch{}render();}
+// 明星+行程合併:每人一張卡,收起時只看指數與「這週做什麼」,展開看完整資料
+function planRow(st){
+  const locked=st.restUntil>S.week||st.travelUntil>S.week;
+  const week=`<div class="weekStrip" title="這週七天">${st.sched.map((v,d)=>`<span class="${v.startsWith('job:')?'job':''}"><small>${E.DAY_NAMES[d]}</small>${actIcon(v)}</span>`).join('')}</div>`;
+  if(locked)return week+`<div class="scheduleNote">${st.restUntil>S.week?'🏥 休養中,這週都休息':'✈ 海外交流中'}</div>`;
+  const e=estimateEnergy(st);
+  return `<div class="planPick">${E.PLAN_OPTIONS.map(v=>`<button data-plan="${v}" data-star="${st.id}" class="${st.plan===v?'on':''}">${PLAN_LABEL[v]}</button>`).join('')}</div>${week}<div class="scheduleNote" style="color:${e<20?'#b83a4e':'#75658b'}">${st.planAuto!==false?'🪄 自動 · ':''}週末體力約 ${e}${e<20?' · 😵 太累了':''} ${scheduleGains(st)}</div>`;
+}
+function scheduleHTML(){return starsHTML();}
+function starRow(st){
+  const open=openCards.has(st.id);
+  return `<div class="card2 starRow${open?' open':''}"><div class="starHead" data-fold-star="${st.id}"><img class="pt" style="--g:${st.glow}33" src="${portrait(st).url}" alt=""><div class="body"><div class="nm" style="color:${st.glow}">${st.emoji} ${esc(st.name)} <span class="tag">${careerTag(st)}</span></div><div class="scheduleStats">${scheduleStats(st)}</div></div><span class="fold">${open?'▾':'▸'}</span></div>
+    ${st.sprint?`<div class="scheduleNote">🎯 衝刺:${D.SKILLS[st.sprint.skill].name} ${st.skills[st.sprint.skill].toFixed(1)} → ${st.sprint.target}(${st.sprint.left} 週)</div>`:''}
+    ${planRow(st)}${open?starCard(st):''}</div>`;
 }
 function switchSchedule() {
-  $('starBox').classList.remove('on');tab='sched';
+  $('starBox').classList.remove('on');tab='stars';
   for(const b of $('tabs').children)b.classList.toggle('on',b.dataset.tab===tab);
   render();
 }
@@ -532,16 +545,16 @@ $('roomBody').onclick=e=>{
 };
 
 function starsHTML() {
-  let h = `<div class="sec">已出道明星 ${E.debuted(S).length} / ${D.LEVELS[S.lv].max}</div>`;
-  h += '<div class="sec">⭐ 已出道</div>'+E.debuted(S).map(st=>starCard(st)).join('');
-  h += `<div class="sec">🌱 練習生(下次評鑑:第 ${Math.ceil(S.week/4)*4} 週)</div>`+E.team(S).filter(st=>st.trainee).map(st=>starCard(st)).join('');
+  let h = `<div class="card2"><button class="sbtn" data-auto="1">🪄 全部交給小助理排</button><div class="meta">每人每週選一件事:🎬 工作天照預約、週日固定休息,其他天就做你選的。體力太低會自動插一天休息。點名字展開資料。</div>${impact('🛏 休息 體力 ↑↑ · 🎉 放假 體力 ↑ 心情 ↑↑ · 練習 技能 ↑ 體力 ↓ · 🔴 直播 粉絲 ↑ 錢 ↑ 體力 ↓ · 🎬 工作 體力 ↓↓')}</div>`;
+  h += `<div class="sec">⭐ 已出道 ${E.debuted(S).length} / ${D.LEVELS[S.lv].max}</div>`+E.debuted(S).map(starRow).join('');
+  h += `<div class="sec">🌱 練習生(下次評鑑:第 ${Math.ceil(S.week/4)*4} 週)</div>`+E.team(S).filter(st=>st.trainee).map(starRow).join('');
   if (S.mentor) h += `<div class="card2"><b>🧑‍🏫 前輩 ${esc(S.mentor.name)}</b><div class="meta">上一季留下來的前輩,不搶工作,教大家練習(練習效果 +15%、演出 +3)。</div></div>`;
   return h;
 }
 function starCard(st, full = false) {
   const fr = E.friendsOf(S, st), rv = E.rivalsOf(S, st);
   const sk = D.SKILL_IDS.map(k => `<div class="${k === E.bestSkill(st) ? 'sp' : ''}">${D.SKILLS[k].icon}${st.skills[k].toFixed(1)}</div>`).join('');
-  const plans = `<button class="miniSched" data-schedule="1" aria-label="查看七天行程">${st.sched.map(v=>`<span>${actIcon(v)}</span>`).join('')}</button>`;
+  const plans = full ? `<button class="miniSched" data-schedule="1" aria-label="查看這週行程">${st.sched.map(v=>`<span>${actIcon(v)}</span>`).join('')}</button>` : '';
   return `<div class="card2"><div class="star"><img class="pt big" data-open="${st.id}" style="--g:${st.glow}33" src="${portrait(st).url}" alt="">
     <div class="body"><div class="nm" style="color:${st.glow}">${st.emoji} ${esc(st.name)} <span class="tag">${st.traits.map(t => D.TRAITS[t].icon + D.TRAITS[t].name).join(' · ')}</span></div>
     <div class="meta">${careerTag(st)} · 潛力 ${S.assistant.lv>=1?E.potentialStars(st):'?'}${(g => g ? ` · 👯 ${esc(g.name)}${g.center === st.id ? '・C 位' : ''}` : '')(E.groupOf(S, st.id))}</div><div class="sk">${sk}</div>
@@ -599,10 +612,11 @@ function coHTML() {
 
 // 分頁裡的按鈕(事件委派)
 $('panel').addEventListener('click', e => {
-  const b = e.target.closest('[data-fold-work],[data-visit],[data-npc],[data-offer-yes],[data-offer-no],[data-proj-new],[data-proj-cancel],[data-grp-new],[data-grp-album],[data-grp-disband],[data-sns],[data-gotobuild],[data-hire],[data-fire],[data-scout-sign],[data-scout-no],[data-debut],[data-assign],[data-pick],[data-plan],[data-talk],[data-outfit],[data-meet],[data-up],[data-floor],[data-build],[data-day],[data-auto],[data-schedule],[data-sign],[data-skipaud],[data-aud],[data-ng],[data-backup],[data-open],[data-ev]');
+  const b = e.target.closest('[data-fold-star],[data-fold-work],[data-visit],[data-npc],[data-offer-yes],[data-offer-no],[data-proj-new],[data-proj-cancel],[data-grp-new],[data-grp-album],[data-grp-disband],[data-sns],[data-gotobuild],[data-hire],[data-fire],[data-scout-sign],[data-scout-no],[data-debut],[data-assign],[data-pick],[data-plan],[data-talk],[data-outfit],[data-meet],[data-up],[data-floor],[data-build],[data-day],[data-auto],[data-schedule],[data-sign],[data-skipaud],[data-aud],[data-ng],[data-backup],[data-open],[data-ev]');
   if (!b || !S || (playback && !('ev' in b.dataset))) return;
   const d = b.dataset;
   let err = null;
+  if(d.foldStar){toggleCard(d.foldStar);return;}
   if(d.foldWork){foldedWork[d.foldWork]=!foldedWork[d.foldWork];try{localStorage.setItem('aistar-fold-'+d.foldWork,foldedWork[d.foldWork]?'1':'0');}catch{}render();return;}
   if(d.visit) {openVisit(+d.visit-1);return;}
   else if(d.npc) {openNpc(d.npc);return;}
@@ -1160,7 +1174,7 @@ function openAssistant(){$('roomTitle').textContent='💡 小助理';$('roomBody
 function analysisHTML(st){const a=E.analyzeStar(S,st),k=a.strongest;return `<div id="developmentAnalysis" class="card2"><b>📈 發展分析</b><p>最突出:${D.SKILLS[k.skill].name} ${k.value.toFixed(1)},全公司第 ${k.rank}。${esc(a.trait)}</p><p>下一個目標:${esc(a.next.text)}<br>${esc(a.next.progress)}</p><p>建議練習:${esc(a.advice)}</p>${a.aptitude.length?`<p>🧭 適性:${a.aptitude.slice(0,3).map(x=>x.name+' '+x.score).join('、')}${a.aptitude[0].id!==st.career?'<br>其實他也很適合當 '+a.aptitude[0].name:''}</p>`:''}</div>`;}
 function scheduleStats(st){return D.SKILL_IDS.map(k=>`${k===E.bestSkill(st)?'<b>':''}${D.SKILLS[k].icon}${st.skills[k].toFixed(1)}${k===E.bestSkill(st)?'</b>':''}`).join(' ')+` · ⚡${Math.round(st.energy)} ${moodFace(st.mood)}`;}
 function scheduleGains(st){return D.SKILL_IDS.map(k=>{const days=st.sched.filter(v=>v==='train:'+k).length;return days?'本週 '+D.SKILLS[k].icon+' +'+E.trainingGain(S,st,k,days).toFixed(1):'';}).filter(Boolean).join(' · ');}
-const TIP_TEXT={ops:['📋 機會','先看技能與預估評價,再選適合的人。','沒人接的機會,下週會被別家公司接走。'],sched:['📅 行程','點一天的格子就能切換活動。','每週留休息或放假,別讓大家累倒。'],stars:['⭐ 明星','點明星查看資料與發展分析。','照顧心情、體力和心願,才能走得長久。'],prod:['🎛 製作','蓋製作部後,可以做自己的作品。','上架後每週都有播放分潤。'],co:['🏢 公司','在這裡升級公司、擴樓、找新人和員工。','搬到新地區也能提高曝光。'],event:['📣 事件','每個選擇都有不同影響。','處理事件後才能進到下一週。'],evaluation:['🌱 月末評鑑','每四週檢查練習生的進步。','準備好了就能安排出道。'],awards:['🏆 頒獎','每二十四週舉辦頒獎典禮。','作品與粉絲都是努力的成果。'],offer:['🤝 合作邀請','別家公司會提出合作。','注意天數、技能要求與回覆期限。'],walkin:['🙋 自薦','有人來公司毛遂自薦。','兩週沒回覆就會離開,記得看條件。']};
+const TIP_TEXT={ops:['📋 機會','先看技能與預估評價,再選適合的人。','沒人接的機會,下週會被別家公司接走。'],sched:['📅 行程','每人每週選一件事就好。','工作天照預約,週日固定休息。'],stars:['⭐ 明星與行程','每人每週選一件事:練哪項、直播、休息或放假。','工作天照預約,週日固定休息;點名字展開資料。'],prod:['🎛 製作','蓋製作部後,可以做自己的作品。','上架後每週都有播放分潤。'],co:['🏢 公司','在這裡升級公司、擴樓、找新人和員工。','搬到新地區也能提高曝光。'],event:['📣 事件','每個選擇都有不同影響。','處理事件後才能進到下一週。'],evaluation:['🌱 月末評鑑','每四週檢查練習生的進步。','準備好了就能安排出道。'],awards:['🏆 頒獎','每二十四週舉辦頒獎典禮。','作品與粉絲都是努力的成果。'],offer:['🤝 合作邀請','別家公司會提出合作。','注意天數、技能要求與回覆期限。'],walkin:['🙋 自薦','有人來公司毛遂自薦。','兩週沒回覆就會離開,記得看條件。']};
 let tutorialQueue=[];
 function showTip(key){
  if(!S||S.tipsOff||S.seenTips.includes(key)||!TIP_TEXT[key])return;
