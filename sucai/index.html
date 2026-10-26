@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>素材包｜遊戲間</title>
+<style>
+  :root { --bg:#f5f0e6; --card:#fffdf8; --ink:#3a3128; --dim:#7a6e60; --line:#e2d8c6; --accent:#c4552f; --ok:#4c8a5a; --no:#a8473a; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--ink); font-family:"PingFang TC","Noto Sans TC",system-ui,sans-serif; line-height:1.7; padding:28px 16px 60px; }
+  .wrap { max-width:1100px; margin:0 auto; }
+  header a { color:var(--dim); font-size:13px; text-decoration:none; }
+  h1 { font-size:28px; margin:6px 0 4px; letter-spacing:.04em; }
+  .lead { color:var(--dim); font-size:14px; max-width:720px; }
+  nav.toc { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0 8px; }
+  nav.toc a { font-size:13px; padding:4px 12px; border:1px solid var(--line); border-radius:99px; color:var(--ink); text-decoration:none; background:var(--card); }
+  section { margin-top:44px; }
+  h2 { font-size:20px; border-bottom:2px solid var(--ink); padding-bottom:6px; margin-bottom:6px; }
+  h2 small { font-size:13px; font-weight:normal; color:var(--dim); margin-left:8px; }
+  .note { color:var(--dim); font-size:13px; margin-bottom:16px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:16px; }
+  .grid.wide { grid-template-columns:repeat(auto-fill, minmax(460px, 1fr)); }
+  figure { background:var(--card); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  figure a { display:block; background:#ebe4d6; }
+  figure img { display:block; width:100%; height:auto; }
+  figcaption { padding:10px 12px 12px; font-size:13px; }
+  figcaption b { display:block; font-size:15px; margin-bottom:2px; }
+  .tag { display:inline-block; font-size:11px; padding:1px 8px; border-radius:99px; margin:4px 4px 0 0; border:1px solid currentColor; }
+  .tag.ok { color:var(--ok); } .tag.no { color:var(--no); } .tag.new { color:var(--accent); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px 18px; }
+  .card ol, .card ul { padding-left:20px; font-size:14px; }
+  .card li { margin:4px 0; }
+  .btn { display:inline-block; margin-top:10px; padding:6px 14px; border-radius:6px; background:var(--ink); color:#fff; text-decoration:none; font-size:13px; }
+  footer { margin-top:56px; color:var(--dim); font-size:12px; }
+  @media (max-width:520px) { .grid, .grid.wide { grid-template-columns:1fr; } h1 { font-size:24px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a href="../">← 回遊戲間</a>
+    <h1>素材包</h1>
+    <p class="lead">遊戲間和姊妹專案「趁墟｜香港手作墟」用過、試過的美術素材與畫風探索。點圖可看原尺寸。這裡的圖不會放進離線快取，第一次打開要等一下。</p>
+    <nav class="toc">
+      <a href="#pixelkit">Pixelkit 程式畫</a>
+      <a href="#iso">等角場景（新）</a>
+      <a href="#chars">人物素材包（新）</a>
+      <a href="#chanhui">趁墟畫風探索</a>
+      <a href="#ref">參考畫風分析</a>
+    </nav>
+  </header>
+
+  <section id="pixelkit">
+    <h2>Pixelkit 程式畫<small>遊戲間現役素材</small></h2>
+    <p class="note">全部用程式畫（<code>shared/pixelkit/</code>），沒有外部素材：雪糕店家具、和風組 68 件、攝影棚、Q 版小人（8 種髮型、可換膚色／髮色／衣服）。可以直接在預覽頁換裝。</p>
+    <div class="card">
+      <p>俯視斜 3/4、32px 一格、自動描外框、光從左上三階。雪糕店、溫泉旅館、AI 明星養成都在用。</p>
+      <a class="btn" href="../games/pixelkit/">打開 Pixelkit 預覽頁 →</a>
+    </div>
+  </section>
+
+  <section id="iso">
+    <h2>等角場景<small>2026-10-26 依參考畫風生成</small></h2>
+    <p class="note">同一個內容（深水埗手作市集街角）兩種畫法，用來決定趁墟場景走哪一路。</p>
+    <div class="grid wide">
+      <figure><a href="iso/scene_pixel.webp"><img src="iso/scene_pixel.webp" alt="等角像素場景" loading="lazy"></a>
+        <figcaption><b>等角像素畫</b>高細節像素、有限調色盤、明暗三階、暖光。<span class="tag new">待選</span></figcaption></figure>
+      <figure><a href="iso/scene_flat.webp"><img src="iso/scene_flat.webp" alt="等角平塗手繪場景" loading="lazy"></a>
+        <figcaption><b>等角平塗手繪</b>深棕手繪外框、平塗色塊、柔和低彩度。<span class="tag new">待選</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="chars">
+    <h2>人物素材包<small>3 套不同畫風</small></h2>
+    <p class="note">每套：上排主角 5 格（正面、背面、斜前方走路兩格、揮手），下排 6 個人物（攤主婆婆、陶藝女生、皮革男生、背包遊客、拿相機女生、校服小朋友）。</p>
+    <div class="grid wide">
+      <figure><a href="iso/chars_anime.webp"><img src="iso/chars_anime.webp" alt="動漫 Q 版人物" loading="lazy"></a>
+        <figcaption><b>A．動漫 Q 版</b>3 頭身、大眼、彩色頭髮、描邊＋賽璐璐陰影。<span class="tag new">新</span></figcaption></figure>
+      <figure><a href="iso/chars_pixel.webp"><img src="iso/chars_pixel.webp" alt="等角像素 Q 版人物" loading="lazy"></a>
+        <figcaption><b>B．等角像素 Q 版</b>約 32×48 像素一人再放大。<span class="tag new">新</span></figcaption></figure>
+      <figure><a href="iso/chars_flat.webp"><img src="iso/chars_flat.webp" alt="繪本平塗人物" loading="lazy"></a>
+        <figcaption><b>C．繪本平塗</b>深棕手繪外框、平塗、圓潤五官。<span class="tag new">新</span></figcaption></figure>
+      <figure><a href="chanhui/sample.webp"><img src="chanhui/sample.webp" alt="水彩手繪素材樣張" loading="lazy"></a>
+        <figcaption><b>（舊）水彩手繪樣張</b>攤位 3 款、主角 4 格、3 個路人、卡片按鈕。<span class="tag no">SS：很 AI</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="chanhui">
+    <h2>趁墟畫風探索<small>2026-10-25 ～ 26 的試作紀錄</small></h2>
+    <p class="note">趁墟（DIY 專案）第一期用小人逛深水埗手作市集。下面按時間排列，每張附上站長的評語。</p>
+    <div class="grid">
+      <figure><a href="chanhui/v0_pixel.webp"><img src="chanhui/v0_pixel.webp" alt="第一版像素街景" loading="lazy"></a>
+        <figcaption><b>v0 像素橫向街景</b>用 Pixelkit 畫的第一版（已上線 sssunwl.github.io/diy）。<span class="tag no">街景太空太平、攤位單調</span></figcaption></figure>
+      <figure><a href="chanhui/concept_a.webp"><img src="chanhui/concept_a.webp" alt="鉛筆水彩概念圖" loading="lazy"></a>
+        <figcaption><b>手繪 A 鉛筆水彩</b><span class="tag ok">輔助方向</span></figcaption></figure>
+      <figure><a href="chanhui/concept_b.webp"><img src="chanhui/concept_b.webp" alt="繪本粗線概念圖" loading="lazy"></a>
+        <figcaption><b>手繪 B 繪本粗線</b><span class="tag ok">人物方向</span></figcaption></figure>
+      <figure><a href="chanhui/concept_c.webp"><img src="chanhui/concept_c.webp" alt="港式墨線淡彩概念圖" loading="lazy"></a>
+        <figcaption><b>手繪 C 港式墨線淡彩</b><span class="tag ok">曾選為主方向</span><span class="tag no">後來覺得太 AI</span></figcaption></figure>
+      <figure><a href="chanhui/muji_v1.webp"><img src="chanhui/muji_v1.webp" alt="日式簡約線稿版" loading="lazy"></a>
+        <figcaption><b>日式簡約 v1 線稿</b>程式畫 SVG。<span class="tag no">太簡單、看不到細節</span></figcaption></figure>
+      <figure><a href="chanhui/muji_v2.webp"><img src="chanhui/muji_v2.webp" alt="日式簡約色塊版" loading="lazy"></a>
+        <figcaption><b>日式簡約 v2 色塊</b>程式畫 SVG。<span class="tag no">太簡單、看不到細節</span></figcaption></figure>
+    </div>
+  </section>
+
+  <section id="ref">
+    <h2>參考畫風分析<small>站長找的 7 張參考圖（別人的遊戲，圖不放這裡）</small></h2>
+    <div class="card">
+      <ol>
+        <li><b>斜 45 度等角視角</b>：像一個切開的小盒子，靠鏡頭的牆拿掉看得到裡面，比橫向街景多了深度。</li>
+        <li><b>細節靠「東西多」</b>：每個平面都擺滿小道具，一間店 30–50 件，每件有自己的顏色。</li>
+        <li><b>暖色＋光源</b>：燈串、窗光、街燈，顏色飽和但協調。</li>
+        <li><b>地板和牆有材質</b>：木紋、格子磚、石磚，空的地方也不單調。</li>
+        <li><b>人物（最喜歡韓／日系經營手遊那種）</b>：2.5–3 頭身、大頭大眼、髮色多變、乾淨描邊＋柔和陰影、有姿勢。</li>
+      </ol>
+      <p class="note" style="margin:10px 0 0">結論：要的是大量風格一致的小道具。下一步考慮買等角素材包（原檔不能進公開 repo）或找繪師，人物另外做換裝系統。</p>
+    </div>
+  </section>
+
+  <footer>素材版權屬遊戲間／趁墟專案。Pixelkit 是程式畫；畫風探索圖用 AI 生成，只作內部比較。</footer>
+</div>
+</body>
+</html>

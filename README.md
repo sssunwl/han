@@ -221,6 +221,7 @@ games/onsen/        溫泉旅館(data.js 數值、main.js 引擎)
 games/aistar/       AI 明星養成(engine.js 純邏輯、lines.js 對話模板、data.js 數值、main.js 畫面)
 games/icecream/     雪糕店(data.js 數值、main.js 引擎,用 shared/tycoon)
 shared/tycoon/      經營遊戲共用骨架(存檔、格子尋路、客人、一天、目標結局、鏡頭、觸控、擺放),見該目錄 README
+sucai/              素材包頁(/han/sucai/):Pixelkit 入口、趁墟畫風探索與人物素材包,大圖在 public/sucai/,不進離線快取
 shared/pixelkit/    自己畫的像素素材(core 點陣圖、furniture 雪糕店、icecream 雪糕與裝潢、japanese 和風、studio 攝影棚、character Q 版人物)
 tools/              素材匯出、自動玩家(onsen_autoplay.mjs、icecream_autoplay.mjs、aistar_autoplay.mjs)
 ```
