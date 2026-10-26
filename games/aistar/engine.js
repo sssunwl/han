@@ -128,7 +128,7 @@ export const bestSkill = st => D.SKILL_IDS.reduce((a, k) => (st.skills[k] > st.s
 // ---------- 開新局 ----------
 export function newGame({ seed = (Date.now() % 2147483647) | 0, company = '星光 AI 娛樂', ng = 0, mentor = null, trophies = [] } = {}) {
   const S = {
-    v: 6, district:'alley', walkins:[], offers:[], staff:[], scouted:[], releases: [], groups: [], chart: [], posts: [], sns: { strategy: 'vlog' }, actLog: [], seed, rs: seed, week: 1, ng, company, lv: 1, floors: initialFloors(), money: 2500,
+    v: 7, seenTips:[], tipsOff:false, district:'alley', walkins:[], offers:[], staff:[], scouted:[], releases: [], groups: [], chart: [], posts: [], sns: { strategy: 'vlog' }, actLog: [], seed, rs: seed, week: 1, ng, company, lv: 1, floors: initialFloors(), money: 2500,
     stars: [], rel: {}, everRival: [], ops: [], nextId: 1, feed: [], seq: 0, trend: null, nextTrend: null,
     rivals: D.RIVALS.map(r => ({ ...r, fans: Math.round(r.fans * (1 + 0.6 * ng)), g: r.g * (1 + 0.12 * ng) })),
     goals: [], trophies: trophies.slice(), mentor, teamups: [], temp: [], flags: {}, event: null,
@@ -147,6 +147,7 @@ export function newGame({ seed = (Date.now() % 2147483647) | 0, company = '星�
   feed(S, null, `🎉 ${S.company} 開張了!${ng ? `(第 ${ng + 1} 季)` : ''}旗下 4 位 AI 明星報到。`, 'sys');
   if (mentor) feed(S, null, `🧑‍🏫 前輩 ${mentor.name} 留下來當老師,大家練習效果 +15%。`, 'sys');
   initPartners(S);
+  S.assistant = makeAssistant(S);
   beginWeek(S);
   return S;
 }
@@ -198,7 +199,7 @@ function wishMatches(S, st, op) {
 }
 
 /** 這位明星有多想要這個機會 → { v, reason } */
-export function interest(S, st, op) {
+export function interest(S, st, op, noise = true) {
   const fit = bestFit(st, op), f = {};
   if(op.partner!=null) f.partner=24;
   let v = 20 + fit * 4.5 + (st.mood - 50) * 0.15;
@@ -223,7 +224,7 @@ export function interest(S, st, op) {
   if (st.lost && !T('jeal')) { v += 5 * Math.min(st.lost, 3); f.revenge = 5 * Math.min(st.lost, 3); }
   if (st.energy < 30) v -= 20;
   if (st.sulk) v -= 60;
-  v += (rnd(S) - 0.5) * 18;
+  if(noise) v += (rnd(S) - 0.5) * 18;
   let reason = 'generic', best = 7;
   for (const [k, x] of Object.entries(f)) if (x > best) { best = x; reason = k; }
   return { v, reason };
@@ -542,14 +543,26 @@ export function upgradeFloor(S,i) {
   S.money-=cost; f.lv++; feed(S,null,`${D.FLOORS[f.type].icon} ${i+1}F 升到 Lv${f.lv}！`,'good'); return null;
 }
 export function migrate(S) {
-  if(S.v===6) return S;
+  if(S.v===7) return S;
+  if(S.v===6) {
+    S.assistant ||= makeAssistant(S); S.seenTips ||= []; S.tipsOff ??= false;
+    if(S.event) {
+      const ev=S.event, definition=EVENTS.find(e=>e.id===ev.id);
+      const ctx=ev.ctx==null?true:Array.isArray(ev.ctx)?ev.ctx.map(id=>starById(S,id)):starById(S,ev.ctx);
+      let choices=[];
+      if(ev.id==='leave') choices=leaveEventHints;
+      else if(definition&&ctx) {S0=S;try {choices=definition.choices(ctx).map(c=>c.hint);} finally {S0=null;}}
+      ev.choices.forEach((c,i)=>{c.hint ||= choices[i]||'會影響:依事件選擇改變';});
+    }
+    S.v=7; return S;
+  }
 
   if(S.v===5) {
     // 舊版 v5 存檔:名字庫用光時別家明星叫「夥伴123」,讀檔時換成正常名字
     for (const r of S.rivals) for (const st of r.stars || []) if (/^夥伴\d+$/.test(st.name)) st.name = partnerName(S);
     S.district ||= 'alley'; S.walkins ||= [];
     for(const st of [...S.stars,...(S.audition||[]),...(S.scouted||[])]) st.salaryBonus ??= 0;
-    S.v=6; return S;
+    S.v=6; return migrate(S);
   }
   if(S.v===4) { initPartners(S); S.offers=[]; S.v=5; return migrate(S); }
   if(S.v===3) {
@@ -667,125 +680,126 @@ export function auditionNow(S) {
 }
 
 // ---------- 事件 ----------
+const leaveEventHints=['會影響:心情 ↑ 歸屬 ↑ 錢 ↓','會影響:歸屬 ↑ 心願期限延長','會影響:明星離開 粉絲 ↓'];
 function leaveEvent(S, st) {
   return {
     id: 'leave', star: st.id, title: st.evalDoubt?`${st.name} 想找老闆聊聊`:`${st.name} 收到別家公司的邀請`, text: st.evalDoubt?'我是不是不適合……我想聽聽你的建議，再一起想想下一步。':withCatch(S, st, fill(pickLine(S, st, L.LEAVE), {})),
     choices: [
-      { label: `☕ 好好談心($${D.TALK_COST * 2})`, cost: D.TALK_COST * 2 },
-      { label: st.wish ? `🤞 答應他的心願:${wishText(S, st)}(4 週內)` : '🤞 答應下次給他好機會(4 週內)' },
-      { label: '👋 祝福他離開' },
+      {  hint: '會影響:心情 ↑ 歸屬 ↑ 錢 ↓',label: `☕ 好好談心($${D.TALK_COST * 2})`, cost: D.TALK_COST * 2 },
+      {  hint: '會影響:歸屬 ↑ 心願期限延長',label: st.wish ? `🤞 答應他的心願:${wishText(S, st)}(4 週內)` : '🤞 答應下次給他好機會(4 週內)' },
+      {  hint: '會影響:明星離開 粉絲 ↓',label: '👋 祝福他離開' },
     ],
   };
 }
 // 每個事件:when 回傳要用的明星(或 true),text/choices 用那位明星
-const EVENTS = [
+export const EVENTS = [
  {id:'partner_practice',w:0.8,when:S=>team(S)[0],title:()=> '別家公司的明星想來交流練習',text:()=> '一起分享拿手的練習方法吧!',choices:st=>[
- {label:'🤝 歡迎一起練習',go:S=>{const r=pick(S,S.rivals),k=pick(S,D.SKILL_IDS);st.skills[k]=Math.min(10,st.skills[k]+0.3);r.rel=clamp(r.rel+5,0,100);return `${r.name}和${st.name}交流，${D.SKILLS[k].name} +0.3、友好度 +5!`;}},
- {label:'這次先婉拒',go:()=> '期待下次有空一起練習。'}]},
+ { hint: '會影響:技能 ↑ 關係 ↑',label:'🤝 歡迎一起練習',go:S=>{const r=pick(S,S.rivals),k=pick(S,D.SKILL_IDS);st.skills[k]=Math.min(10,st.skills[k]+0.3);r.rel=clamp(r.rel+5,0,100);return `${r.name}和${st.name}交流，${D.SKILLS[k].name} +0.3、友好度 +5!`;}},
+ { hint: '會影響:維持現況',label:'這次先婉拒',go:()=> '期待下次有空一起練習。'}]},
  {id:'partner_charity',w:0.8,when:S=>team(S).length>=2?team(S)[0]:null,title:()=> '別家公司邀請一起做公益直播',text:()=> '一起用表演為需要幫助的人加油!',choices:st=>[
- {label:'🤝 一起參加',go:S=>{const r=pick(S,S.rivals);for(const st of team(S).slice(0,2)){st.energy=clamp(st.energy-10,0,100);st.fans+=200;}r.rel=clamp(r.rel+6,0,100);return `${r.name}和我們一起送出祝福!兩位明星粉絲各 +200、體力 −10，友好度 +6。`;}},
- {label:'這次先婉拒',go:()=> '祝直播順利，下次再一起參加!'}]},
+ { hint: '會影響:體力 ↓ 粉絲 ↑ 關係 ↑',label:'🤝 一起參加',go:S=>{const r=pick(S,S.rivals);for(const st of team(S).slice(0,2)){st.energy=clamp(st.energy-10,0,100);st.fans+=200;}r.rel=clamp(r.rel+6,0,100);return `${r.name}和我們一起送出祝福!兩位明星粉絲各 +200、體力 −10，友好度 +6。`;}},
+ { hint: '會影響:維持現況',label:'這次先婉拒',go:()=> '祝直播順利，下次再一起參加!'}]},
   { id: 'fake', w: 1.2, when: S => pick(S, team(S)), title: st => `有人用 AI 做了假影片冒充 ${st.name}!`,
     text: st => `網路上出現一支「${st.name}」的影片,可是那根本不是${st.name},是別人用 AI 做出來的。粉絲都搞混了!`,
     choices: st => [
-      { label: '📢 發聲明澄清($500)', cost: 500, go: S => { st.fans += 150; st.mood += 8; return `大家知道那是假的了!${st.name}的粉絲反而 +150。小知識:AI 做的影片要標示「AI 生成」。`; } },
-      { label: '🙋 請粉絲一起檢舉', go: S => { st.mood -= 5; st.fans = Math.round(st.fans * 0.97); return '粉絲幫忙檢舉,假影片被下架了,不過還是有人搞混。'; } },
-      { label: '🤐 不理它', go: S => { st.fans = Math.round(st.fans * 0.85); st.mood -= 12; st.loyalty -= 6; return `假影片越傳越廣,${st.name}的粉絲掉了 15%,心情很差……`; } },
-    ].concat(S0 && staffLv(S0, 'editor') >= 3 ? [{ label: '📱 交給小編處理', go: S => { st.fans += 150; st.mood += 8; return `小編發了澄清貼文,大家都知道那是假的了!小知識:AI 做的影片要標示「AI 生成」。`; } }] : []) },
+      {  hint: '會影響:心情 ↑ 粉絲 ↑ 錢 ↓',label: '📢 發聲明澄清($500)', cost: 500, go: S => { st.fans += 150; st.mood += 8; return `大家知道那是假的了!${st.name}的粉絲反而 +150。小知識:AI 做的影片要標示「AI 生成」。`; } },
+      {  hint: '會影響:心情 ↓ 粉絲 ↓',label: '🙋 請粉絲一起檢舉', go: S => { st.mood -= 5; st.fans = Math.round(st.fans * 0.97); return '粉絲幫忙檢舉,假影片被下架了,不過還是有人搞混。'; } },
+      {  hint: '會影響:心情 ↓ 歸屬 ↓ 粉絲 ↓',label: '🤐 不理它', go: S => { st.fans = Math.round(st.fans * 0.85); st.mood -= 12; st.loyalty -= 6; return `假影片越傳越廣,${st.name}的粉絲掉了 15%,心情很差……`; } },
+    ].concat(S0 && staffLv(S0, 'editor') >= 3 ? [{  hint: '會影響:心情 ↑ 粉絲 ↑',label: '📱 交給小編處理', go: S => { st.fans += 150; st.mood += 8; return `小編發了澄清貼文,大家都知道那是假的了!小知識:AI 做的影片要標示「AI 生成」。`; } }] : []) },
   { id: 'bday', w: 1, when: S => pick(S, team(S)), title: st => `今天是 ${st.name} 的生日!`, text: st => `${st.emoji} ${st.name}偷偷看了好幾次日曆……`,
     choices: st => [
-      { label: '🎂 辦慶生會($400)', cost: 400, go: S => { for (const o of team(S)) { o.mood += 8; addRel(S, o.id, st.id, 5); } st.mood += 15; st.loyalty += 8; return '大家一起唱生日快樂歌!全員心情變好,感情也更好了。'; } },
-      { label: '🎁 送小禮物($100)', cost: 100, go: S => { st.mood += 10; st.loyalty += 3; return `${st.name}收到禮物很開心!`; } },
-      { label: '💌 寫張卡片', go: S => { st.mood += 4; return `${st.name}把卡片貼在鏡子上。`; } },
+      {  hint: '會影響:心情 ↑ 歸屬 ↑ 關係 ↑ 錢 ↓',label: '🎂 辦慶生會($400)', cost: 400, go: S => { for (const o of team(S)) { o.mood += 8; addRel(S, o.id, st.id, 5); } st.mood += 15; st.loyalty += 8; return '大家一起唱生日快樂歌!全員心情變好,感情也更好了。'; } },
+      {  hint: '會影響:心情 ↑ 歸屬 ↑ 錢 ↓',label: '🎁 送小禮物($100)', cost: 100, go: S => { st.mood += 10; st.loyalty += 3; return `${st.name}收到禮物很開心!`; } },
+      {  hint: '會影響:心情 ↑',label: '💌 寫張卡片', go: S => { st.mood += 4; return `${st.name}把卡片貼在鏡子上。`; } },
     ] },
   { id: 'letter', w: 1, when: S => pick(S, team(S)), title: st => `${st.name} 收到一大箱粉絲手寫信`, text: st => '「你的影片讓我每天都很開心!」',
-    choices: st => [{ label: '💌 太好了!', go: S => { st.mood += 15; st.loyalty += 4; return `${st.name}一封一封讀完,超級開心!`; } }] },
+    choices: st => [{  hint: '會影響:心情 ↑ 歸屬 ↑',label: '💌 太好了!', go: S => { st.mood += 15; st.loyalty += 4; return `${st.name}一封一封讀完,超級開心!`; } }] },
   { id: 'viral', w: 1, when: S => pick(S, team(S)), title: st => `${st.name} 的舊影片突然爆紅!`, text: st => '大家都在轉發,點閱一直衝!',
     choices: st => [
-      { label: '🔴 趁勝追擊開直播', go: S => { const g = Math.round(400 + st.fans * 0.25); st.fans += g; st.energy -= 20; return `直播超多人看!粉絲 +${fmt(g)},不過有點累。`; } },
-      { label: '😌 讓他好好享受', go: S => { const g = Math.round(200 + st.fans * 0.12); st.fans += g; st.mood += 10; return `粉絲 +${fmt(g)},${st.name}心情很好。`; } },
+      {  hint: '會影響:體力 ↓ 粉絲 ↑',label: '🔴 趁勝追擊開直播', go: S => { const g = Math.round(400 + st.fans * 0.25); st.fans += g; st.energy -= 20; return `直播超多人看!粉絲 +${fmt(g)},不過有點累。`; } },
+      {  hint: '會影響:心情 ↑ 粉絲 ↑',label: '😌 讓他好好享受', go: S => { const g = Math.round(200 + st.fans * 0.12); st.fans += g; st.mood += 10; return `粉絲 +${fmt(g)},${st.name}心情很好。`; } },
     ] },
   { id: 'cold', w: 0.8, when: S => pick(S, team(S).filter(s => !(s.jobs || []).length)), title: st => `${st.name} 感冒了`, text: st => '一直打噴嚏,聲音也啞了……',
     choices: st => [
-      { label: '🏥 帶去看醫生($200)', cost: 200, go: S => { st.energy = Math.max(st.energy, 60); setPlan(S, st.id, 'rest'); return `看完醫生好多了,這週先休息。`; } },
-      { label: '🛌 在家休息', go: S => { st.energy = Math.min(st.energy, 30); setPlan(S, st.id, 'rest'); st.mood -= 4; return `${st.name}在家休息,體力恢復得比較慢。`; } },
+      {  hint: '會影響:體力 ↑ 錢 ↓',label: '🏥 帶去看醫生($200)', cost: 200, go: S => { st.energy = Math.max(st.energy, 60); setPlan(S, st.id, 'rest'); return `看完醫生好多了,這週先休息。`; } },
+      {  hint: '會影響:心情 ↓ 體力暫時受限 行程改休息',label: '🛌 在家休息', go: S => { st.energy = Math.min(st.energy, 30); setPlan(S, st.id, 'rest'); st.mood -= 4; return `${st.name}在家休息,體力恢復得比較慢。`; } },
     ] },
   { id: 'down', w: 0.7, when: S => true, title: () => '直播島伺服器當機!', text: () => '這週直播和 Podcast 都沒辦法播。',
-    choices: () => [{ label: '😮 好吧', go: S => { S.flags.down = true; return '這週直播、Podcast 收入是 0,自己直播也不行。'; } }] },
+    choices: () => [{  hint: '會影響:直播與 Podcast 收入 ↓',label: '😮 好吧', go: S => { S.flags.down = true; return '這週直播、Podcast 收入是 0,自己直播也不行。'; } }] },
   { id: 'idea', w: 1.1, when: S => { const t = shuffle(S, team(S)); return t.length >= 2 ? [t[0], t[1]] : null; },
     title: ([a, b]) => `${a.name} 跟 ${b.name} 的點子不一樣`, text: ([a, b]) => `${a.name}想拍${topicName(a.topic)}主題,${b.name}想拍${topicName(b.topic === a.topic ? TOPICS[(TOPICS.findIndex(t => t.id === a.topic) + 5) % TOPICS.length].id : b.topic)}主題,兩個人都覺得自己的比較好。`,
     choices: ([a, b]) => [
-      { label: `👉 用 ${a.name} 的`, go: S => { a.mood += 10; if (has(b, 'jeal') || has(b, 'proud')) { b.mood -= 10; addRel(S, a.id, b.id, -6); return `${a.name}好開心,${b.name}有點不服氣。`; } b.mood -= 3; return `${a.name}好開心,${b.name}說「下次用我的!」`; } },
-      { label: `👉 用 ${b.name} 的`, go: S => { b.mood += 10; if (has(a, 'jeal') || has(a, 'proud')) { a.mood -= 10; addRel(S, a.id, b.id, -6); return `${b.name}好開心,${a.name}有點不服氣。`; } a.mood -= 3; return `${b.name}好開心,${a.name}說「下次用我的!」`; } },
-      { label: '🤝 兩個合起來拍($600)', cost: 600, go: S => { a.mood += 5; b.mood += 5; addRel(S, a.id, b.id, 12); a.fans += 200; b.fans += 200; return '兩個點子合在一起,意外地超好看!兩人感情變好了。'; } },
+      {  hint: '會影響:被選的人心情 ↑ 另一人心情 ↓ 關係可能 ↓',label: `👉 用 ${a.name} 的`, go: S => { a.mood += 10; if (has(b, 'jeal') || has(b, 'proud')) { b.mood -= 10; addRel(S, a.id, b.id, -6); return `${a.name}好開心,${b.name}有點不服氣。`; } b.mood -= 3; return `${a.name}好開心,${b.name}說「下次用我的!」`; } },
+      {  hint: '會影響:被選的人心情 ↑ 另一人心情 ↓ 關係可能 ↓',label: `👉 用 ${b.name} 的`, go: S => { b.mood += 10; if (has(a, 'jeal') || has(a, 'proud')) { a.mood -= 10; addRel(S, a.id, b.id, -6); return `${b.name}好開心,${a.name}有點不服氣。`; } a.mood -= 3; return `${b.name}好開心,${a.name}說「下次用我的!」`; } },
+      {  hint: '會影響:心情 ↑ 粉絲 ↑ 關係 ↑ 錢 ↓',label: '🤝 兩個合起來拍($600)', cost: 600, go: S => { a.mood += 5; b.mood += 5; addRel(S, a.id, b.id, 12); a.fans += 200; b.fans += 200; return '兩個點子合在一起,意外地超好看!兩人感情變好了。'; } },
     ] },
   { id: 'platform', w: 0.9, when: S => (S.temp.length ? null : true), title: () => '新平台上線了!', text: () => '聽說有一個全新的平台,好奇的明星已經坐不住了。',
-    choices: () => [{ label: '🌐 看看是什麼', go: S => { const t = pick(S, ['holo', 'pet']); S.temp.push({ type: t, weeks: 5 }); return `「${MEDIA[t].icon} ${MEDIA[t].name}」上線 5 週!新的機會會出現在機會板上。`; } }] },
+    choices: () => [{  hint: '會影響:新平台機會 ↑',label: '🌐 看看是什麼', go: S => { const t = pick(S, ['holo', 'pet']); S.temp.push({ type: t, weeks: 5 }); return `「${MEDIA[t].icon} ${MEDIA[t].name}」上線 5 週!新的機會會出現在機會板上。`; } }] },
   { id: 'algo', w: 0.8, when: S => true, title: () => '演算法大改版!', text: (_, S) => `${MEDIA[S.trend.hot].name}突然不紅了,接下來兩週效果打折。`,
-    choices: () => [{ label: '📉 知道了', go: S => { S.flags.cool = { type: S.trend.hot, weeks: 2 }; S.trend.hot = pick(S, availMedia(S).filter(k => k !== S.flags.cool.type)); return `改成推 ${MEDIA[S.trend.hot].icon}${MEDIA[S.trend.hot].name}!`; } }] },
+    choices: () => [{  hint: '會影響:原熱門媒體效果 ↓',label: '📉 知道了', go: S => { S.flags.cool = { type: S.trend.hot, weeks: 2 }; S.trend.hot = pick(S, availMedia(S).filter(k => k !== S.flags.cool.type)); return `改成推 ${MEDIA[S.trend.hot].icon}${MEDIA[S.trend.hot].name}!`; } }] },
   { id: 'teacher', w: 1, when: S => true, title: () => 'AI 老師來上課', text: () => '有一位很會教的 AI 老師,可以幫全公司上一堂課。要上哪一科?',
-    choices: () => D.SKILL_IDS.slice(0, 3).map(k => ({ label: `${D.SKILLS[k].icon} ${D.SKILLS[k].name}課($600)`, cost: 600, go: S => { for (const o of team(S)) o.skills[k] = Math.min(10, o.skills[k] + 0.4); return `全員${D.SKILLS[k].name} +0.4!`; } })).concat([{ label: '不用了', go: () => '這次先不上課。' }]) },
+    choices: () => D.SKILL_IDS.slice(0, 3).map(k => ({  hint: '會影響:技能 ↑ 錢 ↓',label: `${D.SKILLS[k].icon} ${D.SKILLS[k].name}課($600)`, cost: 600, go: S => { for (const o of team(S)) o.skills[k] = Math.min(10, o.skills[k] + 0.4); return `全員${D.SKILLS[k].name} +0.4!`; } })).concat([{  hint: '會影響:維持現況',label: '不用了', go: () => '這次先不上課。' }]) },
   { id: 'charity', w: 0.8, when: S => pick(S, team(S).filter(s => !(s.jobs || []).length)), title: st => '公益活動邀請', text: st => `動物之家想請 ${st.name} 幫忙拍影片,讓更多人來認養小貓小狗。沒有酬勞喔。`,
     choices: st => [
-      { label: '🐶 答應', go: S => { st.fans += 300; st.mood += 10; st.loyalty += 5; st.energy -= 10; return `影片幫好多小動物找到家!${st.name}粉絲 +300,心情超好。`; } },
-      { label: '這週太忙了', go: () => '下次有機會再幫忙。' },
+      {  hint: '會影響:心情 ↑ 歸屬 ↑ 體力 ↓ 粉絲 ↑',label: '🐶 答應', go: S => { st.fans += 300; st.mood += 10; st.loyalty += 5; st.energy -= 10; return `影片幫好多小動物找到家!${st.name}粉絲 +300,心情超好。`; } },
+      {  hint: '會影響:維持現況',label: '這週太忙了', go: () => '下次有機會再幫忙。' },
     ] },
   { id: 'tired', w: 1, when: S => team(S).filter(s => s.energy < 45).sort((a, b) => a.energy - b.energy)[0], title: st => `${st.name} 太累了,想放假`, text: st => withCatch(S0, st, pick(S0, L.TIRED._)),
     choices: st => [
-      { label: '🏖 放假一週', go: S => { if (!st.jobs.length) setPlan(S, st.id, 'rest'); st.energy += 25; st.mood += 15; st.loyalty += 5; return `${st.name}好好休息,充飽電了。`; } },
-      { label: '💪 再撐一下', go: S => { st.mood -= 10; st.loyalty -= 6; return `${st.name}嘆了一口氣……`; } },
+      {  hint: '會影響:心情 ↑ 歸屬 ↑ 體力 ↑',label: '🏖 放假一週', go: S => { if (!st.jobs.length) setPlan(S, st.id, 'rest'); st.energy += 25; st.mood += 15; st.loyalty += 5; return `${st.name}好好休息,充飽電了。`; } },
+      {  hint: '會影響:心情 ↓ 歸屬 ↓',label: '💪 再撐一下', go: S => { st.mood -= 10; st.loyalty -= 6; return `${st.name}嘆了一口氣……`; } },
     ] },
   { id: 'snack', w: 0.8, when: S => true, title: () => '粉絲送來一大盒點心!', text: () => '是手作的餅乾,上面畫著每個人的臉。',
-    choices: () => [{ label: '🍪 大家一起吃', go: S => { for (const o of team(S)) o.mood += 6; return '全員心情 +6!'; } }] },
+    choices: () => [{  hint: '會影響:心情 ↑',label: '🍪 大家一起吃', go: S => { for (const o of team(S)) o.mood += 6; return '全員心情 +6!'; } }] },
   { id: 'battle', w: 1, when: S => { for (const a of team(S)) { const r = rivalsOf(S, a)[0]; if (r) return [a, r]; } return null; },
     title: ([a, b]) => `${a.name} 和 ${b.name} 想比一場舞`, text: ([a, b]) => `兩個人互看不順眼,說要比一場舞決勝負!`,
     choices: ([a, b]) => [
-      { label: '🕺 辦一場友誼賽', go: S => { a.skills.dance = Math.min(10, a.skills.dance + 0.3); b.skills.dance = Math.min(10, b.skills.dance + 0.3); const w = a.skills.dance >= b.skills.dance ? a : b; addRel(S, a.id, b.id, 15); w.fans += 200; return `${w.name}贏了!比完兩個人握手,說「你也很強」。關係變好了,舞蹈都 +0.3。`; } },
-      { label: '🙅 叫他們專心工作', go: S => { a.mood -= 4; b.mood -= 4; return '兩個人不情願地回去工作了。'; } },
+      {  hint: '會影響:粉絲 ↑ 技能 ↑ 關係 ↑',label: '🕺 辦一場友誼賽', go: S => { a.skills.dance = Math.min(10, a.skills.dance + 0.3); b.skills.dance = Math.min(10, b.skills.dance + 0.3); const w = a.skills.dance >= b.skills.dance ? a : b; addRel(S, a.id, b.id, 15); w.fans += 200; return `${w.name}贏了!比完兩個人握手,說「你也很強」。關係變好了,舞蹈都 +0.3。`; } },
+      {  hint: '會影響:心情 ↓',label: '🙅 叫他們專心工作', go: S => { a.mood -= 4; b.mood -= 4; return '兩個人不情願地回去工作了。'; } },
     ] },
   { id: 'copy', w: 0.8, when: S => pick(S, team(S)), title: st => `別家公司抄了 ${st.name} 的舞`, text: st => `${S0.rivals[0].name}的新影片,動作跟 ${st.name} 上次的舞一模一樣!`,
     choices: st => [
-      { label: '💃 拍一支更厲害的新版本', go: S => { st.energy -= 12; st.fans += 400; st.skills.dance = Math.min(10, st.skills.dance + 0.2); return `新版本更好看!${st.name}粉絲 +400。`; } },
-      { label: '😄 一笑置之', go: S => { const f = team(S).find(o => has(o, 'funny')); if (f) { f.fans += 300; return `${f.name}拍了一支「原版 vs 抄襲版」搞笑對比,大家笑翻,粉絲 +300!`; } st.mood -= 4; return `${st.name}有點不開心。`; } },
+      {  hint: '會影響:體力 ↓ 粉絲 ↑ 技能 ↑',label: '💃 拍一支更厲害的新版本', go: S => { st.energy -= 12; st.fans += 400; st.skills.dance = Math.min(10, st.skills.dance + 0.2); return `新版本更好看!${st.name}粉絲 +400。`; } },
+      {  hint: '會影響:心情 ↓ 粉絲 ↑',label: '😄 一笑置之', go: S => { const f = team(S).find(o => has(o, 'funny')); if (f) { f.fans += 300; return `${f.name}拍了一支「原版 vs 抄襲版」搞笑對比,大家笑翻,粉絲 +300!`; } st.mood -= 4; return `${st.name}有點不開心。`; } },
     ] },
   { id: 'sponsor', w: 0.8, when: S => true, title: () => '贊助商要送東西', text: () => '一家器材公司想贊助你們,可以選一個:',
     choices: () => [
-      { label: '💰 現金 $1,000', go: S => { S.money += 1000; return '收到 $1,000!'; } },
-      { label: '🏋 新的練習器材', go: S => { for (const o of team(S)) { const k = bestSkill(o); o.skills[k] = Math.min(10, o.skills[k] + 0.15); } return '全員最強的技能 +0.15!'; } },
+      {  hint: '會影響:錢 ↑',label: '💰 現金 $1,000', go: S => { S.money += 1000; return '收到 $1,000!'; } },
+      {  hint: '會影響:技能 ↑',label: '🏋 新的練習器材', go: S => { for (const o of team(S)) { const k = bestSkill(o); o.skills[k] = Math.min(10, o.skills[k] + 0.15); } return '全員最強的技能 +0.15!'; } },
     ] },
   { id: 'rain', w: 0.7, when: S => true, title: () => '下雨天,外景取消', text: () => '這週一直下雨,大家都待在室內。',
-    choices: () => [{ label: '☔ 那就錄 Podcast!', go: S => { S.flags.rain = true; return '這週 Podcast 和配音的粉絲 ×1.5!'; } }] },
+    choices: () => [{  hint: '會影響:Podcast 與配音粉絲 ↑',label: '☔ 那就錄 Podcast!', go: S => { S.flags.rain = true; return '這週 Podcast 和配音的粉絲 ×1.5!'; } }] },
   { id: 'retouch', w: 0.8, when: S => pick(S, team(S)), title: st => `AI 修圖修太多了`, text: st => `${st.name}的新照片被 AI 修得太誇張,粉絲說「這不是${st.name}吧?」`,
     choices: st => [
-      { label: '📸 發一張沒修過的照片', go: S => { st.fans += 200; st.mood += 5; return `粉絲說「真的${st.name}比較可愛!」粉絲 +200。`; } },
-      { label: '🔁 重拍一組($300)', cost: 300, go: S => { st.mood += 2; return '重拍的照片很自然。'; } },
+      {  hint: '會影響:心情 ↑ 粉絲 ↑',label: '📸 發一張沒修過的照片', go: S => { st.fans += 200; st.mood += 5; return `粉絲說「真的${st.name}比較可愛!」粉絲 +200。`; } },
+      {  hint: '會影響:心情 ↑ 錢 ↓',label: '🔁 重拍一組($300)', cost: 300, go: S => { st.mood += 2; return '重拍的照片很自然。'; } },
     ] },
   { id: 'robot', w: 0.6, when: S => true, title: () => '公司的機器人助手當機了', text: () => '它一直重複說「早安早安早安早安」……',
     choices: () => [
-      { label: '🔧 修好它($200)', cost: 200, go: () => '機器人恢復正常了。' },
-      { label: '🎥 拍成影片', go: S => { const f = team(S).find(o => has(o, 'funny')) || pick(S, team(S)); f.fans += 250; f.mood += 6; return `${f.name}跟機器人一起「早安早安」,影片爆紅,粉絲 +250!`; } },
+      {  hint: '會影響:錢 ↓',label: '🔧 修好它($200)', cost: 200, go: () => '機器人恢復正常了。' },
+      {  hint: '會影響:心情 ↑ 粉絲 ↑',label: '🎥 拍成影片', go: S => { const f = team(S).find(o => has(o, 'funny')) || pick(S, team(S)); f.fans += 250; f.mood += 6; return `${f.name}跟機器人一起「早安早安」,影片爆紅,粉絲 +250!`; } },
     ] },
   { id: 'school', w: 0.8, when: S => pick(S, team(S).filter(s => !(s.jobs || []).length)), title: st => '小學邀請去分享', text: st => `有一間小學想請 ${st.name} 去分享「怎麼做出好影片」。`,
     choices: st => [
-      { label: '🏫 去!', go: S => { const ok = st.skills.talk >= 3.5 || has(st, 'funny'); st.energy -= 8; if (ok) { st.fans += 260; st.mood += 8; return `小朋友聽得好開心,一直舉手問問題!粉絲 +260。`; } st.mood -= 3; st.skills.talk = Math.min(10, st.skills.talk + 0.3); return `${st.name}有點緊張,講得結結巴巴,不過口才 +0.3。`; } },
-      { label: '這次先不要', go: () => '下次再說。' },
+      {  hint: '會影響:體力 ↓ 順利時粉絲 ↑ 心情 ↑ 緊張時心情 ↓ 口才 ↑',label: '🏫 去!', go: S => { const ok = st.skills.talk >= 3.5 || has(st, 'funny'); st.energy -= 8; if (ok) { st.fans += 260; st.mood += 8; return `小朋友聽得好開心,一直舉手問問題!粉絲 +260。`; } st.mood -= 3; st.skills.talk = Math.min(10, st.skills.talk + 0.3); return `${st.name}有點緊張,講得結結巴巴,不過口才 +0.3。`; } },
+      {  hint: '會影響:維持現況',label: '這次先不要', go: () => '下次再說。' },
     ] },
   { id: 'kindhelp', w: 0.8, when: S => { const k = team(S).find(o => has(o, 'kind')); const t = k && team(S).filter(o => o.id !== k.id).sort((a, b) => a.mood - b.mood)[0]; return k && t ? [k, t] : null; },
     title: ([k, t]) => `${k.name} 在幫 ${t.name} 練習`, text: ([k, t]) => `${k.name}注意到${t.name}最近沒什麼精神,下班後留下來陪他練習。`,
-    choices: ([k, t]) => [{ label: '🥹 好溫暖', go: S => { addRel(S, k.id, t.id, 15); t.mood += 10; const s = bestSkill(k); t.skills[s] = Math.min(10, t.skills[s] + 0.3); return `${t.name}心情變好,${D.SKILLS[s].name} +0.3,兩人感情變好了。`; } }] },
+    choices: ([k, t]) => [{  hint: '會影響:心情 ↑ 技能 ↑ 關係 ↑',label: '🥹 好溫暖', go: S => { addRel(S, k.id, t.id, 15); t.mood += 10; const s = bestSkill(k); t.skills[s] = Math.min(10, t.skills[s] + 0.3); return `${t.name}心情變好,${D.SKILLS[s].name} +0.3,兩人感情變好了。`; } }] },
   { id: 'mean', w: 0.9, when: S => pick(S, team(S)), title: st => `網路上有人留壞話給 ${st.name}`, text: st => `${st.name}看到一則很難聽的留言,整個人悶悶的。`,
     choices: st => [
-      { label: '🫂 陪他聊聊,一起檢舉', go: S => { st.mood += 6; st.loyalty += 6; return `${st.name}說:「你說得對,不要因為一個人的壞話,忘了很多人喜歡我。」`; } },
-      { label: '📵 讓他這週不要看留言', go: S => { st.mood += 2; return '先離開網路休息一下,心情慢慢好起來。'; } },
-    ].concat(S0 && staffLv(S0, 'editor') >= 3 ? [{ label: '📱 交給小編處理', go: S => { st.mood += 8; st.loyalty += 6; return `小編幫忙檢舉、隱藏了留言,還貼了一張粉絲加油卡給${st.name}。`; } }] : []) },
+      {  hint: '會影響:心情 ↑ 歸屬 ↑',label: '🫂 陪他聊聊,一起檢舉', go: S => { st.mood += 6; st.loyalty += 6; return `${st.name}說:「你說得對,不要因為一個人的壞話,忘了很多人喜歡我。」`; } },
+      {  hint: '會影響:心情 ↑',label: '📵 讓他這週不要看留言', go: S => { st.mood += 2; return '先離開網路休息一下,心情慢慢好起來。'; } },
+    ].concat(S0 && staffLv(S0, 'editor') >= 3 ? [{  hint: '會影響:心情 ↑ 歸屬 ↑',label: '📱 交給小編處理', go: S => { st.mood += 8; st.loyalty += 6; return `小編幫忙檢舉、隱藏了留言,還貼了一張粉絲加油卡給${st.name}。`; } }] : []) },
   { id: 'nominate', w: 0.7, when: S => (S.week > 6 ? team(S).sort((a, b) => b.fans - a.fans)[0] : null), title: st => '頒獎典禮邀請!', text: st => '「年度新星獎」想請公司派一位明星出席走紅毯。要派誰?',
-    choices: () => team(S0).slice().sort((a, b) => b.fans - a.fans).slice(0, 3).map(o => ({ label: `${o.emoji} ${o.name}`, go: S => { const g = Math.round(300 + o.fans * 0.08); o.fans += g; o.mood += 10; for (const x of team(S)) if (x.id !== o.id && (has(x, 'jeal') || has(x, 'proud'))) { x.mood -= 6; } return `${o.name}在紅毯上超亮眼!粉絲 +${fmt(g)}。`; } })) },
+    choices: () => team(S0).slice().sort((a, b) => b.fans - a.fans).slice(0, 3).map(o => ({  hint: '會影響:被選的人心情 ↑ 粉絲 ↑ 其他人可能心情 ↓',label: `${o.emoji} ${o.name}`, go: S => { const g = Math.round(300 + o.fans * 0.08); o.fans += g; o.mood += 10; for (const x of team(S)) if (x.id !== o.id && (has(x, 'jeal') || has(x, 'proud'))) { x.mood -= 6; } return `${o.name}在紅毯上超亮眼!粉絲 +${fmt(g)}。`; } })) },
   { id: 'power', w: 0.6, when: S => true, title: () => '停電了!', text: () => '整棟大樓停電,沒辦法練習。大家只好點蠟燭聊天。',
-    choices: () => [{ label: '🕯 那就聊天吧', go: S => { S.flags.power = true; const t = team(S); for (let i = 0; i < t.length; i++) for (let j = i + 1; j < t.length; j++) addRel(S, t[i].id, t[j].id, 4); return '這週練習沒效果,不過大家聊了好多,感情都變好了。'; } }] },
+    choices: () => [{  hint: '會影響:練習效果 ↓ 關係 ↑',label: '🕯 那就聊天吧', go: S => { S.flags.power = true; const t = team(S); for (let i = 0; i < t.length; i++) for (let j = i + 1; j < t.length; j++) addRel(S, t[i].id, t[j].id, 4); return '這週練習沒效果,不過大家聊了好多,感情都變好了。'; } }] },
   { id: 'jealtalk', w: 1.2, when: S => team(S).find(o => o.lost >= 2), title: st => `${st.name} 覺得大家都不選他`, text: st => withCatch(S0, st, pick(S0, (L.SULK[voice(st)] || L.SULK._))),
     choices: st => [
-      { label: `☕ 找他聊聊($${D.TALK_COST})`, cost: D.TALK_COST, go: S => { st.mood += 12; st.loyalty += 6; st.sulk = 0; st.lost = 0; return fill(pick(S, L.COMFORT[voice(st)] || L.COMFORT._)); } },
-      { label: '🤞 答應下次有機會給他', go: S => { st.mood += 4; st.wish = { type: 'media', media: pick(S, availMedia(S)), left: 4 }; return `${st.name}說:「真的喔!我等著!」(心願:${wishText(S, st)})`; } },
+      {  hint: '會影響:心情 ↑ 歸屬 ↑ 錢 ↓',label: `☕ 找他聊聊($${D.TALK_COST})`, cost: D.TALK_COST, go: S => { st.mood += 12; st.loyalty += 6; st.sulk = 0; st.lost = 0; return fill(pick(S, L.COMFORT[voice(st)] || L.COMFORT._)); } },
+      {  hint: '會影響:心情 ↑',label: '🤞 答應下次有機會給他', go: S => { st.mood += 4; st.wish = { type: 'media', media: pick(S, availMedia(S)), left: 4 }; return `${st.name}說:「真的喔!我等著!」(心願:${wishText(S, st)})`; } },
     ] },
 ];
 let S0 = null;                                        // 事件文字裡要用到 S 的時候(只在 randomEvent 期間有效)
@@ -796,7 +810,7 @@ function randomEvent(S) {
     if (!chance(S, Math.min(1, e.w * 0.7))) continue;
     const ctx = e.when(S); if (!ctx) continue;
     S.flags.lastEv = e.id;
-    const ev = { id: e.id, title: e.title(ctx), text: e.text(ctx, S), choices: e.choices(ctx).map(c => ({ label: c.label, cost: c.cost || 0 })) };
+    const ev = { id: e.id, title: e.title(ctx), text: e.text(ctx, S), choices: e.choices(ctx).map(c => ({ label: c.label, cost: c.cost || 0, hint:c.hint })) };
     ev.ctx = Array.isArray(ctx) ? ctx.map(x => x.id) : ctx === true ? null : ctx.id;
     S0 = null;
     return ev;
@@ -906,8 +920,7 @@ export function endWeek(S) {
         used[k]=(used[k]||0)+1;
         let seat=used[k];
         for(let fi=0;fi<S.floors.length;fi++) if(S.floors[fi].type===room) {floorOf[st.id]=fi;seat-=S.floors[fi].lv+1;if(seat<=0)break;}
-        let mult=(lv?1+0.2*(lv-1):0.5)*(0.7+st.mood/170)*(T('hot')?1.3:1)*(T('chill')?0.8:1)*(st.motivated?1.5:1)*(S.mentor?1.15:1);
-        mult*=st.pot*trainingStaff(S,k);
+        let mult=trainingMultiplier(S,st,k);
         if(lv && used[k]>capacity) {mult*=0.5; if(!R.items.some(i=>i.crowded===k)) R.items.push({crowded:k,text:`${D.FLOORS[room].name}太擠了，部分練習效果減半。`});}
         if(st.energy<20) mult*=0.5; if(S.flags.power) mult=0;
         st.skills[k]=Math.min(10,st.skills[k]+LEARNING.training*mult*(1-st.skills[k]/11)); st.trained[k]=S.week;
@@ -1600,3 +1613,51 @@ export function signWalkin(S,id) {
  feed(S,id,`${st.name}加入公司了!`,'good');return null;
 }
 export function declineWalkin(S,id){S.walkins=S.walkins.filter(st=>st.id!==id);}
+
+
+// v3-B:導覽與分析均為唯讀純函式，讀取不消耗亂數。
+export const ASSISTANT_COSTS = [3000,8000,15000];
+export const ASSISTANT_TITLES = ['小助理','見習分析師','潛力分析師','首席分析師'];
+function makeAssistant(S) { const look=randomLook(ri(S,1,2e9));look.cloth='#55bdb4';return {id:'assistant',name:pick(S,D.ASSISTANT_NAMES),look,lv:0,acc:'headphones',glow:'#55bdb4',traits:[],emoji:'💡'}; }
+export function upgradeAssistant(S) { const cost=ASSISTANT_COSTS[S.assistant.lv];if(!cost)return '已經是首席分析師';if(S.money<cost)return '學費不夠';S.money-=cost;S.assistant.lv++;return null; }
+export function trainingMultiplier(S,st,k) {const lv=roomLv(S,k==='charm'?'style':k);return (lv?1+0.2*(lv-1):0.5)*(0.7+st.mood/170)*(has(st,'hot')?1.3:1)*(has(st,'chill')?0.8:1)*(st.motivated?1.5:1)*(S.mentor?1.15:1)*(st.pot||1)*trainingStaff(S,k);}
+export function trainingGain(S,st,k,days=5) {let v=st.skills[k];const mult=trainingMultiplier(S,st,k)*(st.energy<20?0.5:1)*(S.flags.power?0:1);for(let i=0;i<days;i++)v=Math.min(10,v+LEARNING.training*mult*(1-v/11));return v-st.skills[k];}
+export function careerNext(S,st) {
+ const step=st.careerStep||0;if(step>=3)return {text:'🎉 夢想達成!',progress:'',step:3,skills:[]};
+ const b=st.stat.byType||{},r=st.stat.roles||[],n=(...ks)=>ks.reduce((v,k)=>v+(b[k]||0),0),skill=D.CAREERS[st.career].skill;
+ const count=(label,current,need)=>({text:label,progress:`${label} ${fmt(current)} / ${need}`,current,need,skills:[]});
+ const flag=(label,ok)=>count(label,Number(ok),1);
+ const rows={
+ singer:[()=>count('歌唱類作品',r.filter(x=>x.sing>=0.5).length,2),null,()=>flag('演唱會或巨蛋主唱 A 以上',r.some(x=>['concert','dome'].includes(x.type)&&x.role==='主唱'&&['S','A'].includes(x.grade)))],
+ actor:[()=>count('AI 短劇作品',n('drama'),2),null,()=>flag('AI 短劇主角 S',r.some(x=>x.type==='drama'&&x.role==='主角'&&x.grade==='S'))],
+ dancer:[()=>count('短影音或雙人企劃',n('short','duo'),3),null,()=>flag('第一名或巨蛋主舞 A 以上',r.some(x=>x.first||(x.type==='dome'&&x.role==='主舞'&&['S','A'].includes(x.grade))))],
+ variety:[()=>count('Podcast 或直播作品',n('podcast','live'),3),null,()=>count('粉絲',st.fans,20000)],
+ model:[()=>count('走秀或代言作品',n('fashion','ad','game'),2),null,()=>flag('時尚走秀 S',r.some(x=>x.type==='fashion'&&x.grade==='S'))],
+ idol:[()=>count('不同類型作品',Object.values(b).filter(v=>v>0).length,4),()=>{const skills=D.SKILL_IDS.filter(k=>st.skills[k]<5);return {text:'5 項都 ≥ 5',progress:skills.length?'5 項都 ≥ 5:還差 '+skills.map(k=>D.SKILLS[k].name+' '+st.skills[k].toFixed(1)).join('、'):'5 項都 ≥ 5:已達成',skills,need:5};},()=>({...count('粉絲',st.fans,30000),progress:`粉絲 ${fmt(st.fans)} / 30000 · 全公司人氣第一 ${team(S).every(o=>o.fans<=st.fans)?'1':'0'} / 1`})]};
+ const next=rows[st.career][step]?.() || {text:D.SKILLS[skill].name,progress:`${D.SKILLS[skill].name} ${st.skills[skill].toFixed(1)} / 7`,current:st.skills[skill],need:7,skills:[skill]};return {...next,step,text:D.CAREERS[st.career].name+['①','②','③'][step]+' '+next.text};
+}
+export const APTITUDE_BONUS={funny:{variety:8},perf:{singer:5,dancer:5},shy:{variety:-8},proud:{actor:5,model:5},hot:{dancer:5},kind:{idol:5},comp:{idol:5},curious:{variety:5},solo:{singer:5,idol:-5},chill:{model:3},dream:{singer:3},jeal:{actor:3}};
+export function analyzeStar(S,st) {
+ const k=bestSkill(st),next=careerNext(S,st), practice=next.skills.map(skill=>{let v=st.skills[skill],weeks=0;while(v<next.need&&weeks<=10){v+=trainingGain(S,{...st,skills:{...st.skills,[skill]:v}},skill);weeks++;}return {skill,weeks,text:D.SKILLS[skill].name+' · 每週練 5 天'+(weeks>10?'超過 10 週':`大約 ${weeks} 週`)};});
+ const second={singer:'dance',actor:'talk',dancer:'charm',variety:'act',model:'dance',idol:'charm'};
+ const aptitude=Object.entries(D.CAREERS).map(([id,c])=>({id,name:c.name,score:Math.round(clamp(st.skills[c.skill||bestSkill(st)]*8+st.skills[second[id]]*2+(APTITUDE_BONUS[st.traits[0]]?.[id]||0)+((st.pot||1)-1)*20,0,100))})).sort((a,b)=>b.score-a.score);
+ return {strongest:{skill:k,value:st.skills[k],rank:1+debuted(S).filter(o=>o.skills[k]>st.skills[k]).length},trait:D.TRAITS[st.traits[0]].desc,next,practice,advice:practice.length?practice.map(p=>p.text).join('；'):next.step===3?'🎉 夢想達成!':'多接 '+(st.career==='idol'?'不同':D.CAREERS[st.career].media.map(k=>MEDIA[k].name).join('、'))+' 類的工作',aptitude:S.assistant.lv>=2?aptitude:[]};
+}
+export function analystRecommendation(S,op,slot=op.slots.findIndex(s=>!s.who)) {if(slot<0)return null;return team(S).filter(st=>isFree(st,op)&&(!op.only||op.only.includes(st.id))).map(st=>({st,score:perf(S,st,op,slot,false)})).sort((a,b)=>b.score-a.score)[0]||null;}
+export function assistantAdvice(S) {
+ if(S.week>8&&!S.assistant.lv)return null;
+ if(S.event)return '先處理事件';
+ const t=team(S),noRest=t.find(st=>!st.sched.some(v=>v==='rest'||v==='off'));if(noRest)return `${noRest.name} 這週沒排休息,會累倒`;
+ const tired=t.find(st=>st.energy<30);if(tired)return `${tired.name} 快沒力了,排一天休息或送點心`;
+ for(const op of S.ops.filter(o=>o.status==='open'&&!o.slots.some(s=>s.who))){const rec=analystRecommendation(S,op);if(rec&&rec.score>=D.GRADES.find(g=>g.g==='A').min)return `《${op.title}》讓 ${rec.st.name} 去,預估 ${D.gradeOf(rec.score).g}`;}
+ const wish=t.find(st=>st.wish?.left<=2);if(wish)return `${wish.name} 的心願快到期了:${wishText(S,wish)}`;
+ const trainee=t.find(st=>st.trainee&&S.week%4===3);if(trainee)return `下週月末評鑑,${trainee.name} 還差一點`;
+ if(S.trend)return `這週 🔥 ${MEDIA[S.trend.hot].name} 很紅,接到效果 ×1.5`;
+ return L.ASSISTANT_TIPS[(S.week-1)%L.ASSISTANT_TIPS.length];
+}
+const SELECTION_REACTIONS={jeal:'可能鬧彆扭',comp:'會更拼',proud:'可能覺得沒面子',perf:'想把技能練好',shy:'可能鬆一口氣',kind:'會替夥伴加油',hot:'想再努力練習',chill:'會耐心等下一次',funny:'可能用玩笑化解',curious:'期待下個新挑戰',dream:'可能惦記自己的夢想',solo:'會繼續準備個人表演'};
+export function selectionHint(S,st,op) {
+ const wants=op.bids.some(b=>b.id===st.id)||interest(S,st,op,false).v>=35;
+ const others=op.bids.filter(b=>b.id!==st.id&&!op.slots.some(s=>s.who===b.id)).map(b=>starById(S,b.id)).filter(Boolean).slice(0,2);
+ return '會影響:'+st.name+(wants?' 心情 ↑ 歸屬 ↑':' 心情 ↓')+others.map(o=>{const trait=has(o,'jeal')?'jeal':has(o,'comp')?'comp':o.traits[0];return '；'+o.name+'('+D.TRAITS[trait].name+')'+SELECTION_REACTIONS[trait];}).join('');
+}

@@ -372,3 +372,5 @@ export const WALKIN = Object.fromEntries(['rookie','experienced'].map(kind => [k
  Object.fromEntries(Object.entries(WALKIN_VOICE).map(([trait,lines]) => [trait, lines.map((line,i) =>
  (kind==='rookie' ? ['我在學校社團練習三年了,想試試看!','我還在學習,想找到自己的舞台。'][i]
  : ['我在別家待過兩年,想找更適合自己的舞台。','我有演出經驗,希望在這裡重新出發。'][i])+line)]))]));
+
+export const ASSISTANT_TIPS=['休息能恢復體力。', '放假也能改善心情。', '心情會影響演出表現。', '同台的朋友能互相打氣。', '接工作前先看預估評價。', '熱門媒體的效果會提高。', '主題吻合也有加成。', '每位明星都有自己的大目標。', '訓練師能加快指定技能成長。', '潛力會影響練習速度。', '練習室升級能改善練習效果。', '連續不休息容易累倒。', '自薦者不會一直等候。', '完成心願能增加歸屬感。', '同一週可以接多個短工作。', '作品上架後還能收到分潤。'];

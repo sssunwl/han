@@ -225,3 +225,5 @@ export const DISTRICTS = [
  {id:'avenue',name:'娛樂大道',icon:'🎡',rent:3,bonus:0.2,ops:1,cost:40000,lv:4,walkin:0.8},
  {id:'harbor',name:'星光海港',icon:'🌊',rent:4,bonus:0.3,ops:2,cost:80000,lv:4,fans:200000,walkin:0.9},
 ];
+
+export const ASSISTANT_NAMES=['小晴','阿米','小棠','小岑','阿橙','小葵'];

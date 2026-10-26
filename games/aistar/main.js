@@ -128,6 +128,7 @@ function buildBg() {
 }
 function currentDay() {return playback?.R.timeline[Math.min(6,Math.floor(playback.t/4))];}
 function targetOf(st,idx) {
+  if(st.id==='assistant') return assistantTarget();
   if(st.role) return staffTarget(st,idx);
   const day=currentDay(), p=playback?(playback.t%4)/4:0.3;
   let act=day?.acts[st.id] || st.sched[0], fi=day?.floorOf[st.id] ?? E.floorFor(S,act);
@@ -148,7 +149,7 @@ function targetOf(st,idx) {
   return {fi,x:outside?10:sulk?266:x+Math.floor(idx/spots.length)*9,y:floorY(fi)+y,act,outside};
 }
 function placeActors(snap=false) {
-  const team=[...E.team(S),...S.staff],used={};
+  const team=[...E.team(S),...S.staff,S.assistant],used={};
   for(const id of actors.keys())if(!team.some(st=>st.id===id))actors.delete(id);
   for(const st of team) {
     const fi=currentDay()?.floorOf[st.id] ?? E.floorFor(S,st.sched?.[0]||'rest');
@@ -211,7 +212,8 @@ function draw(now) {
     ctx.drawImage(sprCache[key],288,floorY(i)+24);
   });
   S.floors.forEach((f,i)=>{for(const [k,x,y,lv] of ROOMS[f.type].furniture) if(k==='camera' && f.lv>=lv){ctx.fillStyle=Math.floor(sceneTime*3)%2?'#ff5969':'#542d45';ctx.fillRect(x+8,floorY(i)+y+15,3,3);}});
-  for(const [id,a] of [...actors].sort((a,b)=>a[1].y-b[1].y)) {const st=E.starById(S,id)||S.staff.find(st=>st.id===id);if(st && !a.hide)drawActor(st,a,now);}
+  for(const [id,a] of [...actors].sort((a,b)=>a[1].y-b[1].y)) {const st=E.starById(S,id)||S.staff.find(st=>st.id===id)||(id==='assistant'?S.assistant:null);if(st && !a.hide)drawActor(st,a,now);}
+  const aa=actors.get('assistant');if(aa&&!aa.hide){ctx.font='13px sans-serif';ctx.fillText('💡',aa.x-6,aa.y-34);}
   if(S.scouted.length){const st=S.scouted[0];ctx.drawImage(portrait(st).canvas,66,floorY(0)+48);ctx.drawImage(spr('visitor_sign'),70,floorY(0)+30);}
   if(S.offers.length&&!night){const r=S.rivals[S.offers[0].partner];ctx.drawImage(portrait(r.stars[0]).canvas,194,floorY(0)+48);ctx.drawImage(spr('visitor_badge'),209,floorY(0)+68);ctx.font='14px sans-serif';ctx.fillText(r.icon,205,floorY(0)+37);if(Math.floor(sceneTime)%7<4){ctx.fillStyle='#fffdf5';ctx.fillRect(32,floorY(0)-18,235,29);ctx.fillStyle='#554466';ctx.font='10px sans-serif';ctx.textAlign='left';const text=S.offers[0].greeting||'期待一起合作!';ctx.fillText(text.slice(0,21),38,floorY(0)-6);ctx.fillText(text.slice(21),38,floorY(0)+5);}}
   if(!night)for(const v of (playback?.R.visitors||[])){const day=currentDay();if(!day?.acts[v.our]?.includes(v.op))continue;const fi=day.floorOf[v.our];if(fi==null||fi<0)continue;/* 跟我們的明星同一層 */v.npc.forEach((st,i)=>ctx.drawImage(portrait(st,'down',Math.floor(sceneTime*2)%2?'idle0':'walk1').canvas,210+i*28,floorY(fi)+48));}
@@ -221,7 +223,7 @@ function draw(now) {
 function drawActor(st,a) {
   const act=a.act, type=act?.startsWith('job:') ? (playback?.R.opTypes?.[act.slice(4)] || E.opById(S,act.slice(4))?.type) : '';
   let kind=act==='eat'?'eat':act==='sleep'||act==='rest'?'sleep':act==='relax'?'relax':act==='live'||type==='live'||type==='holo'?'live':act==='train:dance'||['short','duo'].includes(type)?'dance':act==='train:sing'||['own_album','group_album'].includes(type)?'sing':act==='train:talk'||['podcast','own_show'].includes(type)?'talk':'act';
-  if(st.role&&act!=='eat')kind='staff';
+  if((st.role||st.id==='assistant')&&act!=='eat')kind='staff';
   else if(act==='train:charm'||type==='fashion')kind='style';
   if((currentDay()?.sulkOf?.[st.id] ?? !!st.sulk) && !act.startsWith('job:') && !['eat','sleep'].includes(kind))kind='sulk';
   const moving=a.moving, col=moving?['walk0','walk1','walk2','walk3'][Math.floor(a.t*8)%4]:'idle0';
@@ -271,7 +273,7 @@ bindPointer(cv,cam,{blocked:()=>!S,onTap:(x,y)=>{
   const wi=S.walkins.find((st,i)=>Math.abs(x-[110,151,263][i])<18&&Math.abs(y-floorY(0)-92)<20);if(wi){openWalkin(wi.id);return;}
   if(S.offers.length&&Math.abs(x-206)<22&&Math.abs(y-floorY(0)-65)<35){openCompany('partners');toast(S.offers[0].greeting||'歡迎合作!');return;}
   if(S.scouted.length&&Math.abs(x-78)<20&&Math.abs(y-floorY(0)-65)<35){openCompany('scouted');return;}
-  for(const [id,a] of actors)if(!a.hide&&Math.abs(a.x-x)<17&&Math.abs(a.y-16-y)<21){if(E.starById(S,id))openInteract(id);else openCompany();return;}
+  for(const [id,a] of actors)if(!a.hide&&Math.abs(a.x-x)<17&&Math.abs(a.y-16-y)<21){if(id==='assistant')openAssistant();else if(E.starById(S,id))openInteract(id);else openCompany();return;}
   if(y<96 && x>=0 && x<320){openBuild();return;}
   if(x<0||x>320)return;
   const i=S.floors.length-1-Math.floor((y-128)/96);if(i>=0&&i<S.floors.length)openFloor(i);
@@ -296,7 +298,7 @@ function updateBubbles(now) {
   if (bubOn.size < 3) for (const [id, q] of bubQ) {
     if (bubOn.size >= 3) break;
     if (bubOn.has(id) || !q.length || !actors.has(id)) continue;
-    const f = q.shift(), st = E.starById(S, id); if (!st) continue;
+    const f = q.shift(), st = id==='assistant'?S.assistant:E.starById(S, id); if (!st) continue;
     const el = document.createElement('div'); el.className = 'bub'; el.style.setProperty('--c', st.glow);
     let text = f.text.replace(new RegExp('^' + st.name + '[::]'), '');
     if (text.length > 46) text = text.slice(0, 44) + '…';
@@ -328,6 +330,7 @@ function updateBubbles(now) {
 // ============================================================
 function render() {
   if (!S) return;
+  if (tutorialQueue.length && $('tutorialCard').hidden && !document.querySelector?.('.modal.on')) showTip(tutorialQueue.shift());
   pumpFeed();
   placeActors();
   $('coName').innerHTML = `<b>${esc(S.company)}</b>第 ${S.week} 週 · Lv${S.lv} ${D.LEVELS[S.lv].name}${S.ng ? ` · 第 ${S.ng + 1} 季` : ''}`;
@@ -374,6 +377,9 @@ function renderTab() {
     p.querySelectorAll('button:not([data-ev])').forEach(b=>b.disabled=true);
   }
   p.scrollTop = y;
+  showTip(tab);
+  const advice=E.assistantAdvice(S);if(advice&&assistantBubbleWeek!==S.week){assistantBubbleWeek=S.week;bubQ.set('assistant',[{text:advice}]);}
+  for(const key of [S.event?'event':null,S.offers.length?'offer':null,S.walkins.length?'walkin':null])if(key)showTip(key);
 }
 
 const REASONS = { career:'大目標', skill: '最拿手', dream: '夢想', rival: '不想輸給對手', topic: '喜歡這個話題', revenge: '上次沒選上', friend: '想跟朋友一起', wish: '心願', trend: '追流行', big: '想要大舞台', lead: '想當主角', generic: '想試試看' };
@@ -399,7 +405,7 @@ function opMeta(op) {
 }
 function opsHTML() {
   const open = S.ops.filter(o => o.status === 'open' && !o.project), run = S.ops.filter(o => o.status === 'run' && !o.project);
-  let h = '';
+  let h = adviceCard();
   if (S.event) h += `<div class="card2" style="background:#fff3c4"><b>📣 ${esc(S.event.title)}</b><div class="meta">要先決定怎麼處理,才能進到下一週。</div><button class="sbtn" data-ev="1">看事件</button></div>`;
   h += `<div class="sec">本週機會(沒人接的,下週會被別家公司接走)</div>`;
   if (!open.length) h += '<p class="muted">這週的機會都排好了!其他人可以去「📅 行程」排練習或休息。</p>';
@@ -421,6 +427,7 @@ function opCard(op, extra = '') {
   let h = `<div class="card2"><h3>${m.icon} ${esc(op.title)} ${opTags(op)}</h3>
     <div class="meta">${opMeta(op)}</div>
     ${op.partner!=null?`<div class="rew"><span>💰 約 $${fmt(E.cooperationPreview(S,op).money)}</span><span>👥 約 +${fmt(E.cooperationPreview(S,op).fans)}</span><span class="muted">${op.offerType==='loan'?'技能至少 5，酬勞全給公司':'B 評價預估'}</span></div>`:op.project ? `<div class="rew"><span>💿 上架後 8 週每週分潤</span><span class="muted">${D.BUDGETS[op.budget].name}預算</span></div>` : `<div class="rew"><span>💰 $${fmt(op.pay * mult)}</span><span>👥 +${fmt(op.fans * mult)}</span><span class="muted">(B 評價時)</span></div>`}`;
+  if(S.assistant.lv>=3){const rec=E.analystRecommendation(S,op);if(rec)h+=`<div class="meta">🔍 分析師推薦:${esc(rec.st.name)}(預估 ${gradeLabel(rec.st,op,empty)})</div>`;}
   if(op.npc?.length)h+=`<div class="slots">${E.partnerStars(S,op).map(st=>`<span class="slot">${ptImg(st)}${esc(st.name)} ✅ 已就位</span>`).join('')}</div>`;
   if (op.slots.length > 1) h += `<div class="slots">${op.slots.map(s => `<span class="slot">${ptImg(E.starById(S, s.who))}${s.role}${s.who ? ':' + esc(E.starById(S, s.who).name) : ':—'}</span>`).join('')}</div>`;
   const bids = op.bids.filter(b => { const st = E.starById(S, b.id); return st && !st.gone; });
@@ -430,7 +437,7 @@ function opCard(op, extra = '') {
       const st = E.starById(S, b.id), free = E.isFree(st, op), mine = op.slots.some(s => s.who === st.id);
       const g = empty >= 0 && free ? E.estimate(S, st, op, empty) : null;
       h += `<div class="bid">${ptImg(st)}<div class="say" style="--c:${st.glow}">${nameTag(st)}:${esc(b.text)}<div class="why">理由:${REASONS[b.reason] || ''} · ${st.traits.map(t => D.TRAITS[t].icon + D.TRAITS[t].name).join(' ')}</div></div>
-        <div class="act">${mine ? '<span class="muted">✅ 選了</span>' : free && empty >= 0 ? `${gradeChip(g)}<button class="sbtn" data-assign="${op.id}" data-slot="${empty}" data-star="${st.id}">選${op.slots.length > 1 ? '為' + op.slots[empty].role : '他'}</button>` : '<span class="muted">有別的工作</span>'}</div></div>`;
+        <div class="act">${mine ? '<span class="muted">✅ 選了</span>' : free && empty >= 0 ? `${gradeChip(g)}${scoreHTML(st,op,empty)}<button class="sbtn" data-assign="${op.id}" data-slot="${empty}" data-star="${st.id}">選${op.slots.length > 1 ? '為' + op.slots[empty].role : '他'}</button>${impact(E.selectionHint(S,st,op))}` : '<span class="muted">有別的工作</span>'}</div></div>`;
     }
   } else h += `<div class="h4">還沒有人來搶 —— 可以直接指派</div>`;
   for (const y of op.yields) { const st = E.starById(S, y.id); if (st) h += `<div class="yield">💗 ${nameTag(st)}:${esc(y.text)}</div>`; }
@@ -454,9 +461,9 @@ function estimateEnergy(st) {
   return Math.round(e);
 }
 function scheduleHTML() {
-  return `<div class="card2"><button class="sbtn" data-auto="1">🪄 全部自動排</button><div class="meta">點格子換行程。工作已預約，週日記得休息！</div></div>`+E.team(S).map(st=>{
+  return `<div class="card2"><button class="sbtn" data-auto="1">🪄 全部自動排</button><div class="meta">點格子換行程。工作已預約，週日記得休息!</div>${impact('🛏 休息 體力 ↑↑ · 🎉 放假 體力 ↑ 心情 ↑↑ · 練習 技能 ↑ 體力 ↓ · 🔴 直播 粉絲 ↑ 錢 ↑ 體力 ↓ · 🎬 工作 體力 ↓↓')}</div>`+E.team(S).map(st=>{
     const e=estimateEnergy(st), rest=st.sched.some(v=>v==='rest'||v==='off');
-    return `<div class="scheduleRow"><div class="scheduleGrid"><div class="person">${ptImg(st)}${esc(st.name)}${bar(st.energy,'#61bb8b')}</div>${st.sched.map((v,d)=>`<button data-day="${d}" data-star="${st.id}" class="${v.startsWith('job:')?'job':''}" title="週${E.DAY_NAMES[d]} ${esc(E.ACT_NAMES[v]||'工作')}"><small>${E.DAY_NAMES[d]}</small>${actIcon(v)}</button>`).join('')}</div><div class="scheduleNote" style="color:${e<20||!rest?'#b83a4e':'#75658b'}">這週體力預估 ${e}${e<20?' · 😵 太累了':''}${!rest?' · ⚠ 沒有休息日':''}</div></div>`;
+    return `<div class="scheduleRow"><div class="scheduleStats">${scheduleStats(st)}</div><div class="scheduleGrid"><div class="person">${ptImg(st)}${esc(st.name)}${bar(st.energy,'#61bb8b')}</div>${st.sched.map((v,d)=>`<button data-day="${d}" data-star="${st.id}" class="${v.startsWith('job:')?'job':''}" title="週${E.DAY_NAMES[d]} ${esc(E.ACT_NAMES[v]||'工作')}"><small>${E.DAY_NAMES[d]}</small>${actIcon(v)}</button>`).join('')}</div><div class="scheduleNote" style="color:${e<20||!rest?'#b83a4e':'#75658b'}">這週體力預估 ${e}${e<20?' · 😵 太累了':''}${!rest?' · ⚠ 沒有休息日':''} ${scheduleGains(st)}</div></div>`;
   }).join('');
 }
 function switchSchedule() {
@@ -477,7 +484,7 @@ function floorListHTML() {
 }
 function openFloor(i) {
   const f=S.floors[i], def=D.FLOORS[f.type];
-  const here=[...actors].filter(([,a])=>a.fi===i&&!a.hide).map(([id])=>(E.starById(S,id)||S.staff.find(st=>st.id===id)).name);
+  const here=[...actors].filter(([,a])=>a.fi===i&&!a.hide).map(([id])=>(E.starById(S,id)||S.staff.find(st=>st.id===id)||(id==='assistant'?S.assistant:null)).name);
   $('roomTitle').textContent=`${i+1}F ${def.icon} ${def.name} Lv${f.lv}`;
   $('roomBody').innerHTML=`<p class="txt">${def.desc}</p><p class="txt">今天在這層：${here.map(esc).join('、')||'大家都去別處忙了'}</p>${f.lv<3?`<button class="choice" data-room-up="${i}" ${S.money<E.upgradeCost(S,i)?'disabled':''}>升級 $${fmt(E.upgradeCost(S,i))}${S.money<E.upgradeCost(S,i)?'（錢不夠）':''}</button>`:'<p class="muted">已經是最高級！</p>'}`;
   $('roomBox').classList.add('on');
@@ -492,7 +499,7 @@ function openBuild() {
 }
 function openInteract(id) {
   const st=E.starById(S,id);$('roomTitle').textContent=`${st.emoji} ${st.name} · ${careerTag(st)} · 信任 ${Math.round(st.trust)}`;
-  $('roomBody').innerHTML=`<div style="text-align:center">${ptImg(st)}</div>`+[['chat','💬 聊天'],['snack','🍪 點心 $60'],['cheer','👏 鼓勵'],['talk','☕ 談心 $150']].map(([kind,label])=>`<button class="choice" data-interact="${kind}" data-id="${id}" ${st.done[kind]?'disabled':''}>${label}${st.done[kind]?'（這週做過了）':''}</button>`).join('')+`<button class="choice" data-room-star="${id}">📋 資料</button>`;
+  $('roomBody').innerHTML=`<div style="text-align:center">${ptImg(st)}</div>`+[['chat','💬 聊天'],['snack','🍪 點心 $60'],['cheer','👏 鼓勵'],['talk','☕ 談心 $150']].map(([kind,label])=>`<button class="choice" data-interact="${kind}" data-id="${id}" ${st.done[kind]?'disabled':''}>${label}${st.done[kind]?'（這週做過了）':''}</button>`).join('')+`<button class="choice" data-room-star="${id}">📋 資料</button><button class="choice" data-analysis="${id}">📈 發展分析</button>`;
   $('roomBox').classList.add('on');
 }
 let evaluationOpen=false;
@@ -503,6 +510,9 @@ $('roomClose').onclick=()=>{
 $('roomBody').onclick=e=>{
   const b=e.target.closest('button');if(!b||playback)return;const d=b.dataset;let err;
   if(d.trainer||d.evalDebut||'wiz' in d)return;
+  if(d.analysis){$('roomBox').classList.remove('on');openStar(d.analysis);$('developmentAnalysis').scrollIntoView?.();return;}
+  if(d.assistantUp){err=E.upgradeAssistant(S);if(err)toast(err);openAssistant();save();render();return;}
+  if(d.tipsToggle){S.tipsOff=!S.tipsOff;if(S.tipsOff){tutorialQueue=[];$('tutorialCard').hidden=true;$('tutorialCard').innerHTML='';}openAssistant();save();render();return;}
   if(d.roomUp!==undefined)err=E.upgradeFloor(S,+d.roomUp);
   if(d.roomBuild)err=E.buildFloor(S,d.roomBuild);
   if(d.roomStar){$('roomBox').classList.remove('on');openStar(d.roomStar);return;}
@@ -525,12 +535,13 @@ function starCard(st, full = false) {
   const plans = `<button class="miniSched" data-schedule="1" aria-label="查看七天行程">${st.sched.map(v=>`<span>${actIcon(v)}</span>`).join('')}</button>`;
   return `<div class="card2"><div class="star"><img class="pt big" data-open="${st.id}" style="--g:${st.glow}33" src="${portrait(st).url}" alt="">
     <div class="body"><div class="nm" style="color:${st.glow}">${st.emoji} ${esc(st.name)} <span class="tag">${st.traits.map(t => D.TRAITS[t].icon + D.TRAITS[t].name).join(' · ')}</span></div>
-    <div class="meta">${careerTag(st)} · 潛力 ${E.potentialStars(st)}${(g => g ? ` · 👯 ${esc(g.name)}${g.center === st.id ? '・C 位' : ''}` : '')(E.groupOf(S, st.id))}</div><div class="sk">${sk}</div>
+    <div class="meta">${careerTag(st)} · 潛力 ${S.assistant.lv>=1?E.potentialStars(st):'?'}${(g => g ? ` · 👯 ${esc(g.name)}${g.center === st.id ? '・C 位' : ''}` : '')(E.groupOf(S, st.id))}</div><div class="sk">${sk}</div>
     <div class="bars"><div>${moodFace(st.mood)} 心情${bar(st.mood, '#ff8fb1')}</div><div>⚡ 體力${bar(st.energy, st.energy < 25 ? '#ff6f6f' : '#7fdc8a')}</div><div>💗 歸屬${bar(st.loyalty, st.loyalty < 30 ? '#ff6f6f' : '#b98cff')}</div></div>
     <div class="wish">👥 粉絲 ${fmt(st.fans)}${st.wish ? ` · 💭 ${esc(E.wishText(S, st))}(剩 ${st.wish.left} 週)` : ''}${st.lost >= 2 ? ` · 連續 ${st.lost} 次沒選上` : ''}</div>
     ${fr.length || rv.length ? `<div class="rels">${fr.map(o => '🤝' + esc(o.name)).join(' ')} ${rv.map(o => '⚔️' + esc(o.name)).join(' ')}</div>` : ''}
     ${full ? `<div class="wish">❤️ 喜歡 #${D.topicById(st.topic).name} · 🌠 夢想:${D.MEDIA[st.dream].icon}${D.MEDIA[st.dream].name} · 口頭禪「${esc(st.catch)}」</div>
       <div class="wish">🎬 做過 ${st.stat.ops} 個作品${st.stat.best ? ',最好 ' + st.stat.best : ''} · 加入第 ${st.joined} 週</div>` : ''}
+    ${full?analysisHTML(st):''}
     ${plans}
     <div class="acts"><button class="sbtn ghost" data-talk="${st.id}" ${st.talkedThisWeek ? 'disabled' : ''}>☕ 談心 $${D.TALK_COST}</button><button class="sbtn ghost" data-outfit="${st.id}">👗 新造型 $${D.OUTFIT_COST}</button><button class="sbtn ghost" data-meet="${st.id}" ${!E.freeDays(st) ? 'disabled' : ''}>🎪 見面會 $${D.MEET_COST}</button></div>
     </div></div></div>`;
@@ -560,7 +571,7 @@ function coHTML() {
     h += `<div class="meta">簽約金 $${fmt(D.auditionCost(E.debuted(S).length))} · 名額 ${E.debuted(S).length}/${lv.max}</div>`;
     S.audition.forEach((c, i) => {
       h += `<div class="bid"><img class="pt" style="--g:${c.glow}22" src="${portrait(c).url}" alt=""><div class="say" style="--c:${c.glow}">${nameTag(c)}:${esc(c.intro || '')}
-        <div class="why">${c.traits.map(t => D.TRAITS[t].icon + D.TRAITS[t].name).join(' ')} · ${careerTag(c)}<br>${D.SKILL_IDS.map(k=>D.SKILLS[k].icon+c.skills[k].toFixed(1)).join(' ')}</div></div>
+        <div class="why">${c.traits.map(t => D.TRAITS[t].icon + D.TRAITS[t].name).join(' ')} · ${careerTag(c)} · 潛力 ${S.assistant.lv>=1?E.potentialStars(c):'?'}<br>${D.SKILL_IDS.map(k=>D.SKILLS[k].icon+c.skills[k].toFixed(1)).join(' ')}</div></div>
         <div class="act"><button class="sbtn" data-sign="${i}">簽約</button></div></div>`;
     });
     h += `<button class="sbtn ghost" data-skipaud="1" style="margin-top:6px">這次都不要</button>`;
@@ -636,12 +647,12 @@ function openPicker(opId, slot) {
   const op = E.opById(S, opId); if (!op) return;
   pickCtx = { opId, slot };
   $('pickTitle').textContent = `${D.MEDIA[op.type].icon} ${op.title}${op.slots.length > 1 ? ' · ' + op.slots[slot].role : ''}`;
-  $('pickHow').textContent = '沒來搶的人也可以指派,不過如果他沒興趣,心情會差一點。';
+  $('pickHow').textContent = S.tipsOff?'':'沒來搶的人也可以指派,不過如果他沒興趣,心情會差一點。';
   const free = E.team(S).filter(st=>E.isFree(st,op) && (!op.only || op.only.includes(st.id))).map(st => ({ st, g: E.estimate(S, st, op, slot), bid: op.bids.some(b => b.id === st.id) }))
     .sort((a, b) => 'SABC'.indexOf(a.g.g) - 'SABC'.indexOf(b.g.g));
   $('pickList').innerHTML = free.length ? free.map(({ st, g, bid }) => `<div class="bid">${ptImg(st)}<div class="say" style="--c:${st.glow}">${nameTag(st)} ${bid ? '<span class="tag hot">想要</span>' : ''}
     <div class="why">${D.SKILL_IDS.map(k => D.SKILLS[k].icon + st.skills[k].toFixed(1)).join(' ')} · ⚡${Math.round(st.energy)} · ${moodFace(st.mood)}</div></div>
-    <div class="act">${gradeChip(g)}<button class="sbtn" data-pk="${st.id}">選</button></div></div>`).join('') : '<p class="muted">大家這週都有工作了。</p>';
+    <div class="act">${gradeChip(g)}${scoreHTML(st,op,slot)}<button class="sbtn" data-pk="${st.id}">選</button>${impact(E.selectionHint(S,st,op))}</div></div>`).join('') : '<p class="muted">大家這週都有工作了。</p>';
   $('pickBox').classList.add('on');
 }
 $('pickList').addEventListener('click', e => {
@@ -676,12 +687,13 @@ $('starClose').addEventListener('click', () => $('starBox').classList.remove('on
 
 // ---------- 事件 ----------
 function openEvent() {
+  showTip('event');
   const ev = S.event; if (!ev) return;
   $('evTitle').textContent = '📣 ' + ev.title;
   const ids = ev.id === 'leave' ? [ev.star] : Array.isArray(ev.ctx) ? ev.ctx : ev.ctx ? [ev.ctx] : [];
   $('evWho').innerHTML = `<div style="text-align:center">${ids.map(id => E.starById(S, id)).filter(Boolean).map(st => ptImg(st, 'pt big')).join(' ')}</div>`;
   $('evText').textContent = ev.text;
-  $('evChoices').innerHTML = ev.choices.map((c, i) => `<button class="choice" data-ch="${i}">${esc(c.label)}${c.cost && S.money < c.cost ? ' <small>(錢不夠)</small>' : ''}</button>`).join('');
+  $('evChoices').innerHTML = ev.choices.map((c, i) => `<button class="choice" data-ch="${i}">${esc(c.label)}${impact(c.hint||'會影響:依選擇改變')}${c.cost && S.money < c.cost ? ' <small>(錢不夠)</small>' : ''}</button>`).join('');
   $('evMsg').textContent = '';
   $('evBox').classList.add('on');
 }
@@ -785,7 +797,7 @@ $('ngList').addEventListener('click', e => {
 });
 $('ngClose').addEventListener('click', () => $('ngBox').classList.remove('on'));
 $('helpBtn').addEventListener('click', () => { sfx.tap(); $('helpBox').classList.add('on'); });
-$('helpClose').addEventListener('click', () => $('helpBox').classList.remove('on'));
+$('helpClose').addEventListener('click', () => { $('helpBox').classList.remove('on'); if (S) render(); });
 
 // ============================================================
 //  存檔
@@ -814,7 +826,7 @@ const newSeed = () => (Date.now() % 2147483647) || 1;
 function show(id) { for (const s of ['startScreen', 'gameScreen']) $(s).classList.toggle('on', s === id); }
 /** 把一份存檔放進遊戲(開始、讀存檔碼、第二季都走這裡) */
 function boot(sv) {
-  S = E.migrate(sv); playback=null; sceneKey=''; $('playControls').hidden=true; $('nextBtn').disabled=false;
+  S = E.migrate(sv); assistantBubbleWeek=0; tutorialQueue=[]; $('tutorialCard').hidden=true;$('tutorialCard').innerHTML=''; playback=null; sceneKey=''; $('playControls').hidden=true; $('nextBtn').disabled=false;
   for(const n of notifications)n.el.remove();notifications=[];walkinArrival.clear();
   actors.clear(); bubQ.clear(); for (const [, b] of bubOn) b.el.remove(); bubOn.clear();
   ptCache.clear(); bgCanvas = null;
@@ -902,7 +914,7 @@ requestAnimationFrame(frame);
 
 // 開發用:自動玩家、快轉
 if (import.meta.env?.DEV !== false) window.AS = {   // 開發用(正式版沒有;Node 假 DOM 測試也要用)
-  get S() { return S; }, openWalkin, notify, walkinHTML, openVisit, openNpc, renderPartners, openEvaluation, openTrainer, openAwards, openProjectWizard, openGroupWizard, actors, cam, view, E, D, play, skip, render, save, boot, showEnding, openEvent, refreshStart, loadBest: () => loadBest(SAVE_KEY),
+  get S() { return S; }, openAssistant, adviceCard, showTip, analysisHTML, scheduleHTML, openStar, openPicker, cycleDay, openWalkin, notify, walkinHTML, openVisit, openNpc, renderPartners, openEvaluation, openTrainer, openAwards, openProjectWizard, openGroupWizard, actors, cam, view, E, D, play, skip, render, save, boot, showEnding, openEvent, refreshStart, loadBest: () => loadBest(SAVE_KEY),
   next() { $('nextBtn').click(); }, closeReport() { $('repGo').click(); },
   // 窗格在背景時 requestAnimationFrame 不跑:手動推進 sec 秒的畫格
   tick(sec = 1) { const t0 = performance.now(); for (let t = 0; t < sec; t += 0.05) { step(0.05); updateBubbles(t0 + t * 1000); } draw(t0 + sec * 1000); updateBubbles(t0 + sec * 1000); },
@@ -920,8 +932,8 @@ function staffTarget(st,idx) {
  return {fi,x:outside?10:x,y:floorY(fi)+y,act:p>=0.45&&p<0.60?'eat':'staff',outside};
 }
 function recruitmentHTML() {
- const lv=E.roomLv(S,'scout'), reveal=lv>=3||S.staff.some(st=>st.role==='scout'&&st.lv===3);
- return districtHTML()+`<div class="card2" id="scouted"><b>🙋 新人(自薦/星探)</b><div class="meta">練習生 ${E.team(S).filter(st=>st.trainee).length}/${E.traineeCapacity(S)} 位${lv?'':' · 蓋星探部就能找新人'}</div>`+S.walkins.map(st=>walkinHTML(st)).join('')+S.scouted.map(st=>`<div class="bid">${ptImg(st)}<div class="say">${nameTag(st)}<div class="why">${st.traits.map(t=>D.TRAITS[t].name).join(' · ')}<br>${careerTag(st)} · 潛力 ${lv>=2?E.potentialStars(st):'?'}${reveal?' · 專長 '+D.SKILLS[E.bestSkill(st)].name:''}<br>${esc(st.intro)}</div><button class="sbtn" data-scout-sign="${st.id}">簽成練習生 $300</button> <button class="sbtn ghost" data-scout-no="${st.id}">不用了</button></div></div>`).join('')+`</div><div class="card2"><b>👥 員工 (${S.staff.length}/${1+S.lv})</b>`+S.staff.map(st=>`<div class="floorRow"><div>${D.STAFF_ROLES[st.role].icon} ${esc(st.name)} Lv${st.lv}${st.skill?' · '+D.SKILLS[st.skill].name:''}<div class="meta">${D.STAFF_ROLES[st.role].desc} · 週薪 $${D.staffSalary(st)}</div></div><button class="sbtn ghost" data-fire="${st.id}">謝謝你，再見</button></div>`).join('')+`<div class="h4">請人 $${600+300*S.staff.length}</div>`+Object.entries(D.STAFF_ROLES).map(([role,r])=>{const why=E.canHire(S,role);return `<button class="choice" data-hire="${role}" ${why?'disabled':''}>${r.icon} ${r.name}<div class="meta">${r.desc}${why?' · '+why:''}</div></button>`;}).join('')+'</div>';
+ const lv=E.roomLv(S,'scout'), reveal=S.assistant.lv>=2||lv>=3||S.staff.some(st=>st.role==='scout'&&st.lv===3);
+ return districtHTML()+`<div class="card2" id="scouted"><b>🙋 新人(自薦/星探)</b><div class="meta">練習生 ${E.team(S).filter(st=>st.trainee).length}/${E.traineeCapacity(S)} 位${lv?'':' · 蓋星探部就能找新人'}</div>`+S.walkins.map(st=>walkinHTML(st)).join('')+S.scouted.map(st=>`<div class="bid">${ptImg(st)}<div class="say">${nameTag(st)}<div class="why">${st.traits.map(t=>D.TRAITS[t].name).join(' · ')}<br>${careerTag(st)} · 潛力 ${S.assistant.lv>=1||lv>=2?E.potentialStars(st):'?'}${S.assistant.lv>=2?' · '+D.SKILL_IDS.map(k=>D.SKILLS[k].name+' '+st.skills[k].toFixed(1)).join(' · '):reveal?' · 專長 '+D.SKILLS[E.bestSkill(st)].name:''}<br>${esc(st.intro)}</div><button class="sbtn" data-scout-sign="${st.id}">簽成練習生 $300</button> <button class="sbtn ghost" data-scout-no="${st.id}">不用了</button></div></div>`).join('')+`</div><div class="card2"><b>👥 員工 (${S.staff.length}/${1+S.lv})</b>`+S.staff.map(st=>`<div class="floorRow"><div>${D.STAFF_ROLES[st.role].icon} ${esc(st.name)} Lv${st.lv}${st.skill?' · '+D.SKILLS[st.skill].name:''}<div class="meta">${D.STAFF_ROLES[st.role].desc} · 週薪 $${D.staffSalary(st)}</div></div><button class="sbtn ghost" data-fire="${st.id}">謝謝你，再見</button></div>`).join('')+`<div class="h4">請人 $${600+300*S.staff.length}</div>`+Object.entries(D.STAFF_ROLES).map(([role,r])=>{const why=E.canHire(S,role);return `<button class="choice" data-hire="${role}" ${why?'disabled':''}>${r.icon} ${r.name}<div class="meta">${r.desc}${why?' · '+why:''}</div></button>`;}).join('')+'</div>';
 }
 function openTrainer() {
  $('roomTitle').textContent='🏋 訓練師要教哪一科?';
@@ -934,6 +946,7 @@ $('roomBody').addEventListener('click',e=>{
  else openEvaluation(S.report); saveSoon();render();
 });
 function openEvaluation(R) {
+ showTip('evaluation');
  evaluationOpen=true;
  $('roomTitle').textContent='🌱 月末評鑑 · 第 '+R.week+' 週';
  $('roomBody').innerHTML=`<div style="text-align:center"><img width="192" height="96" src="${spr('score_board').toDataURL()}" alt="評鑑分數板"></div>`+R.evaluation.map(ev=>{
@@ -1058,6 +1071,7 @@ function postReport(from) {
 // ---------- 頒獎典禮 ----------
 let award = null;
 function openAwards(R) {
+ showTip('awards');
   award = { list: R.awards, i: 0, shown: false };
   $('awardImg').src = spr('red_carpet').toDataURL();
   renderAward();
@@ -1120,8 +1134,32 @@ let notifications=[];
 function notify(f){const el=document.createElement('div');el.className='notice';el.textContent=f.text;$('notifications').appendChild(el);notifications.push({el,until:performance.now()+4000});while(notifications.length>3)notifications.shift().el.remove();}
 $('logBtn').onclick=()=>{feedSeen=S.seq;$('bFeed').style.display='none';$('roomTitle').textContent='📜 紀錄';$('roomBody').innerHTML=feedHTML();$('roomBox').classList.add('on');};
 const conditionText=st=>({lead:'想當主角',album:'想要自己的單曲',off:'每週至少一天放假'}[st.walkinCondition]||'沒有額外條件');
-function walkinHTML(st){return `<div class="card2">${ptImg(st)}<b>${esc(st.name)} · ${st.trainee?'🌱 素人':'⭐ 有經驗的明星'}</b><p>${esc(st.intro)}</p><p>${st.traits.map(t=>D.TRAITS[t].name).join(' · ')} · ${careerTag(st)}</p><p>${D.SKILL_IDS.map(k=>D.SKILLS[k].name+':'+(!st.trainee||k===E.bestSkill(st)?st.skills[k].toFixed(1):'?')).join(' · ')}</p><p>潛力 ${E.roomLv(S,'scout')>=2?E.potentialStars(st):'?'} · ${conditionText(st)}</p><button class="sbtn" data-walkin-sign="${st.id}">簽約 $${fmt(st.signCost)}</button> <button class="sbtn ghost" data-walkin-no="${st.id}">婉拒</button></div>`;}
+function walkinHTML(st){return `<div class="card2">${ptImg(st)}<b>${esc(st.name)} · ${st.trainee?'🌱 素人':'⭐ 有經驗的明星'}</b><p>${esc(st.intro)}</p><p>${st.traits.map(t=>D.TRAITS[t].name).join(' · ')} · ${careerTag(st)}</p><p>${D.SKILL_IDS.map(k=>D.SKILLS[k].name+':'+(S.assistant.lv>=2||!st.trainee||k===E.bestSkill(st)?st.skills[k].toFixed(1):'?')).join(' · ')}</p><p>潛力 ${S.assistant.lv>=1||E.roomLv(S,'scout')>=2?E.potentialStars(st):'?'} · ${conditionText(st)}</p><button class="sbtn" data-walkin-sign="${st.id}">簽約 $${fmt(st.signCost)}</button> <button class="sbtn ghost" data-walkin-no="${st.id}">婉拒</button></div>`;}
 function openWalkin(id){const st=S.walkins.find(s=>s.id===id);if(!st)return;$('roomTitle').textContent='🙋 自薦';$('roomBody').innerHTML=walkinHTML(st);$('roomBox').classList.add('on');}
 function drawWalkins(){ctx.globalAlpha=1;ctx.textAlign='left';S.walkins.forEach((st,i)=>{const t=Math.min(1,(sceneTime-(walkinArrival.has(st.id)?walkinArrival.get(st.id):(walkinArrival.set(st.id,sceneTime),sceneTime)))/3),x=t<0.5?-60+t*136:8+(t-0.5)*2*(([110,151,263][i]-8)),y=t<0.5?floorY(0)+108:floorY(0)+108-(t-0.5)*32;ctx.drawImage(portrait(st,t<1?'right':'down',t<1?'walk1':'idle0').canvas,x-12,y-30);ctx.font='14px sans-serif';ctx.fillText('❔',x-6,y-34);});}
 function districtHTML(){const d=E.district(S),n=D.DISTRICTS[D.DISTRICTS.indexOf(d)+1];return `<div class="card2"><b>🚚 地區 · ${d.icon} ${d.name}</b><img style="width:100%;height:48px;object-fit:cover;image-rendering:pixelated" src="${streetSprite('skyline_'+d.id).toDataURL()}" alt="${d.name}街景"><p>房租 ×${d.rent} · 粉絲/酬勞 +${Math.round(d.bonus*100)}% · 每週機會 +${d.ops}</p>${n?`<p>下一站:${n.icon} ${n.name} · 公司 Lv${n.lv}${n.fans?' · 粉絲 '+fmt(n.fans):''} · $${fmt(n.cost)}<br>房租 ×${n.rent} · 粉絲/酬勞 +${n.bonus*100}% · 每週機會 +${n.ops}</p><button class="sbtn" data-move="${n.id}" ${E.canMoveDistrict(S,n.id)?'disabled':''}>搬家</button>`:'已到最終地區'}</div>`;}
 for(const id of ['panel','roomBody'])$(id).addEventListener('click',e=>{const b=e.target.closest('[data-walkin-sign],[data-walkin-no],[data-move]');if(!b||playback)return;let err;if(b.dataset.move){if(!confirm('確定搬家?所有樓層、明星和員工都會一起搬。'))return;err=E.moveDistrict(S,b.dataset.move);}else if(b.dataset.walkinSign)err=E.signWalkin(S,b.dataset.walkinSign);else E.declineWalkin(S,b.dataset.walkinNo);if(err)toast(err);else{$('roomBox').classList.remove('on');render();save();}});
+
+let assistantBubbleWeek=0;
+function assistantTarget(){const p=playback?(playback.t%4)/4:0.3,eat=!!playback&&p>=0.45&&p<0.60,outside=!!playback&&p>=0.85,fi=eat?Math.max(0,roomIndex('cafe')):0;return {fi,x:outside?10:eat?155:48,y:floorY(fi)+78,act:eat?'eat':'staff',outside};}
+const impact=t=>S.tipsOff?'':`<div class="impact">${esc(t)}</div>`;
+function scoreHTML(st,op,slot){return S.assistant.lv>=3?`<small>${Math.round(E.perf(S,st,op,slot,false))}</small>`:'';}
+function gradeLabel(st,op,slot){return E.estimate(S,st,op,slot).g+(S.assistant.lv>=3?' '+Math.round(E.perf(S,st,op,slot,false)):'');}
+function adviceCard(){const text=E.assistantAdvice(S);return text&&S.adviceDismissedWeek!==S.week?`<div class="card2 assistantAdvice"><button class="sbtn ghost" data-dismiss-advice="1" aria-label="收起本週建議">✕</button><b>💡 本週建議</b><p>${esc(text)}</p><button class="sbtn" data-assistant="1">找小助理</button></div>`:'';}
+function openAssistant(){$('roomTitle').textContent='💡 小助理';$('roomBody').innerHTML=ptImg(S.assistant)+`<b>${esc(S.assistant.name)} · ${E.ASSISTANT_TITLES[S.assistant.lv]} Lv${S.assistant.lv}</b><p>本週建議:${esc(E.assistantAdvice(S)||'升級成分析師,就能繼續收到每週建議。')}</p><p>Lv1:潛力星星、每週建議。Lv2:適性、候選全部技能。Lv3:推薦人選、預估分數。</p><button class="choice" data-assistant-up="1" ${S.assistant.lv===3?'disabled':''}>升級 ${E.ASSISTANT_COSTS[S.assistant.lv]?'$'+fmt(E.ASSISTANT_COSTS[S.assistant.lv]):'已滿級'}</button><button class="choice" data-tips-toggle="1">教學提示:${S.tipsOff?'關':'開'}</button>`;$('roomBox').classList.add('on');}
+function analysisHTML(st){const a=E.analyzeStar(S,st),k=a.strongest;return `<div id="developmentAnalysis" class="card2"><b>📈 發展分析</b><p>最突出:${D.SKILLS[k.skill].name} ${k.value.toFixed(1)},全公司第 ${k.rank}。${esc(a.trait)}</p><p>下一個目標:${esc(a.next.text)}<br>${esc(a.next.progress)}</p><p>建議練習:${esc(a.advice)}</p>${a.aptitude.length?`<p>🧭 適性:${a.aptitude.slice(0,3).map(x=>x.name+' '+x.score).join('、')}${a.aptitude[0].id!==st.career?'<br>其實他也很適合當 '+a.aptitude[0].name:''}</p>`:''}</div>`;}
+function scheduleStats(st){return D.SKILL_IDS.map(k=>`${k===E.bestSkill(st)?'<b>':''}${D.SKILLS[k].icon}${st.skills[k].toFixed(1)}${k===E.bestSkill(st)?'</b>':''}`).join(' ')+` · ⚡${Math.round(st.energy)} ${moodFace(st.mood)}`;}
+function scheduleGains(st){return D.SKILL_IDS.map(k=>{const days=st.sched.filter(v=>v==='train:'+k).length;return days?'本週 '+D.SKILLS[k].icon+' +'+E.trainingGain(S,st,k,days).toFixed(1):'';}).filter(Boolean).join(' · ');}
+const TIP_TEXT={ops:['📋 機會','先看技能與預估評價,再選適合的人。','沒人接的機會,下週會被別家公司接走。'],sched:['📅 行程','點一天的格子就能切換活動。','每週留休息或放假,別讓大家累倒。'],stars:['⭐ 明星','點明星查看資料與發展分析。','照顧心情、體力和心願,才能走得長久。'],prod:['🎛 製作','蓋製作部後,可以做自己的作品。','上架後每週都有播放分潤。'],co:['🏢 公司','在這裡升級公司、擴樓、找新人和員工。','搬到新地區也能提高曝光。'],event:['📣 事件','每個選擇都有不同影響。','處理事件後才能進到下一週。'],evaluation:['🌱 月末評鑑','每四週檢查練習生的進步。','準備好了就能安排出道。'],awards:['🏆 頒獎','每二十四週舉辦頒獎典禮。','作品與粉絲都是努力的成果。'],offer:['🤝 合作邀請','別家公司會提出合作。','注意天數、技能要求與回覆期限。'],walkin:['🙋 自薦','有人來公司毛遂自薦。','兩週沒回覆就會離開,記得看條件。']};
+let tutorialQueue=[];
+function showTip(key){
+ if(!S||S.tipsOff||S.seenTips.includes(key)||!TIP_TEXT[key])return;
+ const box=$('tutorialCard');
+ // 有別的視窗開著(例如一開始的「怎麼玩」)或已經有一張提示卡,先排隊,關掉之後再出現
+ if((!box.hidden&&box.innerHTML)||document.querySelector?.('.modal.on')){if(key!==box.dataset.tip&&!tutorialQueue.includes(key))tutorialQueue.push(key);return;}
+ box.dataset.tip=key;
+ box.innerHTML=`<b>${TIP_TEXT[key][0]}</b><p>${TIP_TEXT[key].slice(1).map(esc).join('<br>')}</p><button class="sbtn" id="tipUnderstood">知道了</button>`;
+ box.hidden=false;
+ $('tipUnderstood').onclick=()=>{if(!S.seenTips.includes(key))S.seenTips.push(key);box.hidden=true;box.innerHTML='';saveSoon();const next=tutorialQueue.shift();if(next)showTip(next);render();};
+}
+$('panel').addEventListener('click',e=>{const b=e.target.closest('[data-dismiss-advice],[data-assistant]');if(!b)return;if(b.dataset.assistant)openAssistant();else{S.adviceDismissedWeek=S.week;render();saveSoon();}});

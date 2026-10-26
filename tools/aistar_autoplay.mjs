@@ -12,6 +12,7 @@ const fmt = n => Math.round(n).toLocaleString('en-US');
 
 /** 一週的決策 */
 export function botWeek(S, style = 'mix') {
+  const assistantCost=E.ASSISTANT_COSTS[S.assistant.lv];if(assistantCost&&S.money>assistantCost+15000)E.upgradeAssistant(S);
   for(const d of D.DISTRICTS.slice().reverse())if(S.money>d.cost+20000&&!E.canMoveDistrict(S,d.id)){E.moveDistrict(S,d.id);break;}
   for(const st of S.walkins.slice())if((!st.trainee||st.pot>=1.1)&&S.money>=st.signCost)E.signWalkin(S,st.id);
   // 1. 事件:付得起就選第一個,不然選最後一個(通常免費)
@@ -168,14 +169,15 @@ function compare(seeds) {
 }
 
 function migrateTest() {
- for(const v of [1,2,3,4,5]) {
-  const S=E.newGame({seed:222});botWeek(S);S.v=v;
+ for(const v of [1,2,3,4,5,6]) {
+  const S=E.newGame({seed:222});botWeek(S);S.v=v;delete S.assistant;delete S.seenTips;delete S.tipsOff;
+  if(v===6){E.migrate(S);if(S.v!==7||S.assistant.lv!==0)throw Error('v6 遷移失敗');for(let w=0;w<10;w++){botWeek(S);if(!E.endWeek(S))throw Error('結算失敗');}console.log('v6 → v7 遷移後 10 週:0 錯誤');continue;}
   delete S.district;delete S.walkins;for(const st of S.stars)delete st.salaryBonus;
-  if(v===5){E.migrate(S);if(S.v!==6||S.district!=='alley'||S.walkins.length)throw Error('v5 遷移失敗');for(let w=0;w<10;w++){botWeek(S);E.endWeek(S);}console.log('v5 → v6 遷移後 10 週:0 錯誤');continue;}
+  if(v===5){E.migrate(S);if(S.v!==7||S.district!=='alley'||S.walkins.length)throw Error('v5 遷移失敗');for(let w=0;w<10;w++){botWeek(S);E.endWeek(S);}console.log('v5 → v7 遷移後 10 週:0 錯誤');continue;}
   delete S.offers;for(const r of S.rivals){delete r.stars;delete r.rel;delete r.collabs;}
-  if(v===4){E.migrate(S);if(S.v!==6||S.rivals.some(r=>r.stars.length!==3))throw Error('v4 遷移失敗');for(let w=0;w<10;w++){botWeek(S);if(!E.endWeek(S))throw Error('遷移後結算失敗');}console.log('v4 → v6 遷移後 10 週：0 錯誤');continue;}
+  if(v===4){E.migrate(S);if(S.v!==7||S.rivals.some(r=>r.stars.length!==3))throw Error('v4 遷移失敗');for(let w=0;w<10;w++){botWeek(S);if(!E.endWeek(S))throw Error('遷移後結算失敗');}console.log('v4 → v7 遷移後 10 週：0 錯誤');continue;}
   for(const k of ['releases','groups','chart','posts','sns','actLog']) delete S[k];
-  if(v===3){E.migrate(S);if(S.v!==6||!Array.isArray(S.groups)||!S.sns)throw Error('遷移失敗');for(let w=0;w<10;w++){botWeek(S);if(!E.endWeek(S))throw Error('遷移後結算失敗');}console.log('v3 → v6 遷移後 10 週：0 錯誤');continue;}
+  if(v===3){E.migrate(S);if(S.v!==7||!Array.isArray(S.groups)||!S.sns)throw Error('遷移失敗');for(let w=0;w<10;w++){botWeek(S);if(!E.endWeek(S))throw Error('遷移後結算失敗');}console.log('v3 → v7 遷移後 10 週：0 錯誤');continue;}
   delete S.staff;delete S.scouted;
   for(const st of [...S.stars,...(S.audition||[])]) {delete st.skills.charm;delete st.career;delete st.careerStep;delete st.pot;delete st.trainee;delete st.stat.byType;delete st.stat.roles;}
   if(v===1) {
@@ -184,9 +186,9 @@ function migrateTest() {
    for(const op of S.ops){delete op.days;delete op.log;op.weeks=3;op.left=3;}
   }
   E.migrate(S);
-  if(S.v!==6||!Array.isArray(S.groups)||S.fac||S.stars.some(st=>st.sched.length!==7||!st.skills.charm||!st.career))throw Error('遷移失敗');
+  if(S.v!==7||!Array.isArray(S.groups)||S.fac||S.stars.some(st=>st.sched.length!==7||!st.skills.charm||!st.career))throw Error('遷移失敗');
   for(let w=0;w<10;w++){botWeek(S);const r=E.endWeek(S);if(!r||r.timeline.length!==7)throw Error('遷移後結算失敗');}
-  console.log(`v${v} → v6 遷移後 10 週：0 錯誤`);
+  console.log(`v${v} → v7 遷移後 10 週：0 錯誤`);
  }
 }
 
@@ -197,7 +199,7 @@ if (typeof process !== 'undefined' && process.argv[1] && process.argv[1].endsWit
     const N = Number(process.argv[2] || 3), style = process.argv[3] || 'mix', MAX = Number(process.argv[4] || 200);
     for (let i = 0; i < N; i++) {
       const r = run(1000 + i * 7919, style, MAX, process.env.LOG === '1');
-      console.log(`種子 ${r.seed} [${style}] 結局:${r.ending ? r.ending.icon + r.ending.name + ' 第 ' + r.ending.week + ' 週' : '沒到(停在第 ' + r.week + ' 週)'}  目標週:${Object.entries(r.goals).map(([k, v]) => k + '=' + v).join(' ')}  粉絲 ${fmt(r.fans)}  最低存款 $${fmt(r.minMoney)}  離開 ${r.left} 人  剩 ${r.team} 人  大目標 ${r.careers}/${r.debuted}  練習生出道 ${r.newDebuts}  企劃 ${r.projects} 團體 ${r.groups} 一位 ${r.chartWins} 得獎 ${r.awards}  存檔 ${(r.saveSize / 1024).toFixed(1)}KB  錯誤 ${r.errors.length}${r.errors.length ? ' ' + r.errors.slice(0, 3).join(' / ') : ''}  合作 ${Object.values(r.cooperations).join('/')}  友好度 ${r.relations.join('/')} 地區 ${r.S.district} 樓層 ${r.S.floors.length} 自薦 ${r.S.stats.walkins?.rookie||0}/${r.S.stats.walkins?.experienced||0}`);
+      console.log(`種子 ${r.seed} [${style}] 結局:${r.ending ? r.ending.icon + r.ending.name + ' 第 ' + r.ending.week + ' 週' : '沒到(停在第 ' + r.week + ' 週)'}  目標週:${Object.entries(r.goals).map(([k, v]) => k + '=' + v).join(' ')}  粉絲 ${fmt(r.fans)}  最低存款 $${fmt(r.minMoney)}  離開 ${r.left} 人  剩 ${r.team} 人  大目標 ${r.careers}/${r.debuted}  練習生出道 ${r.newDebuts}  企劃 ${r.projects} 團體 ${r.groups} 一位 ${r.chartWins} 得獎 ${r.awards}  存檔 ${(r.saveSize / 1024).toFixed(1)}KB  錯誤 ${r.errors.length}${r.errors.length ? ' ' + r.errors.slice(0, 3).join(' / ') : ''}  合作 ${Object.values(r.cooperations).join('/')}  友好度 ${r.relations.join('/')} 地區 ${r.S.district} 樓層 ${r.S.floors.length} 自薦 ${r.S.stats.walkins?.rookie||0}/${r.S.stats.walkins?.experienced||0} 小助理 Lv${r.S.assistant.lv}`);
     }
   }
 }

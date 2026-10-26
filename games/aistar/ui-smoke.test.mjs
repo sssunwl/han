@@ -73,3 +73,27 @@ assert.equal(AS.cam.worldW,416);assert.equal(AS.cam.worldH,U.floors.length*96+18
 const star=U.stars[0];star.sched[0]='off';AS.tick(6);let actor=AS.actors.get(star.id);assert.ok(actor.x < -48 || actor.x > 368);assert.equal(actor.hide,0);assert.equal(Math.round(actor.y),128+(U.floors.length-1)*96+108);
 star.sched[0]='rest';AS.tick(10);actor=AS.actors.get(star.id);assert.equal(actor.fi,U.floors.findIndex(f=>f.type==='dorm'));assert.ok(actor.x>=0&&actor.x<=320);assert.equal(actor.hide,0);
 console.log('v3-A 假 DOM:5 分頁、紀錄/紅點、3 則通知與到期、自薦卡、地區、416 街景及進出人行道通過');
+
+const B=E.newGame({seed:733});AS.boot(B);AS.openAssistant();assert.match(document.getElementById('roomBody').innerHTML,/教學提示:開/);assert.match(document.getElementById('roomBody').innerHTML,/3,000/);assert.ok(AS.actors.has('assistant'));
+assert.match(AS.adviceCard(),/本週建議/);B.adviceDismissedWeek=B.week;assert.equal(AS.adviceCard(),'');B.week++;assert.match(AS.adviceCard(),/本週建議/);
+// 關閉／重開遊戲保留已看過的教學，只有按知道了才記錄。
+const tip=document.getElementById('tutorialCard');tip.hidden=true;tip.innerHTML='';AS.showTip('ops');assert.equal(tip.hidden,false);document.getElementById('tipUnderstood').onclick();assert.ok(B.seenTips.includes('ops'));tip.hidden=true;tip.innerHTML='';AS.showTip('ops');assert.equal(tip.hidden,true);AS.showTip('sched');assert.match(tip.innerHTML,/點一天/);document.getElementById('tipUnderstood').onclick();
+const bstar=B.stars[0];AS.openStar(bstar.id);assert.match(document.getElementById('starBody').innerHTML,/📈 發展分析/);assert.match(document.getElementById('starBody').innerHTML,/下一個目標/);assert.doesNotMatch(AS.analysisHTML(bstar),/🧭 適性/);
+B.assistant.lv=2;assert.match(AS.analysisHTML(bstar),/🧭 適性/);AS.openPicker(B.ops[0].id,0);assert.match(document.getElementById('pickList').innerHTML,/會影響:/);
+B.event={id:'test',title:'測試',text:'',choices:[{label:'休息',hint:'會影響:體力 ↑ 心情 ↑'}]};AS.openEvent();assert.match(document.getElementById('evChoices').innerHTML,/體力 ↑/);
+B.tipsOff=true;AS.openEvent();assert.doesNotMatch(document.getElementById('evChoices').innerHTML,/會影響/);AS.openPicker(B.ops[0].id,0);assert.doesNotMatch(document.getElementById('pickList').innerHTML,/會影響/);
+B.tipsOff=false;bstar.sched=Array(7).fill('rest');const prior=AS.scheduleHTML();assert.match(prior,/scheduleStats/);assert.match(prior,/🎤\d\.\d/);assert.match(prior,/<b>[\s\S]*?⚡/);assert.match(prior,/體力 ↑↑/);AS.cycleDay(bstar.id,0);assert.notEqual(AS.scheduleHTML(),prior);assert.match(AS.scheduleHTML(),/本週 .*? \+\d\.\d/);
+assert.match(html,/repeat\(7,minmax\(34px/);B.week=30;B.assistant.lv=0;assert.equal(AS.adviceCard(),'');AS.openAssistant();assert.match(document.getElementById('roomBody').innerHTML,/升級成分析師/);
+console.log('v3-B 假 DOM:小助理、建議卡/收起、首次教學、事件/選人 hint 開關、分析頁與行程即時指數通過');
+// 實際小助理按鈕、候選揭露層級、推薦與日夜位置。
+B.week=2;B.money=3000;B.assistant.lv=0;B.event=null;
+document.getElementById('roomBody').onclick({target:{closest:()=>({dataset:{assistantUp:'1'}})}});assert.equal(B.assistant.lv,1);assert.equal(B.money,0);
+const candidateB={...B.stars[1],id:'candidateB',trainee:true,signCost:200};B.walkins=[candidateB];assert.match(AS.walkinHTML(candidateB),/潛力 ★/);assert.match(AS.walkinHTML(candidateB),/:\?/);B.assistant.lv=2;assert.doesNotMatch(AS.walkinHTML(candidateB),/:\?/);
+B.scouted=[candidateB];const scoutHTML=vm.runInContext('recruitmentHTML()',sandbox);for(const skill of D.SKILL_IDS)assert.ok(scoutHTML.includes(D.SKILLS[skill].name+' '+candidateB.skills[skill].toFixed(1)));
+B.assistant.lv=3;assert.match(vm.runInContext('opCard(S.ops[0])',sandbox),/🔍 分析師推薦:/);
+document.getElementById('roomBody').onclick({target:{closest:()=>({dataset:{tipsToggle:'1'}})}});assert.equal(B.tipsOff,true);assert.equal(tip.hidden,true);assert.doesNotMatch(AS.scheduleHTML(),/體力 ↑↑/);
+const assistantDay=vm.runInContext('assistantTarget()',sandbox);assert.equal(assistantDay.fi,0);assert.equal(assistantDay.x,48);
+assert.equal(vm.runInContext('playback={t:2};assistantTarget().act',sandbox),'eat');assert.equal(vm.runInContext('playback={t:3.6};assistantTarget().outside',sandbox),true);vm.runInContext('playback=null',sandbox);
+B.tipsOff=false;tip.hidden=true;tip.innerHTML='';B.seenTips=[];for(const key of ['ops','sched','stars','prod','co','event','evaluation','awards','offer','walkin'])AS.showTip(key);
+for(let i=0;i<10;i++)document.getElementById('tipUnderstood').onclick();assert.equal(new Set(B.seenTips).size,10);
+console.log('v3-B 補驗:升級與開關按鈕、候選揭露、Lv3 推薦、午餐/下班與十種教學排隊通過');
