@@ -352,3 +352,23 @@ for(const [k,lines] of Object.entries(partnerTone)) {
  LOAN_BACK[k]=[`從{partner}回來了!${lines[1]}`,`謝謝{partner}的照顧。${lines[0]}`];
 }
 export const PARTNER_REP=['您好!我們{partner}想跟貴公司合作~','{partner}帶來新點子!','一起做出有趣的作品吧!','我們的明星很期待交流!','你好，這是{partner}的合作邀請。','謝謝招待，會議室很舒服!','希望能一起帶給大家歡笑。','有空來{partner}參觀吧!'];
+
+// 自薦台詞依主性格選擇,各有兩種說法。
+const WALKIN_VOICE = {
+ comp:['我會努力爭取站在最前面的機會!', '我想和厲害的人一起較量!'],
+ shy:['我有點緊張,但我會慢慢練好。', '可以先讓我試一小段嗎?'],
+ perf:['我準備了一段反覆練過的表演。', '我希望把每個細節都做好。'],
+ funny:['我能把練習室變得像喜劇現場!', '大家笑出來就是我的動力!'],
+ jeal:['我也想得到被看見的機會。', '希望努力的時候有人為我加油。'],
+ hot:['我已經準備好全力練習了!', '今天就開始也沒問題!'],
+ chill:['我喜歡穩穩地進步。', '找到自己的節奏,就能走得更遠。'],
+ curious:['我想試試沒做過的演出!', '新平台和新企劃都讓我很好奇。'],
+ dream:['我一直夢想著有一天能登上舞台。', '我想讓自己的夢想變成作品。'],
+ kind:['我也想替夥伴加油。', '希望能和大家一起進步。'],
+ proud:['我想用實力證明自己能當主角。', '我希望有一個屬於自己的代表作。'],
+ solo:['我習慣自己準備好再上場。', '獨立練習的時間對我很重要。'],
+};
+export const WALKIN = Object.fromEntries(['rookie','experienced'].map(kind => [kind,
+ Object.fromEntries(Object.entries(WALKIN_VOICE).map(([trait,lines]) => [trait, lines.map((line,i) =>
+ (kind==='rookie' ? ['我在學校社團練習三年了,想試試看!','我還在學習,想找到自己的舞台。'][i]
+ : ['我在別家待過兩年,想找更適合自己的舞台。','我有演出經驗,希望在這裡重新出發。'][i])+line)]))]));

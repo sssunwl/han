@@ -218,6 +218,9 @@
   .nom.win { background:linear-gradient(90deg,#fff3c4,#ffe9f7); font-weight:bold; box-shadow:0 0 0 2px #ffd25a; }
   .nom .v { font-variant-numeric:tabular-nums; color:#7a6d92; font-size:12px; }
   @media(max-width:560px){ .panel {padding:7px 4px;} .tabs button {font-size:11px; padding:5px 0 4px;} .tabs button i {font-size:15px;} }
+
+/* 通知小泡泡:放在畫面上方左邊、窄窄的,不擋住大廳和街道 */
+#notifications{position:absolute;left:6px;top:40px;display:flex;flex-direction:column;gap:4px;pointer-events:none;max-width:min(58%,220px);z-index:2}.notice{font-size:11px;line-height:1.35;background:#272143c4;color:#fff;padding:3px 8px;border-radius:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;box-shadow:0 1px 0 #0004}
 </style>
 </head>
 <body>
@@ -248,13 +251,13 @@
       <button class="icon" id="backBtn" title="存檔並回開始畫面">✕</button>
       <div id="coName"></div>
       <div class="stats"><div class="chip">💰 <b id="money">0</b></div><div class="chip">👥 <b id="fans">0</b></div><div class="chip">🏆 <b id="rankNo">-</b></div></div>
-      <button class="icon" id="soundBtn" title="聲音">🔊</button>
+      <button class="icon" id="logBtn" title="紀錄">📜<span id="bFeed" style="color:#ff708b"></span></button><button class="icon" id="soundBtn" title="聲音">🔊</button>
       <button class="icon" id="helpBtn" title="怎麼玩">❓</button>
       <span id="saveDot">💾 已存檔</span>
     </div>
     <div class="main">
       <div class="left">
-        <div class="stage"><canvas id="cv"></canvas><div id="bubbles"></div><div class="clock"><span id="timeBar">週一 · 排定這週行程</span> <button id="noPlayBtn">🎬 播放:開</button><span id="playControls" hidden><button id="speedBtn">⏩ 1×</button><button id="skipBtn">⏭ 週末</button></span></div></div>
+        <div class="stage"><canvas id="cv"></canvas><div id="bubbles"></div><div id="notifications"></div><div class="clock"><span id="timeBar">週一 · 排定這週行程</span> <button id="noPlayBtn">🎬 播放:開</button><span id="playControls" hidden><button id="speedBtn">⏩ 1×</button><button id="skipBtn">⏭ 週末</button></span></div></div>
         <div class="trend" id="trend"></div>
         <div class="goal" id="goal"></div>
       </div>
@@ -264,7 +267,7 @@
           <button data-tab="sched"><i>📅</i>行程</button>
           <button data-tab="stars"><i>⭐</i>明星</button>
           <button data-tab="prod"><i>🎛</i>製作<span class="badge" id="bProd"></span></button>
-          <button data-tab="feed"><i>💬</i>訊息<span class="badge" id="bFeed"></span></button>
+          
           <button data-tab="co"><i>🏢</i>公司<span class="badge" id="bCo"></span></button>
         </div>
         <div class="panel" id="panel"></div>

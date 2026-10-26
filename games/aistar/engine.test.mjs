@@ -13,7 +13,7 @@ function opportunity(S,type,id='test') {
 }
 {
   const S=fresh(), st=S.stars[0];S.ops=[];
-  assert.equal(S.v,5);assert.equal(S.floors.length,5);assert.equal(st.sched.length,7);assert.equal(st.sched[6],'rest');
+  assert.equal(S.v,6);assert.equal(S.floors.length,5);assert.equal(st.sched.length,7);assert.equal(st.sched[6],'rest');
   const one=opportunity(S,'short'), two=opportunity(S,'voice','test2');
   assert.equal(E.assign(S,one.id,0,st.id),null);assert.equal(E.assign(S,two.id,0,st.id),null);
   assert.deepEqual(st.jobs,['test','test2']);assert.equal(E.freeDays(st),4);assert.equal(st.sched[6],'rest');
@@ -43,7 +43,7 @@ function opportunity(S,type,id='test') {
 }
 {
   const S=fresh();S.money=100000;
-  assert.equal(E.buildFloor(S,'sing'),'公司要升級才能再往上蓋');
+  assert.equal(E.buildFloor(S,'sing'),null);S.floors.pop();S.money=100000;
   S.lv=2;assert.equal(E.floorCost(S,'sing'),1500);assert.equal(E.buildFloor(S,'sing'),null);
   assert.equal(E.floorCost(S,'act'),2250);assert.equal(E.upgradeCost(S,5),1200);E.upgradeFloor(S,5);assert.equal(S.floors[5].lv,2);
   assert.equal(E.buildFloor(S,'sing'),null);assert.equal(E.roomLv(S,'sing'),2);
@@ -61,7 +61,7 @@ function opportunity(S,type,id='test') {
   S.ops=[];const op=opportunity(S,'dome');op.weeks=op.left=3;
   for(const [i,st] of S.stars.entries()){st.job=i===0?op.id:null;st.plan='train:talk';delete st.jobs;delete st.sched;delete st.trust;delete st.done;}
   op.slots[0].who=S.stars[0].id;op.status='run';
-  E.migrate(S);assert.equal(S.v,5);assert.equal(S.floors.length,9);assert.equal(op.left,2);assert.equal(op.days,5);
+  E.migrate(S);assert.equal(S.v,6);assert.equal(S.floors.length,9);assert.equal(op.left,2);assert.equal(op.days,5);
   assert.equal(S.stars[0].sched.filter(v=>v==='job:test').length,5);assert.equal(S.floors[1].lv,3);assert.equal(E.roomLv(S,'dance'),3);
   assert.ok(E.ACT_NAMES[S.stars[1].sched[0]]);assert.equal(S.stars[1].sched[6],'rest');assert.equal(S.fac,undefined);
   const same=JSON.stringify(S);E.migrate(S);assert.equal(JSON.stringify(S),same);
@@ -219,14 +219,14 @@ console.log('第二階段：魅力、角色里程碑、練習生限制、評鑑�
 {
   // v3 → v4 遷移
   const S = fresh(903); S.v = 3; delete S.releases; delete S.groups; delete S.chart; delete S.posts; delete S.sns; delete S.actLog;
-  E.migrate(S); assert.equal(S.v, 5); assert.deepEqual(S.groups, []); assert.equal(S.sns.strategy, 'vlog');
+  E.migrate(S); assert.equal(S.v, 6); assert.deepEqual(S.groups, []); assert.equal(S.sns.strategy, 'vlog');
   for (const k of ['mixing_console', 'monitor_wall', 'sns_wall', 'heart_sign', 'red_carpet', 'award_trophy', 'confetti', 'album_cover']) { const it = KIT[k], b = it.make(); assert.equal(b.w, it.w); assert.equal(b.h, it.h); }
 }
 console.log('第三階段:製作部企劃/取消/不被接走/分潤遞減、排行、打歌、SNS、團體/C 位/默契、頒獎、遷移、新素材:通過');
 
 // 第 4 階段:邀請、結算與 NPC 不佔玩家名額。
 {
- const S=fresh(44);assert.equal(S.v,5);assert.equal(S.offers.length,0);
+ const S=fresh(44);assert.equal(S.v,6);assert.equal(S.offers.length,0);
  const names=[...S.stars,...S.rivals.flatMap(r=>r.stars)].map(st=>st.name);assert.equal(new Set(names).size,names.length);
  for(const r of S.rivals){assert.equal(r.rel,30);assert.equal(r.stars.length,3);for(const st of r.stars)assert.ok(D.SKILL_IDS.every(k=>st.skills[k]>=3&&st.skills[k]<=7));}
  S.money=100000;S.lv=4;E.buildFloor(S,'meeting');S.floors.at(-1).lv=2;
@@ -252,7 +252,7 @@ for(const type of ['collab','loan','joint']) {
  const S=fresh(81);for(const r of S.rivals)r.rel=70;
  for(let i=0;i<40;i++){const op=opportunity(S,'short','unused'+i);op.bids=[{id:S.stars[0].id}];}
  settle(S);assert.ok(S.feed.some(f=>f.text.includes('被其他小公司接走了')));assert.ok(!S.feed.some(f=>S.rivals.some(r=>f.text.includes('被'+r.name+'接走了'))));
- const old=fresh();old.v=4;delete old.offers;for(const r of old.rivals){delete r.stars;delete r.rel;delete r.collabs;}E.migrate(old);assert.equal(old.v,5);assert.equal(old.rivals[0].stars.length,3);assert.deepEqual(old.offers,[]);
+ const old=fresh();old.v=4;delete old.offers;for(const r of old.rivals){delete r.stars;delete r.rel;delete r.collabs;}E.migrate(old);assert.equal(old.v,6);assert.equal(old.rivals[0].stars.length,3);assert.deepEqual(old.offers,[]);
  for(const [key,w,h] of [['meeting_table',96,40],['projector_screen',64,48],['handshake_sign',32,32],['visitor_badge',12,12]]){assert.equal(KIT[key].w,w);assert.equal(KIT[key].h,h);const b=KIT[key].make();assert.equal(b.w,w);assert.equal(b.h,h);}
 }
 console.log('第四階段:邀請產生/過期/接受/拒絕、NPC 分數與位置、三種合作、友好保護、v5 遷移及四項素材通過');
@@ -273,7 +273,64 @@ console.log('第四階段:邀請產生/過期/接受/拒絕、NPC 分數與位�
  for(const v of [1,2,3,4,5]) {
   const S=fresh(987);S.v=v;
   const code='AISTAR1P:'+Buffer.from(JSON.stringify(S)).toString('base64');
-  const saved=await decodeSave(code);assert.equal(saved.v,5);assert.equal(saved.rivals[0].stars.length,3);
+  const saved=await decodeSave(code);assert.equal(saved.v,6);assert.equal(saved.rivals[0].stars.length,3);
  }
 }
 console.log('邀請頻率/上限、聯演門檻、12 種性格台詞、借將技能門檻與 v1–v5 存檔碼通過');
+
+// v3-A:地區、無限樓層、自薦、條件、薪水及街景規格。
+{
+ const S=fresh(301);assert.equal(S.district,'alley');assert.deepEqual(E.LEARNING,{training:0.12,work:0.035});
+ S.money=100000;assert.ok(E.moveDistrict(S,'shops'));S.lv=2;
+ const mood=S.stars[0].mood,money=S.money, floors=S.floors, stars=S.stars;
+ assert.equal(E.moveDistrict(S,'shops'),null);assert.equal(S.money,money-6000);assert.equal(S.stars[0].mood,Math.min(100,mood+10));assert.equal(S.floors,floors);assert.equal(S.stars,stars);
+ assert.ok(E.moveDistrict(S,'alley'));assert.ok(E.moveDistrict(S,'shops'));assert.ok(E.moveDistrict(S,'city'));
+ S.lv=4;assert.ok(E.moveDistrict(S,'harbor'));S.stars[0].fans=200000;assert.equal(E.moveDistrict(S,'harbor'),null);
+ S.money=0;assert.ok(E.buildFloor(S,'dance'));S.money=1e8;S.lv=1;for(let i=0;i<30;i++)assert.equal(E.buildFloor(S,'dance'),null);assert.equal(S.floors.length,35);
+}
+{
+ const S=fresh(302);S.ops=[];S.event=null;S.money=1e7;for(const st of S.stars)st.sched=Array(7).fill('rest');
+ const T=structuredClone(S);T.district='harbor';const a=settle(S),b=settle(T);
+ assert.equal(S.money-T.money,Math.round(D.LEVELS[1].rent*3));
+ assert.match(b.items.find(x=>x.text.includes('房租')).text,/房租/);
+ // 相同種子與工作在不同地區,只增加酬勞與粉絲。
+ const A=fresh(33);A.ops=[];A.event=null;const op=opportunity(A,'short');E.assign(A,op.id,0,A.stars[0].id);
+ const B=structuredClone(A);B.district='harbor';settle(A);settle(B);
+ assert.ok(B.stars[0].fans>A.stars[0].fans);assert.ok(B.money+Math.round(D.LEVELS[1].rent*3)>A.money);
+ // 播放分潤與 SNS 也套地區倍率。
+ const C=fresh(98);C.event=null;C.ops=[];C.floors.push({type:'sns',lv:1});C.releases=[{id:'release',type:'own_album',title:'測試',artists:[C.stars[0].id],week:1,weeksLeft:8,budget:'small',quality:80,total:{money:0,fans:0},w:{sing:1}}];
+ for(const st of C.stars)st.sched=Array(7).fill('rest');const H=structuredClone(C);H.district='harbor';const cr=settle(C),hr=settle(H);
+ assert.equal(H.releases[0].total.money,Math.round(C.releases[0].total.money*1.3));assert.ok(E.totalFans(H)>E.totalFans(C));assert.ok(cr.items.some(x=>x.text.includes('SNS'))&&hr.items.some(x=>x.text.includes('SNS')));
+}
+{
+ const S=fresh(777);S.walkins=[];S.district='harbor';S.lv=4;S.money=1e7;
+ const found=[];for(let i=0;i<100;i++){S.walkins=[];E.walkinWeek(S);found.push(...S.walkins);assert.ok(S.walkins.length<=3);}
+ const rookie=found.find(s=>s.trainee),experienced=found.find(s=>!s.trainee);assert.ok(rookie&&experienced);
+ assert.ok(found.some(s=>s.needOff)&&found.some(s=>s.wish?.type==='lead')&&found.some(s=>s.wish?.media==='own_album'));
+ for(const st of found){assert.ok(st.pot>=0.85&&st.pot<=1.35);assert.ok(st.intro.length>10);if(!st.trainee){assert.ok(st.fans>=1500&&st.fans<=6000);assert.equal(st.salaryBonus,0.5);assert.ok(Object.values(st.skills).every(v=>v<=8));} }
+ assert.equal(rookie.signCost,200);assert.equal(experienced.signCost,Math.round(D.auditionCost(4)*1.6));
+ S.walkins=[rookie,experienced];const money=S.money;assert.equal(E.signWalkin(S,rookie.id),null);assert.equal(S.money,money-200);assert.ok(rookie.trainee);assert.equal(rookie.sched.length,7);
+ assert.equal(E.signWalkin(S,experienced.id),null);assert.ok(!experienced.trainee);assert.equal(D.salary(experienced),Math.round((60+experienced.fans/160)*1.5));
+ assert.deepEqual(S.stats.walkins,{rookie:1,experienced:1});
+ const stale=found.find(st=>st!==rookie&&st!==experienced);stale.found=S.week-2;S.walkins=[stale];E.walkinWeek(S);assert.ok(!S.walkins.includes(stale));assert.ok(S.feed.some(f=>f.text.includes('等不到回覆,去別家')));
+ const off=S.stars[0];off.needOff=true;off.sched=Array(7).fill('rest');S.ops=[];S.event=null;const T=structuredClone(S);T.stars[0].needOff=false;settle(S);settle(T);assert.equal(T.stars[0].loyalty-S.stars[0].loyalty,3);
+ for(const type of ['rookie','experienced'])for(const trait of D.TRAIT_IDS)assert.ok(L.WALKIN[type][trait].length>=2);
+ const V=fresh();V.v=5;delete V.district;delete V.walkins;for(const st of V.stars)delete st.salaryBonus;E.migrate(V);assert.equal(V.v,6);assert.equal(V.district,'alley');assert.deepEqual(V.walkins,[]);assert.ok(V.stars.every(st=>st.salaryBonus===0));
+}
+{
+ const {STREET_KIT}=await import('../../shared/pixelkit/street.js');
+ for(const [key,entry] of Object.entries(STREET_KIT)){const b=entry.make();assert.equal(b.w,entry.w,key);assert.equal(b.h,entry.h,key);assert.ok(b.d.some(v=>v>0),key);}
+ for(const d of D.DISTRICTS){assert.equal(STREET_KIT['skyline_'+d.id].w,416);assert.equal(STREET_KIT['skyline_'+d.id].h,80);for(const k of ['a','b']){assert.equal(STREET_KIT['neighbor_'+d.id+'_'+k].w,48);assert.equal(STREET_KIT['neighbor_'+d.id+'_'+k].h,96);}}
+ assert.equal(STREET_KIT.car.make({color:'#fa8282'}).w,40);
+}
+console.log('v3-A:地區搬家/房租/工作及分潤/SNS 加成、無限樓層、自薦/過期/條件/薪水、v6 遷移及所有街景素材通過');
+{
+ const S=fresh(632);S.money=0;S.lv=2;assert.match(E.moveDistrict(S,'shops'),/費不夠/);assert.equal(S.district,'alley');
+ const H=fresh(632);H.district='harbor';S.ops=[];H.ops=[];E.beginWeek(S);E.beginWeek(H);assert.equal(H.ops.length,D.LEVELS[H.lv].ops+2);assert.equal(S.ops.length,D.LEVELS[S.lv].ops);
+ const T=fresh(777);T.district='harbor';T.lv=4;T.money=0;while(!T.walkins.some(s=>s.trainee))E.walkinWeek(T);const st=T.walkins.find(s=>s.trainee);assert.match(E.signWalkin(T,st.id),/簽約金/);assert.ok(T.walkins.includes(st));
+ T.money=1e7;for(const s of T.stars)s.trainee=true;assert.match(E.signWalkin(T,st.id),/名額/);
+ E.declineWalkin(T,st.id);assert.ok(!T.walkins.includes(st));
+ const A=fresh(634);A.event=null;A.ops=[];for(const s of A.stars)s.sched=Array(7).fill('rest');A.stars[0].wish={type:'lead',left:1};A.stars[0].walkinCondition='lead';
+ const B=structuredClone(A);delete B.stars[0].walkinCondition;settle(A);settle(B);assert.equal(B.stars[0].loyalty-A.stars[0].loyalty,4);
+}
+console.log('v3-A 補驗:搬家資金、地區機會數、自薦資金/名額/拒絕及心願失敗 1.5 倍通過');

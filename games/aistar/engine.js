@@ -111,7 +111,7 @@ function makeStar(S) {
   const usedAcc = team(S).map(s => s.acc), usedGlow = team(S).map(s => s.glow);
   const career = drawCareer(S, {skills});
   return {
-    career, careerStep:0, trainee:false, pot:1,
+    career, careerStep:0, trainee:false, pot:1, salaryBonus:0,
     id: 's' + S.nextId++, name, look,
     acc: pick(S, ACCESSORIES.filter(a => !usedAcc.includes(a)).concat(usedAcc.length >= ACCESSORIES.length ? ACCESSORIES : [])),
     glow: pick(S, D.GLOWS.filter(g => !usedGlow.includes(g)).concat(usedGlow.length >= D.GLOWS.length ? D.GLOWS : [])),
@@ -128,7 +128,7 @@ export const bestSkill = st => D.SKILL_IDS.reduce((a, k) => (st.skills[k] > st.s
 // ---------- 開新局 ----------
 export function newGame({ seed = (Date.now() % 2147483647) | 0, company = '星光 AI 娛樂', ng = 0, mentor = null, trophies = [] } = {}) {
   const S = {
-    v: 5, offers:[], staff:[], scouted:[], releases: [], groups: [], chart: [], posts: [], sns: { strategy: 'vlog' }, actLog: [], seed, rs: seed, week: 1, ng, company, lv: 1, floors: initialFloors(), money: 2500,
+    v: 6, district:'alley', walkins:[], offers:[], staff:[], scouted:[], releases: [], groups: [], chart: [], posts: [], sns: { strategy: 'vlog' }, actLog: [], seed, rs: seed, week: 1, ng, company, lv: 1, floors: initialFloors(), money: 2500,
     stars: [], rel: {}, everRival: [], ops: [], nextId: 1, feed: [], seq: 0, trend: null, nextTrend: null,
     rivals: D.RIVALS.map(r => ({ ...r, fans: Math.round(r.fans * (1 + 0.6 * ng)), g: r.g * (1 + 0.12 * ng) })),
     goals: [], trophies: trophies.slice(), mentor, teamups: [], temp: [], flags: {}, event: null,
@@ -297,6 +297,7 @@ export const estimate = (S, st, op, slot = 0) => D.gradeOf(perf(S, st, op, slot,
 
 // ---------- 每週開始 ----------
 export function beginWeek(S) {
+  walkinWeek(S);
   scoutWeek(S);
   S.trend = S.nextTrend || genTrend(S);
   if (S.flags.cool && --S.flags.cool.weeks <= 0) delete S.flags.cool;
@@ -306,7 +307,7 @@ export function beginWeek(S) {
   S.flags.down = false; S.flags.rain = false; S.flags.power = false;
 
   // 新機會
-  const types = availMedia(S), n = LEVELS[S.lv].ops + (roomLv(S, 'lobby') >= 3 ? 1 : 0);
+  const types = availMedia(S), n = LEVELS[S.lv].ops + district(S).ops + (roomLv(S, 'lobby') >= 3 ? 1 : 0);
   for (let i = 0; i < n; i++) {
     const t = weighted(S, types.map(k => [k, (k === S.trend.hot ? 2.6 : 1) * (MEDIA[k].temp ? 2 : 1) * (k === 'concert' ? 0.7 : 1)]));
     S.ops.push(makeOp(S, t));
@@ -532,7 +533,6 @@ export function floorCost(S,type) { const f=D.FLOORS[type]; return f?.build ? Ma
 export function upgradeCost(S,i) { const f=S.floors[i]; return f ? D.FLOORS[f.type].cost[f.lv-1] || 0 : 0; }
 export function buildFloor(S,type) {
   if (!D.FLOORS[type]?.build) return '不能加蓋這種樓層';
-  if (S.floors.length >= LEVELS[S.lv].floors) return '公司要升級才能再往上蓋';
   const cost=floorCost(S,type); if (S.money<cost) return `要 $${fmt(cost)}`;
   S.money-=cost; S.floors.push({type,lv:1}); feed(S,null,`🏗 蓋好了${D.FLOORS[type].name}！`,'good'); return null;
 }
@@ -542,12 +542,16 @@ export function upgradeFloor(S,i) {
   S.money-=cost; f.lv++; feed(S,null,`${D.FLOORS[f.type].icon} ${i+1}F 升到 Lv${f.lv}！`,'good'); return null;
 }
 export function migrate(S) {
+  if(S.v===6) return S;
+
   if(S.v===5) {
     // 舊版 v5 存檔:名字庫用光時別家明星叫「夥伴123」,讀檔時換成正常名字
     for (const r of S.rivals) for (const st of r.stars || []) if (/^夥伴\d+$/.test(st.name)) st.name = partnerName(S);
-    return S;
+    S.district ||= 'alley'; S.walkins ||= [];
+    for(const st of [...S.stars,...(S.audition||[]),...(S.scouted||[])]) st.salaryBonus ??= 0;
+    S.v=6; return S;
   }
-  if(S.v===4) { initPartners(S); S.offers=[]; S.v=5; return S; }
+  if(S.v===4) { initPartners(S); S.offers=[]; S.v=5; return migrate(S); }
   if(S.v===3) {
     S.releases ||= []; S.groups ||= []; S.chart ||= []; S.posts ||= []; S.sns ||= { strategy: 'vlog' }; S.actLog ||= [];
     S.v = 4; return migrate(S);
@@ -936,7 +940,7 @@ export function endWeek(S) {
   // 4. 心願倒數
   for (const st of team(S)) {
     if (st.wish && --st.wish.left <= 0) {
-      st.wish = null; st.wishIn = ri(S, 2, 3); st.mood -= 8; st.loyalty -= 8;
+      st.wish = null; st.wishIn = ri(S, 2, 3); st.mood -= 8; st.loyalty -= st.walkinCondition ? 12 : 8;
       say(S, st, L.WISH_FAIL, {}, 'sad');
       if (st.promise) { st.loyalty -= 20; delete st.promise; }
     }
@@ -950,6 +954,7 @@ export function endWeek(S) {
     if (S.money < 0) st.mood -= 3;
     st.mood = clamp(st.mood, 0, 100);
     const loyalty0 = st.loyalty;
+    if(st.needOff && !st.sched.includes('off')) st.loyalty -= 3;
     st.loyalty += st.mood > 70 ? 0.5 : st.mood < 35 ? -3 : 0;
     if (!st.worked && !st.sched.some(v=>v==='rest'||v==='off')) st.loyalty -= 1;          // 一整週沒有工作,有點無聊
     if (st.energy < 15) st.loyalty -= 1;
@@ -968,7 +973,7 @@ export function endWeek(S) {
   evaluate(S,R);
   for(const st of S.staff) {st.weeks++; if(st.weeks%8===0 && st.lv<3) {st.lv++;feed(S,null,`${st.name}升到 Lv${st.lv}!` ,'good');}}
   // 6. 房租、薪水
-  const rent = LEVELS[S.lv].rent, pay = team(S).reduce((a, s) => a + D.salary(s), 0);
+  const rent = Math.round(LEVELS[S.lv].rent * district(S).rent), pay = team(S).reduce((a, s) => a + D.salary(s), 0);
   const staffPay=S.staff.reduce((a,st)=>a+D.staffSalary(st),0);
   S.money -= rent + pay + staffPay;
   R.items.push({ text: `🏢 房租 $${fmt(rent)} + 明星薪水 $${fmt(pay)} + 員工薪水 $${fmt(staffPay)}` });
@@ -1030,6 +1035,7 @@ function finishOp(S, op, R) {
       week: S.week, weeksLeft: 8, budget: op.budget, w: op.w, total: { money: 0, fans }, wins: 0, best: 0, boost: 0 };
     S.releases.push(release);
   }
+  if(op.project){fans=Math.round(fans*(1+district(S).bonus));release.total.fans=fans;}
   if (op.type === 'musicshow') { const r = S.releases.find(x => x.id === op.releaseId); if (r) r.boost = (r.boost || 0) + ({ S: 15, A: 10, B: 10, C: 3 })[g.g]; }
   const grp = op.groupId && groupById(S, op.groupId);
   if (grp && op.type !== 'musicshow') { grp.fans += Math.round(fans * 0.5); grp.albums = (grp.albums || 0) + 1; fans = Math.round(fans * 0.5); }
@@ -1042,6 +1048,8 @@ function finishOp(S, op, R) {
     r.rel=clamp(r.rel+({collab:7,loan:5,joint:10}[op.offerType]),0,100);r.collabs++;r.lastCollab=S.week;(S.stats.cooperations ||= {collab:0,loan:0,joint:0})[op.offerType]++;
     feed(S,null,`🤝 ${op.title}評價 ${g.g}!$${fmt(money)}、粉絲 +${fmt(fans)}${op.offerType==='collab'?'(對方的粉絲也來看了)':''}`,'good');
   }
+  money = Math.round(money * (1 + district(S).bonus));
+  if(!op.project){if(grp && op.type!=='musicshow')grp.fans+=Math.round(fans*district(S).bonus);fans = Math.round(fans * (1 + district(S).bonus));}
   S.money += money;
   ids.forEach(id => {
     const st = starById(S, id), i = op.slots.findIndex(s => s.who === id);
@@ -1344,7 +1352,7 @@ function snsWeek(S, R) {
   const mult = [1, 1.4, 1.8][lv - 1] * [1, 1, 1.15, 1.3][staffLv(S, 'editor')];
   const st0 = S.sns.strategy, stars = debuted(S);
   let total = 0;
-  const add = (st, n) => { n = Math.round(n * mult); st.fans += n; total += n; };
+  const add = (st, n) => { n = Math.round(n * mult * (1 + district(S).bonus)); st.fans += n; total += n; };
   if (st0 === 'vlog') for (const st of stars) { add(st, 40 + st.fans * 0.004); st.mood = clamp(st.mood + 2, 0, 100); }
   if (st0 === 'challenge') for (const st of stars) add(st, (20 + st.fans * 0.003) * (st.hotThisWeek ? 3 : 1));
   if (st0 === 'behind') for (const st of stars) { add(st, 20 + st.fans * 0.002); st.trust = clamp(st.trust + 2, 0, 100); st.loyalty = clamp(st.loyalty + 2, 0, 100); }
@@ -1368,7 +1376,7 @@ function royalties(S, R) {
   for (const r of S.releases) {
     if (r.weeksLeft <= 0) continue;
     const age = S.week - r.week, decay = Math.pow(0.85, age), bm = D.BUDGETS[r.budget || 'small'].mult, prod = 1 + [0, 0.1, 0.2, 0.3][staffLv(S, 'producer')];
-    const money = Math.round(r.quality * 30 * decay * bm * prod * OUTPUT.pay), fans = Math.round(r.quality * 25 * decay * bm * OUTPUT.fans);
+    const money = Math.round(r.quality * 30 * decay * bm * prod * OUTPUT.pay * (1 + district(S).bonus)), fans = Math.round(r.quality * 25 * decay * bm * OUTPUT.fans * (1 + district(S).bonus));
     S.money += money; r.total.money += money; r.total.fans += fans;
     const ids = r.artists.filter(id => starById(S, id) && !starById(S, id).gone);
     const g = r.groupId && groupById(S, r.groupId);
@@ -1551,3 +1559,44 @@ export function cooperationPreview(S, op) {
     fans:Math.round(op.fans*OUTPUT.fans*mult/(1+totalFans(S)/250000)*bonus+(op.offerType==='collab'?partnerStars(S,op).reduce((n,st)=>n+st.fans,0)*0.08:0)),
   };
 }
+
+export const district = S => D.DISTRICTS.find(d => d.id === S.district) || D.DISTRICTS[0];
+export function canMoveDistrict(S,id) {
+ const d=D.DISTRICTS.find(d=>d.id===id);
+ if(!d || D.DISTRICTS.indexOf(d)<=D.DISTRICTS.indexOf(district(S))) return '只能往後搬';
+ if(S.lv<d.lv || totalFans(S)<(d.fans||0))return '還沒達到搬家條件';
+ if(S.money<d.cost)return '搬家費不夠'; return null;
+}
+export function moveDistrict(S,id) {
+ const why=canMoveDistrict(S,id);if(why)return why;
+ const d=D.DISTRICTS.find(d=>d.id===id);S.money-=d.cost;S.district=id;
+ for(const st of team(S))st.mood=clamp(st.mood+10,0,100);
+ feed(S,null,`🚚 搬到${d.name}了!`,'good');return null;
+}
+export function walkinWeek(S) {
+ S.walkins ||= [];
+ S.walkins=S.walkins.filter(st=>{if(S.week-st.found<2)return true;feed(S,null,`${st.name} 等不到回覆,去別家試試了`,'sys');return false;});
+ const d=district(S), advanced=D.DISTRICTS.indexOf(d)>=3;
+ const n=Number(chance(S,d.walkin))+Number(advanced&&chance(S,0.25));
+ for(let i=0;i<n&&S.walkins.length<3;i++) {
+  const st=makeStar(S);st.found=S.week;st.trainee=chance(S,advanced?0.5:0.8);
+  st.pot=+(0.85+rnd(S)*0.5).toFixed(2);st.signCost=st.trainee?200:Math.round(D.auditionCost(debuted(S).length)*1.6);
+  if(!st.trainee){for(const k of D.SKILL_IDS)st.skills[k]=Math.min(8,st.skills[k]+1.5+rnd(S));st.fans=ri(S,1500,6000);st.salaryBonus=0.5;
+   if(chance(S,0.5)){const condition=pick(S,['lead','album','off']);st.walkinCondition=condition; if(condition==='off')st.needOff=true;else st.wish=condition==='lead'?{type:'lead',left:6}:{type:'media',media:'own_album',left:6};}
+  }
+  st.intro=fill(pickLine(S,st,L.INTRO),{name:st.name,media:MEDIA[st.dream].name});
+  const lines=L.WALKIN[st.trainee?'rookie':'experienced'], variant=pickLine(S,st,lines);
+  const index=Object.values(lines).find(row=>row.includes(variant)).indexOf(variant);
+  st.intro+=' '+lines[st.traits[0]][index];
+  S.walkins.push(st);feed(S,null,`🙋 ${st.name}來自薦了!`,'sys');
+ }
+}
+export function signWalkin(S,id) {
+ const st=S.walkins.find(st=>st.id===id);if(!st)return '自薦者已經離開';
+ if(st.trainee?team(S).filter(s=>s.trainee).length>=traineeCapacity(S):debuted(S).length>=LEVELS[S.lv].max)return '名額滿了';
+ if(S.money<st.signCost)return '簽約金不夠';
+ S.money-=st.signCost;st.joined=S.week;S.stars.push(st);S.walkins=S.walkins.filter(s=>s!==st);autoArrange(S,id);
+ const key=st.trainee?'rookie':'experienced';S.stats.walkins ||= {rookie:0,experienced:0};S.stats.walkins[key]++;
+ feed(S,id,`${st.name}加入公司了!`,'good');return null;
+}
+export function declineWalkin(S,id){S.walkins=S.walkins.filter(st=>st.id!==id);}

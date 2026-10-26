@@ -121,7 +121,7 @@ export const FLOORS = {
   // 第 3 階段
 FLOORS.production = { name:'製作部', icon:'🎛', build:3000, cost:[2500,6000], desc:'自己做專輯、短劇、綜藝,做好了每週有播放分潤;可同時做 1/2/3 個企劃' };
 FLOORS.sns = { name:'SNS 部門', icon:'📱', build:2500, cost:[2000,5000], desc:'經營社群:每週選一種貼文策略,大家被動漲粉(效果 ×1/1.4/1.8)' };
-export const salary = st => st.trainee ? 30 : Math.round(60 + st.fans / 160);
+export const salary = st => st.trainee ? 30 : Math.round((60 + st.fans / 160) * (1 + (st.salaryBonus || 0)));
 export const auditionCost = n => 800 + n * 250;
 export const OUTFIT_COST = 300, MEET_COST = 500, TALK_COST = 150;
 
@@ -217,3 +217,11 @@ export const staffSalary = st => 80+40*(st.lv-1);
 
 FLOORS.meeting={name:'會議室',icon:'🤝',build:3500,cost:[3000,7000],desc:'別家公司會來談合作(Lv 越高邀請越多)'};
 export const OFFERS={collab:{name:'聯名企劃'},loan:{name:'借將'},joint:{name:'聯合演唱會'}};
+
+export const DISTRICTS = [
+ {id:'alley',name:'老街小巷',icon:'🏘',rent:1,bonus:0,ops:0,cost:0,lv:1,walkin:0.35},
+ {id:'shops',name:'商店街',icon:'🛍',rent:1.5,bonus:0.05,ops:0,cost:6000,lv:2,walkin:0.5},
+ {id:'city',name:'市中心',icon:'🏙',rent:2.2,bonus:0.1,ops:1,cost:18000,lv:3,walkin:0.65},
+ {id:'avenue',name:'娛樂大道',icon:'🎡',rent:3,bonus:0.2,ops:1,cost:40000,lv:4,walkin:0.8},
+ {id:'harbor',name:'星光海港',icon:'🌊',rent:4,bonus:0.3,ops:2,cost:80000,lv:4,fans:200000,walkin:0.9},
+];
