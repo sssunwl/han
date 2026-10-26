@@ -241,7 +241,7 @@ function play(R) {
   if(!R?.timeline)return;
   playback={R,t:0,said:new Set()};
   bubQ.clear();for(const b of bubOn.values())b.el.remove();bubOn.clear();
-  bubbleSeen=S.seq; $('playControls').hidden=false;$('nextBtn').disabled=true;
+  bubbleSeen=S.seq; $('playControls').hidden=false;
   $('repBox').classList.remove('on');
   render();
 }
@@ -329,7 +329,7 @@ function render() {
   const newFeed = S.feed.filter(f => f.n > feedSeen).length;
   $('bFeed').textContent = newFeed > 99 ? '99+' : newFeed; $('bFeed').style.display = newFeed && tab !== 'feed' ? '' : 'none';
   $('bCo').textContent = '!'; $('bCo').style.display = S.audition || (!E.canUpgrade(S)) ? '' : 'none';
-  $('nextBtn').textContent = S.event ? '📣 先看事件' : '▶ 開始這週';
+  $('nextBtn').textContent = playback ? '⏭ 跳過播放,看結果' : S.event ? '📣 先看事件' : '▶ 開始這週';
   $('nextBtn').classList.toggle('wait', !!S.event);
   renderTab();
 }
@@ -351,7 +351,10 @@ $('tabs').addEventListener('click', e => {
 function renderTab() {
   const p = $('panel'), y = p.scrollTop;
   p.innerHTML = tab === 'ops' ? opsHTML() : tab === 'sched' ? scheduleHTML() : tab === 'stars' ? starsHTML() : tab === 'prod' ? prodHTML() : tab === 'feed' ? feedHTML() : coHTML();
-  if(playback) p.querySelectorAll('button').forEach(b=>b.disabled=true);
+  if(playback) {                                   // 播放中:先看就好,只有「看事件」可以按
+    p.querySelectorAll('button:not([data-ev])').forEach(b=>b.disabled=true);
+    p.insertAdjacentHTML('afterbegin','<div class="card2" style="background:#efe9ff"><b>▶ 這週播放中</b><div class="meta">按下面的「⏭ 跳過播放」或右上角 ⏭ 就能馬上排下一週。</div></div>');
+  }
   p.scrollTop = y;
   if (tab === 'feed') { feedSeen = S.seq; $('bFeed').style.display = 'none'; }
 }
@@ -560,7 +563,7 @@ function coHTML() {
 // 分頁裡的按鈕(事件委派)
 $('panel').addEventListener('click', e => {
   const b = e.target.closest('[data-visit],[data-npc],[data-offer-yes],[data-offer-no],[data-proj-new],[data-proj-cancel],[data-grp-new],[data-grp-album],[data-grp-disband],[data-sns],[data-gotobuild],[data-hire],[data-fire],[data-scout-sign],[data-scout-no],[data-debut],[data-assign],[data-pick],[data-plan],[data-talk],[data-outfit],[data-meet],[data-up],[data-floor],[data-build],[data-day],[data-auto],[data-schedule],[data-sign],[data-skipaud],[data-aud],[data-ng],[data-backup],[data-open],[data-ev]');
-  if (!b || !S || playback) return;
+  if (!b || !S || (playback && !('ev' in b.dataset))) return;
   const d = b.dataset;
   let err = null;
   if(d.visit) {openVisit(+d.visit-1);return;}
@@ -666,7 +669,7 @@ function openEvent() {
   $('evBox').classList.add('on');
 }
 $('evChoices').addEventListener('click', e => {
-  const b = e.target.closest('[data-ch]'); if (!b || playback) return;
+  const b = e.target.closest('[data-ch]'); if (!b) return;   // 播放中也可以回答事件(事件屬於新的一週)
   const id = S.event && S.event.id;
   const res = E.chooseEvent(S, +b.dataset.ch);
   if (S.event) { $('evMsg').textContent = '⚠ ' + (res || ''); sfx.bad(); return; }
@@ -679,7 +682,8 @@ $('evChoices').addEventListener('click', e => {
 
 // ---------- 下一週 ----------
 $('nextBtn').addEventListener('click', () => {
-  if (!S || playback) return;
+  if (!S) return;
+  if (playback) { skip(); return; }                // 播放中按下面的按鈕 = 跳過播放
   if ($('repBox').classList.contains('on')) { $('repGo').click(); return; }   // 週報還開著:先收起來
   if (S.event) { openEvent(); return; }
   const unassigned = S.ops.filter(o => o.status === 'open' && !o.slots[0].who && o.type !== 'dome').length;
