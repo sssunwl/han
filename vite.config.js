@@ -19,7 +19,11 @@ function offlineServiceWorker() {
         for (const name of readdirSync(dir)) {
           const p = join(dir, name);
           if (statSync(p).isDirectory()) walk(p);
-          else if (name !== 'sw.js') files.push(relative(outDir, p).split('\\').join('/'));
+          else if (name !== 'sw.js') {
+            const rel = relative(outDir, p).split('\\').join('/');
+            // 素材包的大圖不進離線快取(只給大人看,不影響小孩玩遊戲)
+            if (!rel.startsWith('sucai/')) files.push(rel);
+          }
         }
       };
       walk(outDir);
@@ -56,6 +60,8 @@ export default {
         onsen: 'games/onsen/index.html',
         icecream: 'games/icecream/index.html',
         aistar: 'games/aistar/index.html',
+        pixelkit: 'games/pixelkit/index.html',
+        sucai: 'sucai/index.html',
       },
     },
   },
