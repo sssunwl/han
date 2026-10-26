@@ -352,8 +352,8 @@ function renderTab() {
   const p = $('panel'), y = p.scrollTop;
   p.innerHTML = tab === 'ops' ? opsHTML() : tab === 'sched' ? scheduleHTML() : tab === 'stars' ? starsHTML() : tab === 'prod' ? prodHTML() : tab === 'feed' ? feedHTML() : coHTML();
   if(playback) {                                   // 播放中:先看就好,只有「看事件」可以按
+    p.innerHTML='<div class="card2" style="background:#efe9ff"><b>▶ 這週播放中</b><div class="meta">按下面的「⏭ 跳過播放」或右上角 ⏭ 就能馬上排下一週。</div></div>'+p.innerHTML;
     p.querySelectorAll('button:not([data-ev])').forEach(b=>b.disabled=true);
-    p.insertAdjacentHTML('afterbegin','<div class="card2" style="background:#efe9ff"><b>▶ 這週播放中</b><div class="meta">按下面的「⏭ 跳過播放」或右上角 ⏭ 就能馬上排下一週。</div></div>');
   }
   p.scrollTop = y;
   if (tab === 'feed') { feedSeen = S.seq; $('bFeed').style.display = 'none'; }

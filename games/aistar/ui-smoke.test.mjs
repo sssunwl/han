@@ -36,7 +36,7 @@ vm.createContext(sandbox);vm.runInContext(code,sandbox,{filename:'main.js'});
 const AS=sandbox.window.AS, S=E.newGame({seed:1234});AS.boot(S);
 for(const b of document.getElementById('tabs').children) document.getElementById('tabs').fire('click',{target:{closest:()=>b}});
 AS.tick(1);
-botWeek(S);const R=E.endWeek(S);AS.play(R);assert.equal(document.getElementById('nextBtn').disabled,true);
+botWeek(S);const R=E.endWeek(S);AS.play(R);assert.match(document.getElementById('nextBtn').textContent,/跳過/);
 AS.tick(10);AS.skip();assert.equal(document.getElementById('nextBtn').disabled,false);assert.ok(document.getElementById('repBox').classList.contains('on'));
 S.money=100000;S.lv=4;for(const type of ['sing','act','talk','lounge'])E.buildFloor(S,type);AS.render();AS.tick(1);
 assert.equal(AS.cam.worldH,S.floors.length*96+128);
