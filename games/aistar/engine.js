@@ -14,7 +14,7 @@ const { MEDIA, TOPICS, TRAITS, LEVELS } = D;
 // 七天制的進步速度可獨立校準，不改目標與評價門檻。
 export const LEARNING = Object.freeze({ training: 0.12, work: 0.035 });
 // 七天制一個人一週能接好幾個小案子,作品的粉絲/酬勞要打折,節奏才跟 v1 差不多(結局約第 30~60 週)
-export const OUTPUT = Object.freeze({ fans: 0.27, pay: 0.45 });
+export const OUTPUT = Object.freeze({ fans: 0.34, pay: 0.68 });
 
 // ---------- 亂數(mulberry32,狀態存在 S.rs) ----------
 export function rnd(S) {
@@ -119,7 +119,7 @@ function makeStar(S) {
     traits: [t1, t2], skills, spec,
     topic: pick(S, TOPICS).id, dream: pick(S, ['drama', 'concert', 'contest', 'short', 'podcast', 'voice', 'live', 'ad']),
     mood: 65, energy: 90, loyalty: 72, fans: ri(S, 60, 260),
-    wish: null, wishIn: ri(S, 2, 5), lost: 0, sulk: 0, motivated: 0, jobs: [], sched: null, trust: 40, done: {},
+    sprint:null, expect:null, wish: null, wishIn: ri(S, 2, 5), lost: 0, sulk: 0, motivated: 0, jobs: [], sched: null, trust: 40, done: {},
     trained: {}, talked: 0, joined: S.week, stat: { ops: 0, S: 0, best: null, byType:{}, roles:[] },
   };
 }
@@ -128,7 +128,7 @@ export const bestSkill = st => D.SKILL_IDS.reduce((a, k) => (st.skills[k] > st.s
 // ---------- 開新局 ----------
 export function newGame({ seed = (Date.now() % 2147483647) | 0, company = '星光 AI 娛樂', ng = 0, mentor = null, trophies = [] } = {}) {
   const S = {
-    v: 7, seenTips:[], tipsOff:false, district:'alley', walkins:[], offers:[], staff:[], scouted:[], releases: [], groups: [], chart: [], posts: [], sns: { strategy: 'vlog' }, actLog: [], seed, rs: seed, week: 1, ng, company, lv: 1, floors: initialFloors(), money: 2500,
+    v: 8, pipeline:[], pendingEvents:[], eventHistory:{}, seenTips:[], tipsOff:false, district:'alley', walkins:[], offers:[], staff:[], scouted:[], releases: [], groups: [], chart: [], posts: [], sns: { strategy: 'vlog' }, actLog: [], seed, rs: seed, week: 1, ng, company, lv: 1, floors: initialFloors(), money: 2500,
     stars: [], rel: {}, everRival: [], ops: [], nextId: 1, feed: [], seq: 0, trend: null, nextTrend: null,
     rivals: D.RIVALS.map(r => ({ ...r, fans: Math.round(r.fans * (1 + 0.6 * ng)), g: r.g * (1 + 0.12 * ng) })),
     goals: [], trophies: trophies.slice(), mentor, teamups: [], temp: [], flags: {}, event: null,
@@ -172,9 +172,10 @@ function makeOp(S, type, extra = {}) {
   const t = TOPICS.find(x => x.id === topic);
   let w = m.w;
   if (!w) { const k = pick(S, D.SKILL_IDS); w = { [k]: 1 }; }     // 選秀:這次比哪一項
+  const req = extra.req === undefined ? requirements(S,type,w) : extra.req;
   const ed = ['drama','voice','ad','game','live','podcast'].includes(type) ? 1 + 0.1 * Math.max(0, roomLv(S, 'studio') - 1) : 1;
   return {
-    id: 'o' + S.nextId++, type, topic, title: fill(pick(S, D.TITLES[type]), { t: t.name }), w,
+    id: 'o' + S.nextId++, type, topic, req, title: fill(pick(S, D.TITLES[type]), { t: t.name }), w,
     slots: m.slots.map(role => ({ role, who: null })), days: m.days, weeks: m.weeks, left: m.weeks, log: {},
     pay: Math.round(m.pay * payScale(S) * ed * (0.85 + rnd(S) * 0.3) / 10) * 10,
     fans: Math.round(m.fans * fansScale(S) * ed * (0.85 + rnd(S) * 0.3) / 10) * 10, sw: m.sw || null,
@@ -224,14 +225,15 @@ export function interest(S, st, op, noise = true) {
   if (st.lost && !T('jeal')) { v += 5 * Math.min(st.lost, 3); f.revenge = 5 * Math.min(st.lost, 3); }
   if (st.energy < 30) v -= 20;
   if (st.sulk) v -= 60;
+  if(st.sprint?.op===op.id) {v+=1000;f.sprint=1000;}
   if(noise) v += (rnd(S) - 0.5) * 18;
   let reason = 'generic', best = 7;
   for (const [k, x] of Object.entries(f)) if (x > best) { best = x; reason = k; }
   return { v, reason };
 }
 
-function computeBids(S, op) {
-  const cands = team(S).filter(st => isFree(st, op) && (!op.only || op.only.includes(st.id))).map(st => ({ st, ...interest(S, st, op) })).filter(c => c.v > (op.groupId ? 45 : 55)).sort((a, b) => b.v - a.v).slice(0, 4);
+export function computeBids(S, op) {
+  const cands = team(S).filter(st => (st.sprint?.op===op.id||isFree(st, op)) && op.slots.some((slot,i)=>!slot.who&&!requirementError(S,st,op,i)) && (!op.only || op.only.includes(st.id))).map(st => ({ st, ...interest(S, st, op) })).filter(c => c.v > (op.groupId ? 45 : 55)).sort((a, b) => b.v - a.v).slice(0, Math.max(4,team(S).filter(st=>st.sprint?.op===op.id).length));
   if (op.groupId && op.type === 'group_album') for (const c of cands) c.reason = 'center';
   // 對手也在搶 → 好勝、愛吃醋的加碼,理由變成「不能讓對手搶走」
   for (let i = 1; i < cands.length; i++) {
@@ -246,7 +248,7 @@ function computeBids(S, op) {
   // 貼心的人:好朋友也在搶 → 讓出來
   op.yields = [];
   for (const c of cands.slice()) {
-    if (!has(c.st, 'kind') || op.slots.length > 1) continue;
+    if (c.st.sprint?.op===op.id || !has(c.st, 'kind') || op.slots.length > 1) continue;
     const fr = cands.find(p => p !== c && isFriend(S, p.st.id, c.st.id));
     if (fr && chance(S, 0.65)) {
       cands.splice(cands.indexOf(c), 1);
@@ -258,6 +260,8 @@ function computeBids(S, op) {
   op.bids = cands.map(c => {
     const st = c.st, m = MEDIA[op.type];
     const vars = { partner:S.rivals[op.partner]?.name, npc:partnerStars(S,op)[0]?.name || S.rivals[op.partner]?.stars[0]?.name, career:D.CAREERS[st.career].name, media: m.name, skill: D.SKILLS[mainSkill(op)].name, topic: TOPICS.find(t => t.id === op.topic).name, rival: c.rival, friend: c.friend, op: op.title };
+    if(requirementError(S,st,op,0)&&c.reason==='lead')c.reason='generic';
+    if(st.sprint?.op===op.id)c.reason='sprint';
     const open = pick(S, L.OPEN[voice(st)]);
     const reason = fill(pickLine(S, st, L.REASON[c.reason] || L.REASON.generic), vars);
     const end = /[!?。~…]$/.test(reason) ? '' : voice(st) === 'shy' ? '……' : voice(st) === 'chill' ? '~' : '!';
@@ -265,7 +269,7 @@ function computeBids(S, op) {
     if (/…$/.test(reason + end) && /^…/.test(close)) close = close.replace(/^…+/, '');
     const text = withCatch(S, st, [open, reason + end, close].filter(Boolean).join(' '), 0.3);
     feed(S, st.id, text, 'bid', { op: op.id });
-    return { id: st.id, v: Math.round(c.v), reason: c.reason, text };
+    return { id: st.id, v: Math.round(c.v), reason: c.reason, text, supportOnly:!!requirementError(S,st,op,0) };
   });
 }
 
@@ -303,16 +307,17 @@ export function beginWeek(S) {
   S.trend = S.nextTrend || genTrend(S);
   if (S.flags.cool && --S.flags.cool.weeks <= 0) delete S.flags.cool;
   S.temp = S.temp.filter(t => --t.weeks > 0 || (feed(S, null, `🌐 限時平台「${MEDIA[t.type].name}」結束了。`, 'sys'), false));
-  S.nextTrend = genTrend(S);
-  if (S.nextTrend.hot === S.trend.hot && chance(S, 0.6)) S.nextTrend = genTrend(S);
+  S.nextTrend = S.forecastTrends?.[S.week+1] || genTrend(S);
+  if (!S.forecastTrends?.[S.week+1] && S.nextTrend.hot === S.trend.hot && chance(S, 0.6)) S.nextTrend = genTrend(S);
   S.flags.down = false; S.flags.rain = false; S.flags.power = false;
 
-  // 新機會
-  const types = availMedia(S), n = LEVELS[S.lv].ops + district(S).ops + (roomLv(S, 'lobby') >= 3 ? 1 : 0);
-  for (let i = 0; i < n; i++) {
-    const t = weighted(S, types.map(k => [k, (k === S.trend.hot ? 2.6 : 1) * (MEDIA[k].temp ? 2 : 1) * (k === 'concert' ? 0.7 : 1)]));
-    S.ops.push(makeOp(S, t));
-  }
+  // 預定只抽一次,開案沿用標題、話題和門檻。
+  S.pipeline ||= [];
+  if (!S.pipeline.length) planWeek(S,S.week,S.trend);
+  for (const p of S.pipeline.filter(p=>p.week===S.week)) S.ops.push(makeOp(S,p.type,{topic:p.topic,title:p.title,req:p.req,w:p.w}));
+  S.pipeline=S.pipeline.filter(p=>p.week>S.week);
+  if(!S.pipeline.some(p=>p.week===S.week+1)) planWeek(S,S.week+1,S.nextTrend);
+  if(!S.pipeline.some(p=>p.week===S.week+2)) planWeek(S,S.week+2,genTrend(S));
   // 自己組隊的企劃
   for (const tu of S.teamups.splice(0)) {
     const a = starById(S, tu.a), b = starById(S, tu.b);
@@ -337,8 +342,10 @@ export function beginWeek(S) {
     st.jobs = [];
     if (st.cold) { st.sched[0] = st.sched[1] = 'rest'; st.cold = false; st.sickDays = [0,1]; say(S, st, L.TIRED, {}, 'sad'); }
     else st.sickDays = [];
+    if(st.restUntil>S.week){st.sched=Array(7).fill('rest');st.sickDays=[0,1,2,3,4,5,6];}else if(st.travelUntil>S.week){st.sched=Array(7).fill('off');st.sickDays=[0,1,2,3,4,5,6];}
     for (const op of S.ops) if (op.slots.some(s => s.who === st.id)) { st.jobs.push(op.id); scheduleJob(st, op); }
 
+    progressPlans(S,st);
     if (st.motivated) st.motivated--;
     if (!st.wish && --st.wishIn <= 0) newWish(S, st);
   }
@@ -348,7 +355,8 @@ export function beginWeek(S) {
   S.event = null;
   const leaver = team(S).filter(s => (s.loyalty < 25 || s.evalDoubt) && !s.promise).sort((a, b) => a.loyalty - b.loyalty)[0];
   if (leaver && team(S).length > 2) { S.event = leaveEvent(S, leaver); delete leaver.evalDoubt; }
-  else if (S.week > 1 && chance(S, 0.5)) S.event = randomEvent(S);
+  else S.event = dueEvent(S) || (S.week > 1 && chance(S, 0.6) ? randomEvent(S) : null);
+  if(S.event) recordEvent(S,S.event);
   if (S.event) feed(S, null, `📣 ${S.event.title}`, 'event');
   // 試鏡
   if (--S.auditionIn <= 0) {
@@ -406,12 +414,14 @@ export function assign(S, opId, slotIdx, starId) {
   if (!op || op.status !== 'open') return '這個機會已經開始了';
   if (!st || st.gone) return '找不到這位明星';
   if(op.offerType==='loan' && st.skills[op.loanSkill]<5)return '這項技能要達到 5';
+  const gate=requirementError(S,st,op,slotIdx);if(gate)return gate;
   if(st.jobs.includes(op.id)) return '已經參加這個機會了';
   if (op.only && !op.only.includes(st.id)) return op.type === 'musicshow' ? '只有原唱可以上打歌舞台' : '只有團員可以參加';
   if(!isFree(st,op)) return `${st.name}這週排不下，要留 ${op.days} 天空檔`;
   const slot = op.slots[slotIdx];
   if (!slot || slot.who) return '這個角色已經有人了';
   slot.who = st.id; st.jobs.push(op.id); scheduleJob(st, op);
+  completePlans(S,st,op,slotIdx);
   const bid = op.bids.find(b => b.id === st.id);
   if (op.groupId && slotIdx === 0 && op.type === 'group_album') {
     say(S, st, L.CENTER_WIN, {}, 'win', { op: op.id });
@@ -447,10 +457,12 @@ function lockOp(S, op) {
     const st = starById(S, b.id);
     if (!st || st.gone || (ids.includes(st.id) && !(op.groupId && op.type === 'group_album' && st.id !== ids[0]))) continue;
     loseReaction(S, st, op, winner);
+    if(st.sprint?.op===op.id)st.sprint=null;
   }
   for (const y of op.yields) { const st = starById(S, y.id); if (st && ids.includes(y.friend)) { addRel(S, st.id, y.friend, 6); st.loyalty = clamp(st.loyalty + 2, 0, 100); } }
   // 同場的兩人:想跟對方一起的心願
   for (const id of ids) { const st = starById(S, id); if (st.wish && st.wish.type === 'with' && ids.includes(st.wish.friend)) wishDone(S, st); }
+  for(const st of team(S))if(st.sprint?.op===op.id)st.sprint=null;
   if (op.type === 'dome') S.domeTries++;
 }
 function loseReaction(S, st, op, winner) {
@@ -490,7 +502,7 @@ export function setDay(S, id, d, value) {
   const st = starById(S,id);
   if (!st || st.gone || !Number.isInteger(d) || d < 0 || d > 6) return '找不到這天行程';
   if (st.sched[d].startsWith('job:')) return '這天要工作';
-  if (st.sickDays?.includes(d)) return '感冒了，這天要休息';
+  if (st.sickDays?.includes(d)) return st.restUntil>S.week?'休養中,這天要休息':st.travelUntil>S.week?'海外交流中,這天不在公司':'感冒了，這天要休息';
   if (!ACT_NAMES[value]) return '不能排這種行程';
   st.sched[d] = value; return null;
 }
@@ -503,10 +515,12 @@ export function setPlan(S,id,value) {
 export function autoArrange(S,id) {
   const st = starById(S,id); if (!st || st.gone) return;
   st.sched ||= Array(7).fill('rest');
+  if(st.travelUntil>S.week){st.sched=Array(7).fill('off');return;}
+  if(st.restUntil>S.week){st.sched=Array(7).fill('rest');return;}
   const ks = D.SKILL_IDS.slice().sort((a,b)=>st.skills[b]-st.skills[a]);
   const free = [6,0,1,2,3,4,5].filter(d=>!st.sched[d].startsWith('job:'));
   let n=0;
-  for (const d of free) st.sched[d] = 'train:' + (st.wish?.type === 'train' ? st.wish.skill : (st.trainee ? ks[n++ % 3] : D.CAREERS[st.career]?.skill || ks[n++ % 2]));
+  for (const d of free) st.sched[d] = 'train:' + (st.sprint ? st.sprint.skill : st.wish?.type === 'train' ? st.wish.skill : (st.trainee ? ks[n++ % 3] : D.CAREERS[st.career]?.skill || ks[n++ % 2]));
   if (free.length) st.sched[free[0]] = st.wish?.type === 'rest' ? 'off' : 'rest';
   if (st.energy < 40) for (const d of free.filter(d=>d!==6).slice(0,2)) st.sched[d]='rest';
   for (const d of st.sickDays || []) if (!st.sched[d].startsWith('job:')) st.sched[d]='rest';
@@ -543,7 +557,14 @@ export function upgradeFloor(S,i) {
   S.money-=cost; f.lv++; feed(S,null,`${D.FLOORS[f.type].icon} ${i+1}F 升到 Lv${f.lv}！`,'good'); return null;
 }
 export function migrate(S) {
-  if(S.v===7) return S;
+  if(S.v===8) return S;
+  if(S.v===7) {
+    S.pipeline=[]; S.pendingEvents=[]; S.eventHistory={};
+    for(const st of [...S.stars,...(S.audition||[]),...(S.scouted||[]),...(S.walkins||[])]){st.sprint=null;st.expect=null;}
+    planWeek(S,S.week+1,S.nextTrend||genTrend(S));planWeek(S,S.week+2,genTrend(S));
+    for(const op of S.ops)op.req ??= requirements(S,op.type,op.w);
+    S.v=8;return S;
+  }
   if(S.v===6) {
     S.assistant ||= makeAssistant(S); S.seenTips ||= []; S.tipsOff ??= false;
     if(S.event) {
@@ -554,7 +575,7 @@ export function migrate(S) {
       else if(definition&&ctx) {S0=S;try {choices=definition.choices(ctx).map(c=>c.hint);} finally {S0=null;}}
       ev.choices.forEach((c,i)=>{c.hint ||= choices[i]||'會影響:依事件選擇改變';});
     }
-    S.v=7; return S;
+    S.v=7; return migrate(S);
   }
 
   if(S.v===5) {
@@ -805,7 +826,7 @@ export const EVENTS = [
 let S0 = null;                                        // 事件文字裡要用到 S 的時候(只在 randomEvent 期間有效)
 function randomEvent(S) {
   S0 = S;
-  const pool = shuffle(S, EVENTS).filter(e => !(S.flags.lastEv === e.id));
+  const pool = shuffle(S, EVENTS).filter(e => !e.followup && S.week-(S.eventHistory?.[e.id]??-99)>=8);
   for (const e of pool) {
     if (!chance(S, Math.min(1, e.w * 0.7))) continue;
     const ctx = e.when(S); if (!ctx) continue;
@@ -844,8 +865,9 @@ export function chooseEvent(S, i) {
     if (ch.cost && S.money < ch.cost) return `要 $${fmt(ch.cost)}`;
     S.money -= ch.cost || 0;
     res = ch.go(S);
-    for (const st of team(S)) { st.mood = clamp(st.mood, 0, 100); st.loyalty = clamp(st.loyalty, 0, 100); st.energy = clamp(st.energy, 0, 100); }
+    for (const st of team(S)) { st.mood = clamp(st.mood, 0, 100); st.loyalty = clamp(st.loyalty, 0, 100); st.energy = clamp(st.energy, 0, 100); st.trust=clamp(st.trust,0,100); }
   }
+  if(ev.chain&&['salary_review','salary_poach','authentic_brand','integrity_award','contract_terms','rehab_done','injury_worse','trust_rebuild'].includes(ev.chainId||ev.id)) S.stats.chains=(S.stats.chains||0)+1;
   S.stats.events++;
   feed(S, null, '📣 ' + res, 'event');
   S.event = null;
@@ -885,6 +907,7 @@ export function endWeek(S) {
     if (op.type === 'dome') continue;                // 巨蛋會一直留著
     if (op.project || op.partner!=null) continue;                         // 自家企劃也一直留著,等玩家選人或取消
     S.ops.splice(S.ops.indexOf(op), 1);
+    for(const st of team(S).filter(st=>st.sprint?.op===op.id)){loseReaction(S,st,op,null);st.sprint=null;}
     if (op.own) continue;                             // 音樂節目沒去,就這樣
     if (op.bids.length && chance(S, 0.5)) feed(S, null, `《${op.title.replace(/[《》]/g, '')}》被${(pick(S, S.rivals.filter(r=>r.rel<70))?.name || '其他小公司')}接走了。`, 'sys');
     for (const b of op.bids) { const st = starById(S, b.id); if (st && !st.gone && !st.jobs.length) st.mood = clamp(st.mood - 2, 0, 100); }
@@ -952,6 +975,8 @@ export function endWeek(S) {
   }
   // 4. 心願倒數
   for (const st of team(S)) {
+    if(st.expect && --st.expect.left<=0){st.mood-=6;st.loyalty-=5;st.expect=null;S.stats.expectFail=(S.stats.expectFail||0)+1;say(S,st,L.EXPECT_FAIL,{},'sad');}
+    if(st.sprint?.op){if(!S.ops.some(o=>o.id===st.sprint.op&&o.status==='open'))st.sprint=null;}
     if (st.wish && --st.wish.left <= 0) {
       st.wish = null; st.wishIn = ri(S, 2, 3); st.mood -= 8; st.loyalty -= st.walkinCondition ? 12 : 8;
       say(S, st, L.WISH_FAIL, {}, 'sad');
@@ -1638,18 +1663,20 @@ export function careerNext(S,st) {
 }
 export const APTITUDE_BONUS={funny:{variety:8},perf:{singer:5,dancer:5},shy:{variety:-8},proud:{actor:5,model:5},hot:{dancer:5},kind:{idol:5},comp:{idol:5},curious:{variety:5},solo:{singer:5,idol:-5},chill:{model:3},dream:{singer:3},jeal:{actor:3}};
 export function analyzeStar(S,st) {
- const k=bestSkill(st),next=careerNext(S,st), practice=next.skills.map(skill=>{let v=st.skills[skill],weeks=0;while(v<next.need&&weeks<=10){v+=trainingGain(S,{...st,skills:{...st.skills,[skill]:v}},skill);weeks++;}return {skill,weeks,text:D.SKILLS[skill].name+' · 每週練 5 天'+(weeks>10?'超過 10 週':`大約 ${weeks} 週`)};});
+ const k=bestSkill(st),next=careerNext(S,st), forecast=st.sprint||S.pipeline?.find(p=>p.req?.skill&&(careerLikes(st,p.type)||st.dream===p.type||st.topic===p.topic)&&st.skills[p.req.skill]<p.req.target)?.req, practice=(forecast?[forecast.skill]:next.skills).map(skill=>{let v=st.skills[skill],weeks=0;while(v<(forecast?.target||next.need)&&weeks<=10){v+=trainingGain(S,{...st,skills:{...st.skills,[skill]:v}},skill);weeks++;}return {skill,weeks,text:D.SKILLS[skill].name+' · 每週練 5 天'+(weeks>10?'超過 10 週':`大約 ${weeks} 週`)};});
  const second={singer:'dance',actor:'talk',dancer:'charm',variety:'act',model:'dance',idol:'charm'};
  const aptitude=Object.entries(D.CAREERS).map(([id,c])=>({id,name:c.name,score:Math.round(clamp(st.skills[c.skill||bestSkill(st)]*8+st.skills[second[id]]*2+(APTITUDE_BONUS[st.traits[0]]?.[id]||0)+((st.pot||1)-1)*20,0,100))})).sort((a,b)=>b.score-a.score);
  return {strongest:{skill:k,value:st.skills[k],rank:1+debuted(S).filter(o=>o.skills[k]>st.skills[k]).length},trait:D.TRAITS[st.traits[0]].desc,next,practice,advice:practice.length?practice.map(p=>p.text).join('；'):next.step===3?'🎉 夢想達成!':'多接 '+(st.career==='idol'?'不同':D.CAREERS[st.career].media.map(k=>MEDIA[k].name).join('、'))+' 類的工作',aptitude:S.assistant.lv>=2?aptitude:[]};
 }
-export function analystRecommendation(S,op,slot=op.slots.findIndex(s=>!s.who)) {if(slot<0)return null;return team(S).filter(st=>isFree(st,op)&&(!op.only||op.only.includes(st.id))).map(st=>({st,score:perf(S,st,op,slot,false)})).sort((a,b)=>b.score-a.score)[0]||null;}
+export function analystRecommendation(S,op,slot=op.slots.findIndex(s=>!s.who)) {if(slot<0)return null;return team(S).filter(st=>isFree(st,op)&&!requirementError(S,st,op,slot)&&(!op.only||op.only.includes(st.id))).map(st=>({st,score:perf(S,st,op,slot,false)})).sort((a,b)=>b.score-a.score)[0]||null;}
 export function assistantAdvice(S) {
  if(S.week>8&&!S.assistant.lv)return null;
  if(S.event)return '先處理事件';
  const t=team(S),noRest=t.find(st=>!st.sched.some(v=>v==='rest'||v==='off'));if(noRest)return `${noRest.name} 這週沒排休息,會累倒`;
  const tired=t.find(st=>st.energy<30);if(tired)return `${tired.name} 快沒力了,排一天休息或送點心`;
  for(const op of S.ops.filter(o=>o.status==='open'&&!o.slots.some(s=>s.who))){const rec=analystRecommendation(S,op);if(rec&&rec.score>=D.GRADES.find(g=>g.g==='A').min)return `《${op.title}》讓 ${rec.st.name} 去,預估 ${D.gradeOf(rec.score).g}`;}
+ const sprint=t.find(st=>st.sprint&&!st.sprint.op);if(sprint)return `${sprint.name} 想衝${D.SKILLS[sprint.sprint.skill].name}接${sprint.sprint.title},幫他多排練習`;
+ const expect=t.find(st=>st.expect?.left<=1);if(expect)return `${expect.name} 的接案期望剩 1 週:${expectText(expect)}`;
  const wish=t.find(st=>st.wish?.left<=2);if(wish)return `${wish.name} 的心願快到期了:${wishText(S,wish)}`;
  const trainee=t.find(st=>st.trainee&&S.week%4===3);if(trainee)return `下週月末評鑑,${trainee.name} 還差一點`;
  if(S.trend)return `這週 🔥 ${MEDIA[S.trend.hot].name} 很紅,接到效果 ×1.5`;
@@ -1661,3 +1688,129 @@ export function selectionHint(S,st,op) {
  const others=op.bids.filter(b=>b.id!==st.id&&!op.slots.some(s=>s.who===b.id)).map(b=>starById(S,b.id)).filter(Boolean).slice(0,2);
  return '會影響:'+st.name+(wants?' 心情 ↑ 歸屬 ↑':' 心情 ↓')+others.map(o=>{const trait=has(o,'jeal')?'jeal':has(o,'comp')?'comp':o.traits[0];return '；'+o.name+'('+D.TRAITS[trait].name+')'+SELECTION_REACTIONS[trait];}).join('');
 }
+
+// v3-C:預告、技能門檻與獨立的工作期望。
+export function requirements(S,type,w) {
+ const row={drama:['act',3.5+S.lv*0.5],concert:['sing',5+(S.lv-3)*0.5],contest:[Object.keys(w||{sing:1})[0],4],ad:['charm',4],game:['talk',4],fashion:['charm',4.5]};
+ return type==='dome'?{skills:['sing','dance','talk'],target:6.5}:row[type]?{skill:row[type][0],target:row[type][1]}:null;
+}
+export function slotRequirement(S,op,slot=0){const r=op.req===undefined?requirements(S,op.type,op.w):op.req;return r&&(op.type==='dome'?{skill:r.skills[slot],target:r.target}:slot===0?r:null);}
+export function requirementError(S,st,op,slot=0){const r=slotRequirement(S,op,slot);return r&&st.skills[r.skill]+1e-9<r.target?`${st.name} 的${D.SKILLS[r.skill].name} ${st.skills[r.skill].toFixed(1)},要 ${r.target} 才能接`:null;}
+export function requirementText(op){const r=op.req;return !r?'無技能門檻':r.skills?r.skills.map(k=>D.SKILLS[k].name+' ≥ '+r.target).join('、'):(MEDIA[op.type].slots[0]+' '+D.SKILLS[r.skill].name+' ≥ '+r.target);}
+function planWeek(S,week,trend){
+ S.forecastTrends||={};S.forecastTrends[week]={...trend};for(const k of Object.keys(S.forecastTrends))if(+k<S.week)delete S.forecastTrends[k];
+ const n=LEVELS[S.lv].ops+district(S).ops+(roomLv(S,'lobby')>=3?1:0);
+ for(let i=0;i<n;i++){
+  const type=weighted(S,availMedia(S).map(k=>[k,(k===trend.hot?2.6:1)*(MEDIA[k].temp?2:1)*(k==='concert'?0.7:1)]));
+  const topic=chance(S,0.4)?trend.topic:pick(S,TOPICS).id,w=MEDIA[type].w||{[pick(S,D.SKILL_IDS)]:1};
+  S.pipeline.push({week,type,topic,title:fill(pick(S,D.TITLES[type]),{t:topicName(topic)}),req:requirements(S,type,w),w,hot:type===trend.hot});
+ }
+}
+export function newExpect(S,st){
+ const r=rnd(S),lead=st.traits.some(t=>['comp','proud','dream'].includes(t));
+ st.expect={kind:r<0.6?'career':r<0.8?'dream':lead?'lead':'career',left:5};
+ // 只從「現在真的會開出來的工作」挑(公司等級夠、不是自家企劃/打歌),不然一定失敗
+ const open=availMedia(S), mine=(D.CAREERS[st.career].media||[]).filter(k=>open.includes(k));
+ if(st.expect.kind==='career')st.expect.media=pick(S,mine.length?mine:open);
+ if(st.expect.kind==='dream')st.expect.media=open.includes(st.dream)?st.dream:pick(S,mine.length?mine:open);
+}
+export function expectMatches(st,op,slot=null){const e=st.expect;return !!e&&(e.kind==='lead'?(slot==null?hasLead(op):D.LEAD_ROLES.includes(op.slots[slot]?.role)):e.media===op.type);}
+export function expectText(st){const e=st.expect;return !e?'準備下一個目標':e.kind==='lead'?'主角/主唱':MEDIA[e.media].icon+' '+MEDIA[e.media].name;}
+function progressPlans(S,st){
+ if(st.trainee)return;
+ if(!st.expect&&S.week>=(st.expectAfter||0))newExpect(S,st);
+ if(st.sprint){const sp=st.sprint;sp.left=Math.max(0,sp.week-S.week);
+  if(!sp.op&&sp.week<=S.week){const op=S.ops.find(o=>o.born===S.week&&o.title===sp.title&&o.type===sp.type);
+   if(op&&st.skills[sp.skill]+1e-9>=sp.target){sp.op=op.id;S.stats.sprintSuccess=(S.stats.sprintSuccess||0)+1;}
+   else{st.mood=clamp(st.mood-5,0,100);feed(S,st.id,'還差一點……下次。','sad');S.stats.sprintFail=(S.stats.sprintFail||0)+1;st.sprint=null;}
+  }
+ }
+ if(st.sprint)return;
+ const p=S.pipeline.find(p=>p.req?.skill&&(careerLikes(st,p.type)||st.dream===p.type||st.topic===p.topic)&&p.req.target-st.skills[p.req.skill]>=0.2-1e-9&&p.req.target-st.skills[p.req.skill]<=Math.min(1.5,0.9*trainingGain(S,st,p.req.skill,5*Math.max(1,p.week-S.week))));   // 只衝「算得出來練得到」的差距
+ if(p){st.sprint={skill:p.req.skill,target:p.req.target,title:p.title,type:p.type,week:p.week,left:p.week-S.week};feed(S,st.id,fill(pick(S,L.SPRINT[voice(st)]),{title:p.title,skill:D.SKILLS[p.req.skill].name,target:p.req.target,left:p.week-S.week}),'wish');}
+}
+function completePlans(S,st,op,slot){
+ if(st.sprint?.op===op.id){st.mood=clamp(st.mood+15,0,100);st.loyalty=clamp(st.loyalty+8,0,100);st.trust=clamp(st.trust+5,0,100);st.sprint=null;}
+ if(expectMatches(st,op,slot)){st.mood=clamp(st.mood+10,0,100);st.loyalty=clamp(st.loyalty+6,0,100);st.expect=null;st.expectAfter=S.week+1;S.stats.expectDone=(S.stats.expectDone||0)+1;say(S,st,L.EXPECT_DONE,{},'good');}
+}
+export function scheduleEvent(S,id,delay,ctx=null){(S.pendingEvents||=[]).push({id,week:S.week+delay,ctx:ctx?.id||ctx});}
+function recordEvent(S,ev){(S.eventHistory||={})[ev.id]=S.week;S.stats.eventKinds||=[];if(!S.stats.eventKinds.includes(ev.id))S.stats.eventKinds.push(ev.id);}
+function dueEvent(S){
+ S.pendingEvents||=[];
+ while(true){const i=S.pendingEvents.findIndex(e=>e.week<=S.week);if(i<0)return null;const p=S.pendingEvents.splice(i,1)[0],st=Array.isArray(p.ctx)?p.ctx.map(id=>starById(S,id)):p.ctx&&starById(S,p.ctx);if(p.ctx&&(Array.isArray(st)?st.some(x=>!x||x.gone):!st||st.gone))continue;
+  if(p.id==='salary_poach'){const ev=leaveEvent(S,st);ev.text='上次加薪沒有談成,現在另一家公司提出了待遇。'+ev.text;ev.chain=true;ev.chainId=p.id;return ev;}
+  const e=EVENTS.find(e=>e.id===p.id);if(!e)continue;const ctx=st||true;S0=S;try{return {id:e.id,ctx:p.ctx,chain:true,title:e.title(ctx),text:e.text(ctx,S),choices:e.choices(ctx).map(c=>({label:c.label,cost:c.cost||0,hint:c.hint}))};}finally{S0=null;}
+ }
+}
+
+// 事件內容保留明確取捨,連續事件的選項在回答時才生效。
+const eventChoice=(label,hint,go,cost=0)=>({label,hint:'會影響:'+hint,go,cost});
+const cEvent=(id,title,text,choices,followup=false)=>({id,w:1,followup,when:S=>pick(S,debuted(S)),title:st=>typeof title==='function'?title(st):title,text:st=>text.replaceAll('{name}',st.name),choices});
+const boost=(st,mood=6,loyal=4)=>{st.mood+=mood;st.loyalty+=loyal;};
+EVENTS.push(
+ cEvent('salary_request',st=>`${st.name} 想談加薪`,'{name}整理了最近的工作量,希望報酬能跟責任一起成長。',st=>[
+ eventChoice('調薪並訂下檢討日期','薪水支出 ↑ 歸屬 ↑ 後續檢討',S=>{st.salaryBonus+=0.15;boost(st);scheduleEvent(S,'salary_review',3,st);return '新待遇確認,三週後一起檢視工作量。';}),
+ eventChoice('先維持待遇,之後再說','歸屬 ↓ 三至四週後可能收到挖角',S=>{st.loyalty-=8;scheduleEvent(S,'salary_poach',ri(S,3,4),st);return '他沒有得到明確答覆,決定看看其他機會。';})]),
+ cEvent('salary_review','調薪後的工作量檢討','{name}帶著工作紀錄來了,希望新待遇也能搭配合理工時。',st=>[eventChoice('一起訂工作量上限','歸屬 ↑ 信任 ↑',S=>{boost(st);st.trust+=5;return '待遇與工時都有共識了。';}),eventChoice('多排一天休息','體力 ↑',S=>{st.energy+=15;return '先把精神養回來。';})],true),
+ cEvent('fake_fans','有人推銷快速漲粉方案','對方承諾一夜增加粉絲,卻不願提供真實互動來源。',st=>[
+ eventChoice('拒絕,公開真實互動數據','信任 ↑ 後續品牌可能主動邀約',S=>{st.trust+=5;scheduleEvent(S,'authentic_brand',ri(S,4,6),st);return '團隊留下透明數據,繼續慢慢累積觀眾。';}),
+ eventChoice('買一批粉絲 $500','錢 ↓ 表面粉絲 ↑ 日後造假風險',S=>{st.fans+=2000;scheduleEvent(S,'fake_exposed',ri(S,4,6),st);return '帳面數字漂亮了,互動卻沒有跟上。';},500)]),
+ cEvent('authentic_brand','真實互動吸引品牌','品牌看過透明報告,欣賞{name}和觀眾的真實交流。',st=>[eventChoice('接受透明合作條件','錢 ↑ 粉絲 ↑ 信任 ↑',S=>{S.money+=1800;st.fans+=600;st.trust+=8;S.ops.push(makeOp(S,'ad',{title:'真實互動品牌合作',own:true}));return '品牌主動提出合作,長期經營得到回報。';}),eventChoice('先保留聯絡,專心作品','心情 ↑ 信任 ↑',S=>{boost(st);st.trust+=8;return '品牌理解安排,願意等下一檔。';})],true),
+ cEvent('fake_exposed','數據造假被揭穿','平台發現異常帳號,品牌要求說明先前的粉絲數據。',st=>[eventChoice('公開更正並退還合作費','粉絲 ↓ 錢 ↓ 信任 ↓',S=>{st.fans=Math.round(st.fans*0.65);S.money-=2000;st.trust-=20;st.loyalty-=10;scheduleEvent(S,'trust_rebuild',2,st);return '品牌解約,公司開始重建信任。';}),eventChoice('只刪掉假帳號','粉絲 ↓↓ 信任 ↓↓ 追蹤後果',S=>{st.fans=Math.round(st.fans*0.5);st.trust-=30;S.money-=2500;scheduleEvent(S,'trust_rebuild',2,st);return '缺乏完整說明讓品牌更不放心。';})],true),
+ cEvent('trust_rebuild','品牌要求重新查核','品牌仍不接受舊數據,要求完整互動紀錄才能再談合作。',st=>[eventChoice('投入人工查核 $600','錢 ↓ 信任逐步 ↑',S=>{st.trust+=6;return '先從可驗證的數字重新開始。';},600),eventChoice('暫停商業曝光,重做作品','粉絲 ↓ 心情 ↓',S=>{st.fans=Math.round(st.fans*0.95);st.mood-=5;return '短期沒有新合作,團隊繼續承擔後果。';})],true),
+ cEvent('vote_scheme','有人提議操弄頒獎投票','外包商聲稱能用大量帳號灌票,還保證不會被發現。',st=>[eventChoice('拒絕並向主辦單位通報','信任 ↑ 下次頒獎前有後續',S=>{st.trust+=6;scheduleEvent(S,'integrity_award',Math.max(1,24-S.week%24-1),st);return '只接受真實支持,主辦單位收到通報。';}),eventChoice('默許外包灌票 $400','錢 ↓ 日後調查與失信風險',S=>{scheduleEvent(S,'vote_inquiry',Math.max(1,24-S.week%24-1),st);return '外包商開始操作,紀錄也留在系統裡。';},400)]),
+ cEvent('integrity_award','主辦單位頒發誠信獎','主辦單位感謝公司通報灌票,邀請{name}分享公平競爭的做法。',st=>[eventChoice('和團隊一起領獎','獎盃 ↑ 信任 ↑ 粉絲 ↑',S=>{S.trophies.push({id:'integrity_'+S.week,icon:'⚖️',name:'誠信獎',week:S.week,ng:S.ng});st.trust+=10;st.fans+=800;return '拿到誠信獎,真實支持持續累積。';}),eventChoice('領獎並公開防弊流程','獎盃 ↑ 信任 ↑',S=>{S.trophies.push({id:'integrity_'+S.week,icon:'⚖️',name:'誠信獎',week:S.week,ng:S.ng});st.trust+=12;return '把誠信獎和防弊流程一起分享。';})],true),
+ cEvent('vote_inquiry','主辦單位調查異常投票','投票紀錄指向外包商,公司必須交代授權過程。',st=>[eventChoice('承認並配合調查','錢 ↓ 粉絲 ↓ 信任 ↓',S=>{S.money-=1800;st.fans=Math.round(st.fans*0.8);st.trust-=18;scheduleEvent(S,'trust_rebuild',2,st);return '異常票作廢,合作暫停,後續持續查核。';}),eventChoice('把責任全推給外包商','粉絲 ↓↓ 信任 ↓↓',S=>{st.fans=Math.round(st.fans*0.65);st.trust-=30;scheduleEvent(S,'trust_rebuild',2,st);return '授權紀錄仍在,推卸責任讓觀眾更失望。';})],true),
+ cEvent('contract_renew','經紀約即將到期','{name}希望新合約寫清楚報酬、創作權與休息安排。',st=>[eventChoice('坐下來談條件','信任 ↑ 兩週後確認條款',S=>{st.trust+=4;scheduleEvent(S,'contract_terms',2,st);return '先交換期待,兩週後帶著草案再談。';}),eventChoice('加薪續約','薪水支出 ↑ 歸屬 ↑',S=>{st.salaryBonus+=0.2;boost(st,10,10);return '提高待遇並完成續約。';}),eventChoice('尊重選擇,期滿放手','明星離開 粉絲 ↓',S=>starLeaves(S,st))]),
+ cEvent('contract_terms','新合約內容確認','雙方對基本待遇已有共識,剩下創作自主與宣傳配合的分工。',st=>[eventChoice('保障創作自主,公司多付製作費 $700','錢 ↓ 信任 ↑ 歸屬 ↑',S=>{boost(st,8,10);st.trust+=10;return '創作自主寫進合約,續約完成。';},700),eventChoice('固定分潤,共同審核宣傳內容','薪水支出 ↑ 信任 ↑',S=>{st.salaryBonus+=0.1;st.trust+=6;return '雙方保留審核權,確認新合約。';})],true),
+ cEvent('dance_sprain','練舞時扭傷了','{name}落地時扭到腳,想趕上演出,但需要先檢查。',st=>[eventChoice('先休息並安排復健','體力 ↑ 一週後復健成果',S=>{medicalRest(S,st,1);scheduleEvent(S,'rehab_done',1,st);return '停止負重練習,開始復健。';}),eventChoice('照原行程硬撐','體力 ↓ 下週傷勢可能加重',S=>{st.energy-=15;scheduleEvent(S,'injury_worse',1,st);return '他勉強撐完,腳踝卻越來越不舒服。';})]),
+ cEvent('rehab_done','復健完成,準備回來','{name}依照復健計畫恢復,也學會更安全的落地方式。',st=>[eventChoice('逐步恢復練舞','舞蹈 ↑ 體力 ↑',S=>{st.skills.dance=Math.min(10,st.skills.dance+0.3);st.energy+=15;return '動作更穩定,舞蹈進步了。';}),eventChoice('再多安排恢復時間','體力 ↑↑ 舞蹈 ↑',S=>{st.skills.dance=Math.min(10,st.skills.dance+0.15);st.energy+=25;return '確認沒有疼痛再回到完整強度。';})],true),
+ cEvent('injury_worse','傷勢加重,需要休息兩週','{name}走路仍痛,原先的小傷因硬撐而延長了恢復期。',st=>[eventChoice('取消工作,完整休養','工作取消 錢 ↓ 強制休息兩週',S=>{medicalRest(S,st,2);S.money-=600;return '兩週停止工作與訓練,公司負擔取消費。';}),eventChoice('調整合作檔期,在家休養','工作取消 錢 ↓ 歸屬 ↓ 強制休息兩週',S=>{medicalRest(S,st,2);S.money-=300;st.loyalty-=6;return '協調延期,仍必須休息兩週。';})],true),
+);
+function medicalRest(S,st,weeks){
+ st.restUntil=Math.max(st.restUntil||0,S.week+weeks);
+ for(const op of S.ops.filter(o=>o.slots.some(s=>s.who===st.id))){
+  for(const slot of op.slots)if(slot.who===st.id)slot.who=null;
+  op.status='open';
+  for(const other of team(S)){other.sched=other.sched.map(v=>v==='job:'+op.id?'rest':v);other.jobs=other.jobs.filter(id=>id!==op.id);}
+  // 重新排好仍在案內的人,避免其預約遺失。
+  for(const slot of op.slots)if(slot.who){const other=starById(S,slot.who);other.jobs.push(op.id);scheduleJob(other,op);}
+ }
+ st.sched=Array(7).fill('rest');st.jobs=[];st.sickDays=[0,1,2,3,4,5,6];
+}
+
+// 每筆都是獨立情境,選項和後果各自保留在存檔事件定義裡。
+EVENTS.push(
+ cEvent('brand_image','品牌希望改變形象','品牌想讓{name}穿上完全不同風格的服裝,但他擔心失去原本特色。',st=>[eventChoice('付費試裝,讓明星保留否決權 $300','錢 ↓ 魅力 ↑ 信任 ↑',S=>{st.skills.charm=Math.min(10,st.skills.charm+0.2);st.trust+=5;return '試出兼顧品牌與個性的版本。';},300),eventChoice('直接接受品牌版本','錢 ↑ 心情 ↓',S=>{S.money+=600;st.mood-=8;return '品牌願意加價,他卻不喜歡這次造型。';})]),
+ cEvent('brand_exclusive','代言附帶獨家使用條款','品牌要求{name}在所有公開場合只能使用他們的產品,連非合作內容也算。',st=>[eventChoice('限縮到合作期間與同類產品','信任 ↑ 錢 ↑',S=>{S.money+=400;st.trust+=4;return '改成合理的排他範圍,保留生活選擇。';}),eventChoice('接受全面限制換取加價','錢 ↑↑ 心情 ↓',S=>{S.money+=900;st.mood-=10;return '合作費提高,日常內容卻變得綁手綁腳。';})]),
+ cEvent('brand_program','代言還要上品牌節目','品牌臨時要求{name}多錄一集節目,原合約沒有這段工時。',st=>[eventChoice('談追加費並確認休息','錢 ↑ 歸屬 ↑',S=>{S.money+=500;st.loyalty+=5;return '工時和追加報酬都寫進補充條款。';}),eventChoice('免費配合一次','體力 ↓ 品牌曝光粉絲 ↑',S=>{st.energy-=18;st.fans+=200;return '節目播出了,團隊也多加了一次班。';})]),
+ cEvent('clipped_video','影片被斷章取義','{name}的一段訪談只剩十秒,網友誤以為他在嘲笑觀眾。',st=>[eventChoice('公開完整片段與時間軸','信任 ↑ 粉絲 ↑',S=>{st.trust+=6;st.fans+=180;return '完整上下文讓誤會逐漸散去。';}),eventChoice('先暫停發言,等風波過去','心情 ↓ 粉絲 ↓',S=>{st.mood-=5;st.fans=Math.round(st.fans*0.97);return '沉默沒有解開疑問,觀眾還在等說明。';})]),
+ cEvent('voice_clone','有人合成明星聲音上架歌曲','陌生帳號用{name}的聲音發布歌曲,還標示成公司新作。',st=>[eventChoice('留存證據,向平台要求下架 $200','錢 ↓ 信任 ↑',S=>{st.trust+=8;return '平台受理申訴,公司也公告沒有授權。';},200),eventChoice('只發澄清公告','信任 ↑ 心情 ↓',S=>{st.trust+=2;st.mood-=4;return '先釐清來源,但冒名歌曲還沒下架。';})]),
+ cEvent('script_similarity','短劇被質疑抄襲','觀眾指出新短劇橋段與另一作品相似,編劇願意提供創作紀錄。',st=>[eventChoice('暫停宣傳,查核並補正授權 $500','錢 ↓ 信任 ↑',S=>{st.trust+=7;return '比對創作紀錄,修改相似段落並致謝。';},500),eventChoice('先撤下爭議片段','粉絲 ↓ 心情 ↓',S=>{st.fans=Math.round(st.fans*0.98);st.mood-=3;return '爭議片段撤下,團隊還需要重新製作。';})]),
+ cEvent('ai_lyrics','AI 協作歌詞要不要標示','{name}修改了 AI 提供的歌詞初稿,發行頁還沒寫創作流程。',st=>[eventChoice('標示 AI 協作並檢查來源 $150','錢 ↓ 信任 ↑ 創作技能 ↑',S=>{st.trust+=6;st.skills.sing=Math.min(10,st.skills.sing+0.1);return '觀眾看得到創作分工,團隊完成來源檢查。';},150),eventChoice('重寫成自己的版本再發','體力 ↓ 技能 ↑',S=>{st.energy-=12;st.skills.sing=Math.min(10,st.skills.sing+0.2);return '花時間重寫,保留了完整修改紀錄。';})]),
+ cEvent('schedule_error','工作人員排錯行程','兩個通告同時訂下了{name},工作人員很緊張,不知道怎麼向客戶說明。',st=>[eventChoice('公司承擔協調費 $400','錢 ↓ 歸屬 ↑ 信任 ↑',S=>{st.loyalty+=6;st.trust+=4;return '和兩邊協調出新時段,也加入雙人覆核。';},400),eventChoice('請明星親自協調','體力 ↓ 心情 ↓',S=>{st.energy-=10;st.mood-=7;return '通告重新排好了,但行政壓力落到明星身上。';})]),
+ cEvent('editing_error','剪輯師交錯影片版本','上架的檔案含有尚未確認的字幕,{name}提醒觀眾已經開始轉傳。',st=>[eventChoice('立即更正並說明版本差異 $200','錢 ↓ 信任 ↑',S=>{st.trust+=5;return '置頂更正與新版連結,建立交付清單。';},200),eventChoice('直接撤下重傳','粉絲 ↓ 體力 ↓',S=>{st.fans=Math.round(st.fans*0.99);st.energy-=6;return '新版已上傳,部分觀眾仍找不到原留言。';})]),
+ cEvent('equipment_broken','收音器材壞了','錄音室出現雜音,{name}的下一次錄製快到了。',st=>[eventChoice('更換器材 $800','錢 ↓ 技能 ↑',S=>{st.skills.talk=Math.min(10,st.skills.talk+0.2);return '新器材到位,也練習了新的收音方式。';},800),eventChoice('先借器材 $150','錢 ↓ 體力 ↓',S=>{st.energy-=5;return '這次可以交件,之後仍要安排維修。';},150)]),
+ cEvent('overseas_invite','海外工作室邀約一週交流','海外團隊想請{name}帶作品交流,這週會不在公司。',st=>[eventChoice('安排海外交流並取消原通告','工作取消 錢 ↓ 技能 ↑ 一週外出',S=>{medicalRest(S,st,1);st.sickDays=[];st.sched=Array(7).fill('off');st.skills[bestSkill(st)]=Math.min(10,st.skills[bestSkill(st)]+0.3);st.travelUntil=S.week+1;st.sickDays=[0,1,2,3,4,5,6];return '帶著作品出發,這週行程改為海外交流。';},600),eventChoice('改成線上交流','口才 ↑ 體力 ↓',S=>{st.skills.talk=Math.min(10,st.skills.talk+0.1);st.energy-=8;return '跨時區開會完成,保留了原本工作。';})]),
+ cEvent('fanclub','粉絲後援會成立','後援會想替{name}整理活動資訊,詢問公司能否建立固定窗口。',st=>[eventChoice('建立窗口與公開規範 $200','錢 ↓ 粉絲 ↑ 信任 ↑',S=>{st.fans+=400;st.trust+=4;return '資訊更清楚,也寫明不鼓勵攀比消費。';},200),eventChoice('先提供公開資訊頁','粉絲 ↑',S=>{st.fans+=120;return '大家可以從同一頁取得正確活動消息。';})]),
+ cEvent('minor_tips','未成年粉絲打賞過多','客服收到家長來信,未成年粉絲把整個月生活費都打賞給{name}。',st=>[eventChoice('退款並設打賞上限 $400','錢 ↓ 信任 ↑ 粉絲 ↑',S=>{st.trust+=10;st.fans+=150;return '完成退款,加入消費提醒與打賞上限。';},400),eventChoice('先停用打賞功能','收入減少 信任 ↑',S=>{S.money-=150;st.trust+=5;return '停止接收打賞,逐筆聯絡處理退款。';})]),
+ cEvent('study_leave','明星準備考試想請假','{name}想進修,但需要一週不接工作準備考試。',st=>[eventChoice('核准請假,協調取消通告','工作取消 歸屬 ↑ 信任 ↑',S=>{medicalRest(S,st,1);boost(st,8,8);st.trust+=6;return '整週留給準備考試,公司負責協調檔期。';}),eventChoice('提供課程費,另約考期 $300','錢 ↓ 歸屬 ↑',S=>{st.loyalty+=3;return '先上彈性課程,下次提早保留考試週。';},300)]),
+ cEvent('duo_request','兩位明星想組一個小企劃','{name}想和夥伴嘗試雙人作品,但不想立刻綁成固定團體。',st=>[eventChoice('安排一次自製試作','雙人企劃 ↑ 心情 ↑',S=>{const b=team(S).find(o=>o.id!==st.id);if(b)S.teamups.push({a:st.id,b:b.id});st.mood+=8;return '下週先試一支作品,再決定是否長期合作。';}),eventChoice('先練默契再提案','技能 ↑',S=>{st.skills.dance=Math.min(10,st.skills.dance+0.15);return '用排練確認風格與分工。';})]),
+ cEvent('group_split','合作搭檔想各自發展','{name}覺得搭檔風格越來越不同,希望能談談接下來的作品方向。',st=>[eventChoice('安排共同討論,尊重各自創作','心情 ↑ 信任 ↑',S=>{boost(st,8,4);st.trust+=5;return '決定先各做一支作品,沒有把分歧變成對立。';}),eventChoice('投資一次共同工作坊 $250','錢 ↓ 技能 ↑',S=>{st.skills.talk=Math.min(10,st.skills.talk+0.2);return '把分工與期待說清楚,再決定合作方式。';},250)]),
+ cEvent('burnout','連續工作讓人倦怠','{name}說自己看到通告表就緊張,連喜歡的練習也提不起勁。',st=>[eventChoice('取消工作,安排一週恢復','工作取消 體力 ↑ 歸屬 ↑',S=>{medicalRest(S,st,1);st.energy+=20;st.loyalty+=8;return '這週暫停工作,也不追進度。';}),eventChoice('找人分擔並談心 $250','錢 ↓ 心情 ↑ 體力 ↑',S=>{st.mood+=8;st.energy+=10;return '先減少額外宣傳,一起重排優先順序。';},250)]),
+ cEvent('overtime_photo','半夜還在公司的照片引發討論','有人拍到{name}半夜離開公司,留言質疑團隊長期加班。',st=>[eventChoice('公開工時改善計畫 $300','錢 ↓ 信任 ↑ 體力 ↑',S=>{st.trust+=7;st.energy+=12;return '檢查真實工時,訂定晚間離場時間。';},300),eventChoice('先停止夜間宣傳','粉絲 ↓ 體力 ↑',S=>{st.fans=Math.round(st.fans*0.99);st.energy+=15;return '減少夜間工作,再向大家交代改善成果。';})]),
+ cEvent('privacy_leak','粉絲資料誤寄給外包商','活動名單寄錯了收件人,裡面有聯絡資料。團隊需要立即處理。',st=>[eventChoice('通知受影響粉絲並加強權限 $700','錢 ↓ 信任 ↑',S=>{st.trust+=6;return '追蹤刪除誤寄資料,通知粉絲並改成最少權限。';},700),eventChoice('先停用名單與活動報名','錢 ↓ 粉絲 ↓',S=>{S.money-=250;st.fans=Math.round(st.fans*0.97);return '停止資料流通,仍須逐一通知並修復流程。';})]),
+ cEvent('staff_poach','別家公司向員工招手','工作夥伴收到更好的邀請,希望公司也能提供成長方向。',st=>[eventChoice('提供進修與合理補貼 $450','錢 ↓ 歸屬 ↑',S=>{for(const o of team(S))o.loyalty+=3;return '團隊一起訂進修計畫,留下來的理由更明確。';},450),eventChoice('祝福發展,安排交接','員工離開 錢 ↑',S=>{const employee=S.staff.pop();S.money+=100;return employee?'完成交接,員工前往新公司。':'目前沒有固定員工,先建立日後的交接規範。';})]),
+ cEvent('trainee_homesick','練習生想家了','新人最近吃不下飯,希望找時間回家。{name}也想幫他說話。',st=>[eventChoice('安排探親交通 $200','錢 ↓ 心情 ↑ 歸屬 ↑',S=>{const t=team(S).find(o=>o.trainee)||st;boost(t,12,8);t.energy+=10;return '和家人好好聊過,心情安定許多。';},200),eventChoice('陪他視訊並調整練習量','心情 ↑',S=>{const t=team(S).find(o=>o.trainee)||st;t.mood+=6;return '先安排固定聯絡家人的時間。';})]),
+ cEvent('parents_visit','練習生家長來參觀','家長想知道公司的作息、學習安排和遇到困難時找誰。',st=>[eventChoice('公開作息並提供聯絡窗口','信任 ↑ 歸屬 ↑',S=>{for(const t of team(S).filter(t=>t.trainee)){t.loyalty+=6;t.trust+=5;}st.trust+=3;return '把練習、休息與學習的安排都說清楚。';}),eventChoice('準備一次成果分享 $200','錢 ↓ 心情 ↑',S=>{for(const t of team(S))t.mood+=3;return '家長看到孩子的作品,也留下想了解的問題。';},200)]),
+ cEvent('own_song','明星想自己寫歌','{name}帶來一段旋律,希望能留時間把它做成自己的作品。',st=>[eventChoice('投資試錄 $350','錢 ↓ 歌唱 ↑ 信任 ↑',S=>{st.skills.sing=Math.min(10,st.skills.sing+0.25);st.trust+=6;return '完成第一版試聽,創作有了具體方向。';},350),eventChoice('先在練習時間試寫','歌唱 ↑ 體力 ↓',S=>{st.skills.sing=Math.min(10,st.skills.sing+0.1);st.energy-=8;return '保留草稿,下次再安排完整製作。';})]),
+ cEvent('mentor_program','前輩帶後輩的導師提案','{name}願意帶新人練習,希望公司把教學時間也算進工作。',st=>[eventChoice('提供教學補貼 $300','錢 ↓ 新人技能 ↑ 關係 ↑',S=>{const t=team(S).find(o=>o.id!==st.id&&o.trainee)||team(S).find(o=>o.id!==st.id);if(t){const k=bestSkill(st);t.skills[k]=Math.min(10,t.skills[k]+0.3);addRel(S,st.id,t.id,10);}return '前輩的付出被看見,新人也學到新方法。';},300),eventChoice('先做一次短分享','口才 ↑ 體力 ↓',S=>{st.skills.talk=Math.min(10,st.skills.talk+0.1);st.energy-=6;return '先試教一堂,之後再估算正式教學時間。';})]),
+ cEvent('documentary','紀錄片拍攝邀約','製作團隊想拍{name}的日常,包含練習失敗和休息時間。',st=>[eventChoice('訂拍攝界線與撤回同意機制','錢 ↑ 信任 ↑',S=>{S.money+=700;st.trust+=5;return '只在同意的時段拍攝,私人休息不入鏡。';}),eventChoice('改成作品製作專訪','錢 ↑ 粉絲 ↑',S=>{S.money+=300;st.fans+=180;return '把鏡頭留給創作過程。';})]),
+ cEvent('game_collab','遊戲聯名邀請','遊戲公司想把{name}的造型做成角色,需要確認使用期限與內容。',st=>[eventChoice('限定授權期間,審核角色內容','錢 ↑ 信任 ↑',S=>{S.money+=900;st.trust+=4;return '角色內容和授權期限都確認了。';}),eventChoice('只做一次線上分享','粉絲 ↑ 體力 ↓',S=>{st.fans+=300;st.energy-=8;return '先介紹遊戲與創作,不授權永久角色。';})]),
+ cEvent('festival_show','節慶特別節目臨時邀約','節目想請{name}表演一段新內容,距離播出只剩幾天。',st=>[eventChoice('改編熟悉作品,保留休息','粉絲 ↑ 錢 ↑',S=>{st.fans+=300;S.money+=450;return '用熟悉作品做節慶版本,準時完成。';}),eventChoice('加練全新段落','粉絲 ↑↑ 體力 ↓↓',S=>{st.fans+=500;st.energy-=22;return '新段落吸引討論,表演後需要好好恢復。';})]),
+ cEvent('rent_increase','房東提出漲租通知','房東想提高租金,公司可以提前協商或接受短期調整。',st=>[eventChoice('付費整理設備換取原租金 $400','錢 ↓ 信任 ↑',S=>{st.trust+=3;return '完成設備整理,這一季維持原條件。';},400),eventChoice('接受本季追加租金','錢 ↓↓',S=>{S.money-=650;return '追加本季租金,留下重新議約的日期。';})]),
+ cEvent('accounting_review','會計師提醒帳目缺漏','有幾筆製作費沒有附收據,結算前需要重新查核。',st=>[eventChoice('補齊憑證並建立覆核 $300','錢 ↓ 信任 ↑',S=>{st.trust+=5;return '每筆支出都有依據,之後按月覆核。';},300),eventChoice('暫停報銷,逐筆向供應商確認','錢 ↓ 體力 ↓',S=>{S.money-=100;st.energy-=5;return '花時間聯絡供應商,帳目逐筆確認。';})]),
+ cEvent('media_interview','媒體邀請深度專訪','記者想問{name}對 AI 創作與努力的看法,願意提前提供題綱。',st=>[eventChoice('準備具體作品和創作紀錄','口才 ↑ 粉絲 ↑',S=>{st.skills.talk=Math.min(10,st.skills.talk+0.15);st.fans+=200;return '用實際作品說明,訪談得到好回應。';}),eventChoice('以短訪回應,留時間休息','體力 ↑ 粉絲 ↑',S=>{st.energy+=8;st.fans+=80;return '用簡短回答介紹近況。';})]),
+ cEvent('live_mistake','直播音訊突然出包','{name}聽不見連線來賓的聲音,聊天室開始催促。',st=>[eventChoice('暫停連線,向觀眾說明','信任 ↑ 口才 ↑',S=>{st.trust+=4;st.skills.talk=Math.min(10,st.skills.talk+0.1);return '先把問題說清楚,測試後再恢復連線。';}),eventChoice('提前結束並補一場','錢 ↓ 體力 ↓',S=>{S.money-=150;st.energy-=8;return '這場先收尾,和來賓約好補播時間。';})]),
+ cEvent('fan_advert','粉絲做了應援廣告','粉絲自費刊登{name}的應援廣告,公司收到成果照片。',st=>[eventChoice('感謝並提醒量力而為','粉絲 ↑ 信任 ↑',S=>{st.fans+=250;st.trust+=5;return '謝謝支持,也提醒不必花錢才能當粉絲。';}),eventChoice('拍一段免費感謝影片','心情 ↑ 粉絲 ↑ 體力 ↓',S=>{st.mood+=6;st.fans+=350;st.energy-=5;return '把感謝分享給所有觀眾,不鼓勵集資攀比。';})]),
+);

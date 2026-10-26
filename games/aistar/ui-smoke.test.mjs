@@ -18,15 +18,17 @@ function node(id='') {
   const classes=new Set(), listeners={};
   return {id,style:{setProperty:noop},dataset:{},children:[],innerHTML:'',textContent:'',hidden:false,disabled:false,clientWidth:375,offsetWidth:130,offsetHeight:45,scrollTop:0,
     classList:{add:k=>classes.add(k),remove:k=>classes.delete(k),contains:k=>classes.has(k),toggle:(k,on)=>on?classes.add(k):classes.delete(k)},
-    addEventListener:(k,f)=>{listeners[k]=f;},removeEventListener:noop,setPointerCapture:noop,appendChild:noop,remove:noop,
+    addEventListener:(k,f)=>{(listeners[k]||=[]).push(f);},removeEventListener:noop,setPointerCapture:noop,appendChild:noop,remove:noop,
     getBoundingClientRect:()=>({left:0,top:0,width:375,height:390}),getContext:()=>context2d,toDataURL:()=> 'data:image/png;base64,test',
-    querySelectorAll:()=>[],click(){listeners.click?.({target:{closest:()=>this}});},fire(k,e){listeners[k]?.(e);}};
+    querySelectorAll:()=>[],click(){listeners.click?.forEach(f=>f({target:{closest:()=>this}}));},fire(k,e){listeners[k]?.forEach(f=>f(e));}};
 }
 const document={getElementById:id=>{if(!nodes.has(id))nodes.set(id,node(id));return nodes.get(id);},createElement:()=>node(),addEventListener:noop};
 for(const match of readFileSync(new URL('./index.html',import.meta.url),'utf8').matchAll(/id="([^"]+)"/g))document.getElementById(match[1]);
 document.getElementById('tabs').children=['ops','sched','stars','prod','co'].map(tab=>Object.assign(node(),{dataset:{tab}}));
 globalThis.document=document;globalThis.devicePixelRatio=1;globalThis.ImageData=class {constructor(data,w,h){Object.assign(this,{data,width:w,height:h});}};
-const sandbox={STREET_KIT,E,D,Bmp,toCanvas,makeFrame,FW,FH,ST,makeAccessory,stWall,Camera,bindPointer,document,devicePixelRatio:1,ImageData:globalThis.ImageData,
+const storage=new Map();
+const localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,String(v))};
+const sandbox={localStorage,STREET_KIT,E,D,Bmp,toCanvas,makeFrame,FW,FH,ST,makeAccessory,stWall,Camera,bindPointer,document,devicePixelRatio:1,ImageData:globalThis.ImageData,
   console,performance,Date,Math,Map,Set,addEventListener:noop,ResizeObserver:class {observe(){}},requestAnimationFrame:noop,setInterval:noop,setTimeout:()=>1,clearTimeout:noop,
   saveKey:()=> 'test',currentProfile:()=>({name:'測試'}),tone:noop,fanfare:noop,renderWho:noop,lockGestures:noop,escapeHTML:s=>String(s),
   audioPrefs:{sfx:false,music:'off'},saveAudioPrefs:noop,TRACKS:{},playMusic:noop,stopMusic:noop,nowPlaying:()=>null,
@@ -97,3 +99,20 @@ assert.equal(vm.runInContext('playback={t:2};assistantTarget().act',sandbox),'ea
 B.tipsOff=false;tip.hidden=true;tip.innerHTML='';B.seenTips=[];for(const key of ['ops','sched','stars','prod','co','event','evaluation','awards','offer','walkin'])AS.showTip(key);
 for(let i=0;i<10;i++)document.getElementById('tipUnderstood').onclick();assert.equal(new Set(B.seenTips).size,10);
 console.log('v3-B 補驗:升級與開關按鈕、候選揭露、Lv3 推薦、午餐/下班與十種教學排隊通過');
+
+const C=E.newGame({seed:9060});AS.boot(C);C.tipsOff=false;C.event=null;
+let workHTML=vm.runInContext('opsHTML()',sandbox);assert.match(workHTML,/🔮 工作預告/);assert.match(workHTML,/🙋 接案期望/);assert.match(workHTML,/下週/);assert.match(workHTML,/兩週後/);assert.match(workHTML,/剩 5 週/);
+C.stars[0].expect.left=1;assert.match(vm.runInContext('workSections()',sandbox),/color:#b83a4e/);
+const fold={dataset:{foldWork:'pipeline'}};document.getElementById('panel').fire('click',{target:{closest:sel=>sel.includes('[data-fold-work]')?fold:null}});assert.equal(storage.get('aistar-fold-pipeline'),'1');assert.doesNotMatch(vm.runInContext('workSections()',sandbox),/兩週後/);
+document.getElementById('panel').fire('click',{target:{closest:sel=>sel.includes('[data-fold-work]')?fold:null}});assert.equal(storage.get('aistar-fold-pipeline'),'0');assert.match(vm.runInContext('workSections()',sandbox),/兩週後/);
+const cstar=C.stars[0];C.ops=[];const gated={id:'gate',type:'drama',title:'預告短劇',topic:C.trend.topic,req:{skill:'act',target:4},w:{act:1},slots:[{role:'主角',who:null},{role:'配角',who:null}],days:4,weeks:1,left:1,status:'open',bids:[{id:cstar.id,text:'我想參加',reason:'career',supportOnly:true}],yields:[],pay:1000,fans:1000};C.ops.push(gated);cstar.skills.act=3.2;cstar.sched=Array(7).fill('rest');cstar.jobs=[];cstar.expect={kind:'career',media:'drama',left:2};
+AS.openPicker(gated.id,0);let pickHTML=document.getElementById('pickList').innerHTML;assert.match(pickHTML,/演技差 0.8/);assert.match(pickHTML,new RegExp('disabled data-pk="'+cstar.id+'"'));assert.match(document.getElementById('pickHow').textContent,/演技 ≥ 4/);
+assert.match(vm.runInContext('opCard(S.ops[0])',sandbox),/⭐ 期望/);assert.match(vm.runInContext('opCard(S.ops[0])',sandbox),new RegExp('disabled data-assign="gate" data-slot="0" data-star="'+cstar.id+'"'));
+AS.openPicker(gated.id,1);pickHTML=document.getElementById('pickList').innerHTML;assert.doesNotMatch(pickHTML,new RegExp('disabled data-pk="'+cstar.id+'"'));
+cstar.sprint={skill:'act',target:4,title:gated.title,week:C.week+2,left:2};assert.match(AS.scheduleHTML(),/🎯 衝刺:演技 3.2 → 4\(2 週\)/);
+assert.match(html,/\.expectRow\{display:flex/);assert.match(html,/overflow-wrap:anywhere/);assert.match(code,/if \(true\)/);
+console.log('v3-C 假 DOM:工作預告/接案期望與收合記憶、倒數紅色、主角門檻差額/停用選鈕、配角不受限、期望標記及行程衝刺通過');
+
+// 回歸剛修好的視窗互斥:提示卡必須等其他視窗關閉才顯示。
+C.seenTips=[];C.tipsOff=false;tip.hidden=true;tip.innerHTML='';vm.runInContext('tutorialQueue=[]',sandbox);let modalBlock=true;document.querySelector=()=>modalBlock?{}:null;AS.showTip('ops');assert.equal(tip.hidden,true);assert.ok(vm.runInContext("tutorialQueue.includes('ops')",sandbox));modalBlock=false;AS.render();assert.equal(tip.hidden,false);assert.match(tip.innerHTML,/📋 機會/);assert.equal(C.seenTips.includes('ops'),false);document.getElementById('tipUnderstood').onclick();assert.ok(C.seenTips.includes('ops'));
+console.log('提示卡在其他視窗開啟時排隊,關閉後才顯示:回歸通過');

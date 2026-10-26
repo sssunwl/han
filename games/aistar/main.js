@@ -382,7 +382,7 @@ function renderTab() {
   for(const key of [S.event?'event':null,S.offers.length?'offer':null,S.walkins.length?'walkin':null])if(key)showTip(key);
 }
 
-const REASONS = { career:'大目標', skill: '最拿手', dream: '夢想', rival: '不想輸給對手', topic: '喜歡這個話題', revenge: '上次沒選上', friend: '想跟朋友一起', wish: '心願', trend: '追流行', big: '想要大舞台', lead: '想當主角', generic: '想試試看' };
+const REASONS = { sprint:'我練到了!讓我接!', career:'大目標', skill: '最拿手', dream: '夢想', rival: '不想輸給對手', topic: '喜歡這個話題', revenge: '上次沒選上', friend: '想跟朋友一起', wish: '心願', trend: '追流行', big: '想要大舞台', lead: '想當主角', generic: '想試試看' };
 const gradeChip = g => `<span class="gr" style="background:${g.color}">${g.g}</span>`;
 function opTags(op) {
   const t = [];
@@ -403,9 +403,18 @@ function opMeta(op) {
     : Object.keys(op.w).map(k => D.SKILLS[k].icon + D.SKILLS[k].name).join(' ');
   return `${op.partner!=null?D.OFFERS[op.offerType].name:m.name} · ${op.partner!=null?esc(S.rivals[op.partner].name):m.pf} · ${op.weeks} 週，每週 ${op.days} 天 · ${sk}`;
 }
+const foldedWork = {};
+for(const key of ['pipeline','expect'])try{foldedWork[key]=localStorage.getItem('aistar-fold-'+key)==='1';}catch{}
+function workSections(){
+ const panel=(key,title,body)=>`<div class="card2 workPreview"><button class="sbtn ghost" data-fold-work="${key}" aria-expanded="${!foldedWork[key]}">${foldedWork[key]?'▸':'▾'} ${title}</button>${foldedWork[key]?'':body}</div>`;
+ const preview=[1,2].map(n=>`<div class="h4">${n===1?'下週':'兩週後'}</div>`+(S.pipeline||[]).filter(p=>p.week===S.week+n).map(p=>`<div class="meta">${D.MEDIA[p.type].icon} ${esc(p.title)}${p.hot?' <span class="tag hot">🔥 熱門</span>':''}<div>${esc(E.requirementText(p))}</div></div>`).join('')).join('');
+ const expects=E.debuted(S).map(st=>`<div class="expectRow">${ptImg(st)}<span>${esc(st.name)} · 想接:${esc(E.expectText(st))}</span><span style="color:${st.expect?.left<=2?'#b83a4e':'inherit'}">${st.expect?'剩 '+st.expect.left+' 週':'下週更新'}</span></div>`).join('');
+ return panel('pipeline','🔮 工作預告',preview)+panel('expect','🙋 接案期望',expects);
+}
+function gapLabel(st,op,slot){const r=E.slotRequirement(S,op,slot);return E.requirementError(S,st,op,slot)?`<span class="muted">${D.SKILLS[r.skill].name}差 ${(r.target-st.skills[r.skill]).toFixed(1)}</span>`:'';}
 function opsHTML() {
   const open = S.ops.filter(o => o.status === 'open' && !o.project), run = S.ops.filter(o => o.status === 'run' && !o.project);
-  let h = adviceCard();
+  let h = adviceCard()+workSections();
   if (S.event) h += `<div class="card2" style="background:#fff3c4"><b>📣 ${esc(S.event.title)}</b><div class="meta">要先決定怎麼處理,才能進到下一週。</div><button class="sbtn" data-ev="1">看事件</button></div>`;
   h += `<div class="sec">本週機會(沒人接的,下週會被別家公司接走)</div>`;
   if (!open.length) h += '<p class="muted">這週的機會都排好了!其他人可以去「📅 行程」排練習或休息。</p>';
@@ -425,7 +434,7 @@ function opCard(op, extra = '') {
   const m = D.MEDIA[op.type], empty = op.slots.findIndex(s => !s.who);
   const mult = E.trendMult(S, op);
   let h = `<div class="card2"><h3>${m.icon} ${esc(op.title)} ${opTags(op)}</h3>
-    <div class="meta">${opMeta(op)}</div>
+    <div class="meta">${opMeta(op)}</div><div class="meta">${esc(E.requirementText(op))}</div>
     ${op.partner!=null?`<div class="rew"><span>💰 約 $${fmt(E.cooperationPreview(S,op).money)}</span><span>👥 約 +${fmt(E.cooperationPreview(S,op).fans)}</span><span class="muted">${op.offerType==='loan'?'技能至少 5，酬勞全給公司':'B 評價預估'}</span></div>`:op.project ? `<div class="rew"><span>💿 上架後 8 週每週分潤</span><span class="muted">${D.BUDGETS[op.budget].name}預算</span></div>` : `<div class="rew"><span>💰 $${fmt(op.pay * mult)}</span><span>👥 +${fmt(op.fans * mult)}</span><span class="muted">(B 評價時)</span></div>`}`;
   if(S.assistant.lv>=3){const rec=E.analystRecommendation(S,op);if(rec)h+=`<div class="meta">🔍 分析師推薦:${esc(rec.st.name)}(預估 ${gradeLabel(rec.st,op,empty)})</div>`;}
   if(op.npc?.length)h+=`<div class="slots">${E.partnerStars(S,op).map(st=>`<span class="slot">${ptImg(st)}${esc(st.name)} ✅ 已就位</span>`).join('')}</div>`;
@@ -436,8 +445,8 @@ function opCard(op, extra = '') {
     for (const b of bids) {
       const st = E.starById(S, b.id), free = E.isFree(st, op), mine = op.slots.some(s => s.who === st.id);
       const g = empty >= 0 && free ? E.estimate(S, st, op, empty) : null;
-      h += `<div class="bid">${ptImg(st)}<div class="say" style="--c:${st.glow}">${nameTag(st)}:${esc(b.text)}<div class="why">理由:${REASONS[b.reason] || ''} · ${st.traits.map(t => D.TRAITS[t].icon + D.TRAITS[t].name).join(' ')}</div></div>
-        <div class="act">${mine ? '<span class="muted">✅ 選了</span>' : free && empty >= 0 ? `${gradeChip(g)}${scoreHTML(st,op,empty)}<button class="sbtn" data-assign="${op.id}" data-slot="${empty}" data-star="${st.id}">選${op.slots.length > 1 ? '為' + op.slots[empty].role : '他'}</button>${impact(E.selectionHint(S,st,op))}` : '<span class="muted">有別的工作</span>'}</div></div>`;
+      h += `<div class="bid">${ptImg(st)}<div class="say" style="--c:${st.glow}">${nameTag(st)}:${esc(b.text)} ${E.expectMatches(st,op)?'<span class="tag hot">⭐ 期望</span>':''}${b.supportOnly?'<span class="tag">想接配角</span>':''}<div class="why">理由:${REASONS[b.reason] || ''} · ${st.traits.map(t => D.TRAITS[t].icon + D.TRAITS[t].name).join(' ')}</div></div>
+        <div class="act">${mine ? '<span class="muted">✅ 選了</span>' : free && empty >= 0 ? `${gradeChip(g)}${scoreHTML(st,op,empty)}${gapLabel(st,op,empty)}<button class="sbtn" ${E.requirementError(S,st,op,empty)?'disabled':''} data-assign="${op.id}" data-slot="${empty}" data-star="${st.id}">選${op.slots.length > 1 ? '為' + op.slots[empty].role : '他'}</button>${impact(E.selectionHint(S,st,op))}` : '<span class="muted">有別的工作</span>'}</div></div>`;
     }
   } else h += `<div class="h4">還沒有人來搶 —— 可以直接指派</div>`;
   for (const y of op.yields) { const st = E.starById(S, y.id); if (st) h += `<div class="yield">💗 ${nameTag(st)}:${esc(y.text)}</div>`; }
@@ -463,7 +472,7 @@ function estimateEnergy(st) {
 function scheduleHTML() {
   return `<div class="card2"><button class="sbtn" data-auto="1">🪄 全部自動排</button><div class="meta">點格子換行程。工作已預約，週日記得休息!</div>${impact('🛏 休息 體力 ↑↑ · 🎉 放假 體力 ↑ 心情 ↑↑ · 練習 技能 ↑ 體力 ↓ · 🔴 直播 粉絲 ↑ 錢 ↑ 體力 ↓ · 🎬 工作 體力 ↓↓')}</div>`+E.team(S).map(st=>{
     const e=estimateEnergy(st), rest=st.sched.some(v=>v==='rest'||v==='off');
-    return `<div class="scheduleRow"><div class="scheduleStats">${scheduleStats(st)}</div><div class="scheduleGrid"><div class="person">${ptImg(st)}${esc(st.name)}${bar(st.energy,'#61bb8b')}</div>${st.sched.map((v,d)=>`<button data-day="${d}" data-star="${st.id}" class="${v.startsWith('job:')?'job':''}" title="週${E.DAY_NAMES[d]} ${esc(E.ACT_NAMES[v]||'工作')}"><small>${E.DAY_NAMES[d]}</small>${actIcon(v)}</button>`).join('')}</div><div class="scheduleNote" style="color:${e<20||!rest?'#b83a4e':'#75658b'}">這週體力預估 ${e}${e<20?' · 😵 太累了':''}${!rest?' · ⚠ 沒有休息日':''} ${scheduleGains(st)}</div></div>`;
+    return `<div class="scheduleRow"><div class="scheduleStats">${scheduleStats(st)}</div>${st.sprint?`<div class="scheduleNote">🎯 衝刺:${D.SKILLS[st.sprint.skill].name} ${st.skills[st.sprint.skill].toFixed(1)} → ${st.sprint.target}(${st.sprint.left} 週)</div>`:''}<div class="scheduleGrid"><div class="person">${ptImg(st)}${esc(st.name)}${bar(st.energy,'#61bb8b')}</div>${st.sched.map((v,d)=>`<button data-day="${d}" data-star="${st.id}" class="${v.startsWith('job:')?'job':''}" title="週${E.DAY_NAMES[d]} ${esc(E.ACT_NAMES[v]||'工作')}"><small>${E.DAY_NAMES[d]}</small>${actIcon(v)}</button>`).join('')}</div><div class="scheduleNote" style="color:${e<20||!rest?'#b83a4e':'#75658b'}">這週體力預估 ${e}${e<20?' · 😵 太累了':''}${!rest?' · ⚠ 沒有休息日':''} ${scheduleGains(st)}</div></div>`;
   }).join('');
 }
 function switchSchedule() {
@@ -590,10 +599,11 @@ function coHTML() {
 
 // 分頁裡的按鈕(事件委派)
 $('panel').addEventListener('click', e => {
-  const b = e.target.closest('[data-visit],[data-npc],[data-offer-yes],[data-offer-no],[data-proj-new],[data-proj-cancel],[data-grp-new],[data-grp-album],[data-grp-disband],[data-sns],[data-gotobuild],[data-hire],[data-fire],[data-scout-sign],[data-scout-no],[data-debut],[data-assign],[data-pick],[data-plan],[data-talk],[data-outfit],[data-meet],[data-up],[data-floor],[data-build],[data-day],[data-auto],[data-schedule],[data-sign],[data-skipaud],[data-aud],[data-ng],[data-backup],[data-open],[data-ev]');
+  const b = e.target.closest('[data-fold-work],[data-visit],[data-npc],[data-offer-yes],[data-offer-no],[data-proj-new],[data-proj-cancel],[data-grp-new],[data-grp-album],[data-grp-disband],[data-sns],[data-gotobuild],[data-hire],[data-fire],[data-scout-sign],[data-scout-no],[data-debut],[data-assign],[data-pick],[data-plan],[data-talk],[data-outfit],[data-meet],[data-up],[data-floor],[data-build],[data-day],[data-auto],[data-schedule],[data-sign],[data-skipaud],[data-aud],[data-ng],[data-backup],[data-open],[data-ev]');
   if (!b || !S || (playback && !('ev' in b.dataset))) return;
   const d = b.dataset;
   let err = null;
+  if(d.foldWork){foldedWork[d.foldWork]=!foldedWork[d.foldWork];try{localStorage.setItem('aistar-fold-'+d.foldWork,foldedWork[d.foldWork]?'1':'0');}catch{}render();return;}
   if(d.visit) {openVisit(+d.visit-1);return;}
   else if(d.npc) {openNpc(d.npc);return;}
   else if(d.offerYes) err=E.acceptOffer(S,d.offerYes);
@@ -647,16 +657,16 @@ function openPicker(opId, slot) {
   const op = E.opById(S, opId); if (!op) return;
   pickCtx = { opId, slot };
   $('pickTitle').textContent = `${D.MEDIA[op.type].icon} ${op.title}${op.slots.length > 1 ? ' · ' + op.slots[slot].role : ''}`;
-  $('pickHow').textContent = S.tipsOff?'':'沒來搶的人也可以指派,不過如果他沒興趣,心情會差一點。';
+  $('pickHow').textContent = S.tipsOff?'':'沒來搶的人也可以指派,不過如果他沒興趣,心情會差一點。'+' '+E.requirementText(op);
   const free = E.team(S).filter(st=>E.isFree(st,op) && (!op.only || op.only.includes(st.id))).map(st => ({ st, g: E.estimate(S, st, op, slot), bid: op.bids.some(b => b.id === st.id) }))
     .sort((a, b) => 'SABC'.indexOf(a.g.g) - 'SABC'.indexOf(b.g.g));
   $('pickList').innerHTML = free.length ? free.map(({ st, g, bid }) => `<div class="bid">${ptImg(st)}<div class="say" style="--c:${st.glow}">${nameTag(st)} ${bid ? '<span class="tag hot">想要</span>' : ''}
     <div class="why">${D.SKILL_IDS.map(k => D.SKILLS[k].icon + st.skills[k].toFixed(1)).join(' ')} · ⚡${Math.round(st.energy)} · ${moodFace(st.mood)}</div></div>
-    <div class="act">${gradeChip(g)}${scoreHTML(st,op,slot)}<button class="sbtn" data-pk="${st.id}">選</button>${impact(E.selectionHint(S,st,op))}</div></div>`).join('') : '<p class="muted">大家這週都有工作了。</p>';
+    <div class="act">${gradeChip(g)}${scoreHTML(st,op,slot)}${gapLabel(st,op,slot)}<button class="sbtn" ${E.requirementError(S,st,op,slot)?'disabled':''} data-pk="${st.id}">選</button>${impact(E.selectionHint(S,st,op))}</div></div>`).join('') : '<p class="muted">大家這週都有工作了。</p>';
   $('pickBox').classList.add('on');
 }
 $('pickList').addEventListener('click', e => {
-  const b = e.target.closest('[data-pk]'); if (!b || !pickCtx || playback) return;
+  const b = e.target.closest('[data-pk]'); if (!b || b.disabled || !pickCtx || playback) return;
   const err = doAssign(pickCtx.opId, pickCtx.slot, b.dataset.pk);
   if (err) { toast('⚠ ' + err); sfx.bad(); }
   $('pickBox').classList.remove('on'); saveSoon(); render();

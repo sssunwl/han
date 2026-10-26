@@ -374,3 +374,22 @@ export const WALKIN = Object.fromEntries(['rookie','experienced'].map(kind => [k
  : ['我在別家待過兩年,想找更適合自己的舞台。','我有演出經驗,希望在這裡重新出發。'][i])+line)]))]));
 
 export const ASSISTANT_TIPS=['休息能恢復體力。', '放假也能改善心情。', '心情會影響演出表現。', '同台的朋友能互相打氣。', '接工作前先看預估評價。', '熱門媒體的效果會提高。', '主題吻合也有加成。', '每位明星都有自己的大目標。', '訓練師能加快指定技能成長。', '潛力會影響練習速度。', '練習室升級能改善練習效果。', '連續不休息容易累倒。', '自薦者不會一直等候。', '完成心願能增加歸屬感。', '同一週可以接多個短工作。', '作品上架後還能收到分潤。'];
+
+// 衝刺台詞依主性格選用,與一般心願分開。
+export const SPRINT = {
+ hot:['《{title}》等我!我要把{skill}練到 {target}!','還有 {left} 週,每天都要再進步一點!'],
+ comp:['這次《{title}》我想贏,先把{skill}衝到 {target}!','我會把{skill}練到 {target},到時候公平比一場!'],
+ shy:['……我想試試《{title}》。{skill}還差一點,我會練。','可以讓我準備 {left} 週嗎?我想把{skill}練到 {target}。'],
+ chill:['慢慢練也會到的,《{title}》之前試試看吧~','還有 {left} 週,我想把{skill}練到 {target}~'],
+ proud:['《{title}》的主角值得我認真準備。{skill}要到 {target}。','我要用實力站上去,這幾週先衝{skill}!'],
+ perf:['我算過了,{skill}到 {target} 才合格。請幫我排練習。','《{title}》值得把細節磨好,我要專練{skill}。'],
+ funny:['《{title}》缺一個認真的我!{skill}練起來!','我的笑話先休息,{skill}要衝 {target} 啦!'],
+ jeal:['這次我也想被看見。我要把{skill}練到 {target}。','《{title}》我也想搶,先多給我一點練習時間吧。'],
+ curious:['《{title}》好新鮮!我想先把{skill}練到 {target}!','還有 {left} 週,試一套新的{skill}練法吧!'],
+ kind:['我想為《{title}》多準備一點,先練{skill}。','如果{skill}能到 {target},就能替大家多接一個好案子了。'],
+ dream:['《{title}》離夢想很近,我要把{skill}練到 {target}!','還有 {left} 週,這次我想認真追上那個舞台。'],
+ solo:['我想靠自己拿下《{title}》,先專練{skill}。','請留一點獨練時間,{skill}到 {target} 我就去試。'],
+};
+export const EXPECT_DONE={_:['終於接到一直想做的工作了,謝謝你記得!','這次的安排讓我覺得,公司有聽見我的方向。']};
+export const EXPECT_FAIL={_:['等了五週還沒接到……下次可以幫我留意嗎?','這段時間一直沒等到想做的工作,有點失落。']};
+REASON.sprint={_:['我練到了!讓我接!']};
