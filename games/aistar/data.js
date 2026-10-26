@@ -227,3 +227,7 @@ export const DISTRICTS = [
 ];
 
 export const ASSISTANT_NAMES=['小晴','阿米','小棠','小岑','阿橙','小葵'];
+
+export const T=32, COLS=32, ROWS=48, CHUNK=8;
+export const START_LAND=['1,5','2,5','1,4','2,4'];
+export const ROOM_SIZE={lobby:{w:6,h:5},studio:{w:6,h:5},dance:{w:5,h:4},sing:{w:5,h:4},act:{w:5,h:4},talk:{w:5,h:4},style:{w:5,h:4},cafe:{w:6,h:4},dorm:{w:5,h:4},lounge:{w:4,h:4},production:{w:6,h:4},sns:{w:4,h:4},scout:{w:4,h:4},meeting:{w:5,h:4}};

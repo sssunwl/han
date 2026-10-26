@@ -582,3 +582,12 @@ for(const [key,w,h] of [['meeting_table',96,40],['projector_screen',64,48],['han
  else {b.rect(4,0,4,4,CYAN.mid);box(b,1,3,10,8,2,WHITE);b.rect(3,6,3,3,PURPLE.mid);b.hline(7,7,3,CYAN.mid);}
  return outline(b);
 }};
+
+// 俯視辦公室地板與牆。所有紋理以固定像素繪製。
+for(const type of ['lobby','studio','dance','sing','act','talk','style','cafe','dorm','lounge','production','sns','scout','meeting'])KIT['floor_'+type]={w:32,h:32,tags:['俯視'],make:()=>{
+ if(['dance','sing','act','talk','style','meeting'].includes(type))return floor({kind:'wood'});
+ if(['dorm','lounge','sns'].includes(type))return floor({kind:'carpet'});
+ const b=new Bmp(32,32),c=type==='lobby'?'#e3dfd4':type==='cafe'?'#e8d5b0':type==='production'?'#797e9e':'#919ca7';b.rect(0,0,32,32,c);b.hline(0,31,32,mix(c,-.18));b.vline(31,0,32,mix(c,-.18));b.hline(2,2,14,mix(c,.12));if(type==='cafe'){b.rect(0,0,16,16,'#b79a87');b.rect(16,16,16,16,'#b79a87');}return b;
+}};
+for(const [key,w,h] of [['wall_top',32,16],['wall_side',8,32],['door_top',32,16],['sidewalk_top',32,32],['road_top',32,32]])KIT[key]={w,h,tags:['俯視'],make:()=>{const b=new Bmp(w,h);if(key==='road_top'){b.rect(0,0,w,h,'#535969');b.hline(4,15,20,'#f6e3a4');}else if(key==='sidewalk_top'){b.rect(0,0,w,h,'#b6bdc8');b.hline(0,0,32,'#e0e5ed');b.hline(0,16,32,'#919ba9');b.vline(16,0,32,'#919ba9');}else if(key==='door_top'){b.rect(0,10,32,6,'#bf925e');b.hline(0,9,32,'#e7c18b');}else{b.rect(0,0,w,h,'#645475');b.rect(0,0,w-2,h-5,'#d6ccd6');b.hline(0,0,w,'#f6e5df');}return b;}};
+for(const district of ['alley','shops','city','avenue','harbor'])KIT['ground_'+district]={w:32,h:32,tags:['俯視','街景'],make:()=>{const b=new Bmp(32,32),c={alley:'#626b70',shops:'#bfad96',city:'#929aa8',avenue:'#3c355a',harbor:'#538aa6'}[district];b.rect(0,0,32,32,c);if(district==='alley'){for(let i=0;i<14;i++)b.px(i*17%32,i*11%32,'#818780');b.hline(3,22,9,'#4a525b');}if(district==='shops'||district==='city'){for(let y=0;y<32;y+=16){b.hline(0,y,32,mix(c,-.2));b.vline(y,0,32,mix(c,.15));}}if(district==='avenue'){b.rect(2,2,28,28,'#51436e');b.hline(3,3,26,'#977fc0');b.hline(3,28,26,'#5bd5cf');b.vline(28,4,24,'#b667b9');}if(district==='harbor'){for(let y=4;y<32;y+=9){b.hline(y%7,y,20,'#72b0c1');b.hline(14,y+2,12,'#40829d');}}return b;}};

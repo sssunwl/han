@@ -1,3 +1,4 @@
+import * as O from '../games/aistar/office.js';
 // AI 明星養成自動玩家:直接在 Node 跑引擎(engine.js 不碰 DOM),一路玩到結局,
 // 印出每個目標是第幾週達成、結局種類、有沒有出錯。調平衡、檢查重玩性用。
 //
@@ -61,7 +62,7 @@ export function botWeek(S, style = 'mix') {
     if (op.type === 'dome') continue;
     for (let i = 0; i < op.slots.length; i++) {
       if (op.slots[i].who) continue;
-      const free = E.team(S).filter(st => !E.requirementError(S,st,op,i)&&(!op.only||op.only.includes(st.id))&&E.isFree(st, op) && (op.offerType!=='loan'||st.skills[op.loanSkill]>=5) && st.energy >= 25 && !(dome && op.weeks > 1 && (S._domePlan || []).includes(st.id)));
+      const free = E.team(S).filter(st => !E.requirementError(S,st,op,i)&&(!op.only||op.only.includes(st.id))&&E.isFree(st, op) && (op.offerType!=='loan'||st.skills[op.loanSkill]>=5) && st.energy >= 25 && !(dome && (S._domePlan || []).includes(st.id)));
       if (!free.length) break;
       const score = st => {
         const g = E.estimate(S, st, op, i), base = { S: 4, A: 3, B: 2, C: 0 }[g.g] * 10 + E.perf(S, st, op, i, false) / 10;
@@ -99,9 +100,9 @@ export function botWeek(S, style = 'mix') {
     break;
   }
   const nx = D.LEVELS[S.lv + 1];
-  const reserve = nx ? nx.cost * 0.6 : 0;
+  const reserve = nx ? nx.cost : 0;
   for(const type of ['sing','meeting','style','scout','production','sns','act','talk','lounge']) if(!E.roomLv(S,type)) {
-    if(S.money>E.floorCost(S,type)+reserve+2000) E.buildFloor(S,type);
+    if(S.money>E.floorCost(S,type)+reserve+2000) {let p=O.findSpot(S,type);if(!p){for(let cy=5;cy>=0&&!p;cy--)for(let cx=0;cx<4&&!p;cx++)if(O.adjacentLand(S,cx,cy)&&S.money>O.landCost(S)+E.floorCost(S,type)+2000&&!O.buyLand(S,cx,cy))p=O.findSpot(S,type);}if(p)E.buildFloor(S,type,p.x,p.y);}
     break;
   }
   for(const type of ['dance','sing','act','talk','style','scout','production','sns','meeting','cafe','dorm','studio']) {
@@ -180,16 +181,18 @@ function migrationEnd(S) {
 }
 
 function migrateTest() {
- for(const v of [1,2,3,4,5,6,7]) {
+ const old=E.newGame({seed:998});old.v=8;while(old.floors.length<20)old.floors.push({type:Object.keys(D.ROOM_SIZE)[old.floors.length%14],lv:3});E.migrate(old);const grid=O.walkGrid(old),dist=grid.bfs(O.doorOf(O.roomRect(old,0)));for(let i=0;i<20;i++){const r=O.roomRect(old,i),[x,y]=O.doorOf(r);if(dist[y][x]<0||O.canPlaceRoom(old,old.floors[i].type,r.x,r.y,i))throw Error('20 房間遷移配置錯誤');}console.log('20 房間 v8 → v9:無重疊,每扇門 BFS 可達');
+ for(const v of [1,2,3,4,5,6,7,8]) {
   const S=E.newGame({seed:222});botWeek(S);S.v=v;delete S.assistant;delete S.seenTips;delete S.tipsOff;delete S.pipeline;delete S.pendingEvents;for(const st of S.stars){delete st.sprint;delete st.expect;}
-  if(v===7){S.assistant={...E.newGame({seed:1}).assistant};E.migrate(S);if(S.v!==8||S.pipeline.length===0)throw Error('v7 遷移失敗');for(let w=0;w<10;w++){botWeek(S);if(!migrationEnd(S))throw Error('結算失敗');}console.log('v7 → v8 遷移後 10 週:0 錯誤');continue;}
-  if(v===6){E.migrate(S);if(S.v!==8||S.assistant.lv!==0)throw Error('v6 遷移失敗');for(let w=0;w<10;w++){botWeek(S);if(!migrationEnd(S))throw Error('結算失敗');}console.log('v6 → v8 遷移後 10 週:0 錯誤');continue;}
+  if(v===8){S.assistant=E.newGame({seed:1}).assistant;S.pipeline=[];S.pendingEvents=[];S.seenTips=[];E.migrate(S);if(S.v!==9)throw Error('v8 遷移失敗');for(let w=0;w<10;w++){botWeek(S);migrationEnd(S);}console.log('v8 → v9 遷移後 10 週:0 錯誤');continue;}
+  if(v===7){S.assistant={...E.newGame({seed:1}).assistant};E.migrate(S);if(S.v!==9||S.pipeline.length===0)throw Error('v7 遷移失敗');for(let w=0;w<10;w++){botWeek(S);if(!migrationEnd(S))throw Error('結算失敗');}console.log('v7 → v9 遷移後 10 週:0 錯誤');continue;}
+  if(v===6){E.migrate(S);if(S.v!==9||S.assistant.lv!==0)throw Error('v6 遷移失敗');for(let w=0;w<10;w++){botWeek(S);if(!migrationEnd(S))throw Error('結算失敗');}console.log('v6 → v9 遷移後 10 週:0 錯誤');continue;}
   delete S.district;delete S.walkins;for(const st of S.stars)delete st.salaryBonus;
-  if(v===5){E.migrate(S);if(S.v!==8||S.district!=='alley'||S.walkins.length)throw Error('v5 遷移失敗');for(let w=0;w<10;w++){botWeek(S);migrationEnd(S);}console.log('v5 → v8 遷移後 10 週:0 錯誤');continue;}
+  if(v===5){E.migrate(S);if(S.v!==9||S.district!=='alley'||S.walkins.length)throw Error('v5 遷移失敗');for(let w=0;w<10;w++){botWeek(S);migrationEnd(S);}console.log('v5 → v9 遷移後 10 週:0 錯誤');continue;}
   delete S.offers;for(const r of S.rivals){delete r.stars;delete r.rel;delete r.collabs;}
-  if(v===4){E.migrate(S);if(S.v!==8||S.rivals.some(r=>r.stars.length!==3))throw Error('v4 遷移失敗');for(let w=0;w<10;w++){botWeek(S);if(!migrationEnd(S))throw Error('遷移後結算失敗');}console.log('v4 → v8 遷移後 10 週：0 錯誤');continue;}
+  if(v===4){E.migrate(S);if(S.v!==9||S.rivals.some(r=>r.stars.length!==3))throw Error('v4 遷移失敗');for(let w=0;w<10;w++){botWeek(S);if(!migrationEnd(S))throw Error('遷移後結算失敗');}console.log('v4 → v9 遷移後 10 週：0 錯誤');continue;}
   for(const k of ['releases','groups','chart','posts','sns','actLog']) delete S[k];
-  if(v===3){E.migrate(S);if(S.v!==8||!Array.isArray(S.groups)||!S.sns)throw Error('遷移失敗');for(let w=0;w<10;w++){botWeek(S);if(!migrationEnd(S))throw Error('遷移後結算失敗');}console.log('v3 → v8 遷移後 10 週：0 錯誤');continue;}
+  if(v===3){E.migrate(S);if(S.v!==9||!Array.isArray(S.groups)||!S.sns)throw Error('遷移失敗');for(let w=0;w<10;w++){botWeek(S);if(!migrationEnd(S))throw Error('遷移後結算失敗');}console.log('v3 → v9 遷移後 10 週：0 錯誤');continue;}
   delete S.staff;delete S.scouted;
   for(const st of [...S.stars,...(S.audition||[])]) {delete st.skills.charm;delete st.career;delete st.careerStep;delete st.pot;delete st.trainee;delete st.stat.byType;delete st.stat.roles;}
   if(v===1) {
@@ -198,9 +201,9 @@ function migrateTest() {
    for(const op of S.ops){delete op.days;delete op.log;op.weeks=3;op.left=3;}
   }
   E.migrate(S);
-  if(S.v!==8||!Array.isArray(S.groups)||S.fac||S.stars.some(st=>st.sched.length!==7||!st.skills.charm||!st.career))throw Error('遷移失敗');
+  if(S.v!==9||!Array.isArray(S.groups)||S.fac||S.stars.some(st=>st.sched.length!==7||!st.skills.charm||!st.career))throw Error('遷移失敗');
   for(let w=0;w<10;w++){botWeek(S);const r=migrationEnd(S);if(!r||r.timeline.length!==7)throw Error('遷移後結算失敗');}
-  console.log(`v${v} → v8 遷移後 10 週：0 錯誤`);
+  console.log(`v${v} → v9 遷移後 10 週：0 錯誤`);
  }
 }
 
@@ -211,7 +214,7 @@ if (typeof process !== 'undefined' && process.argv[1] && process.argv[1].endsWit
     const N = Number(process.argv[2] || 3), style = process.argv[3] || 'mix', MAX = Number(process.argv[4] || 200);
     for (let i = 0; i < N; i++) {
       const r = run(1000 + i * 7919, style, MAX, process.env.LOG === '1');
-      console.log(`種子 ${r.seed} [${style}] 結局:${r.ending ? r.ending.icon + r.ending.name + ' 第 ' + r.ending.week + ' 週' : '沒到(停在第 ' + r.week + ' 週)'}  目標週:${Object.entries(r.goals).map(([k, v]) => k + '=' + v).join(' ')}  粉絲 ${fmt(r.fans)}  最低存款 $${fmt(r.minMoney)}  離開 ${r.left} 人  剩 ${r.team} 人  大目標 ${r.careers}/${r.debuted}  練習生出道 ${r.newDebuts}  企劃 ${r.projects} 團體 ${r.groups} 一位 ${r.chartWins} 得獎 ${r.awards}  存檔 ${(r.saveSize / 1024).toFixed(1)}KB  錯誤 ${r.errors.length}${r.errors.length ? ' ' + r.errors.slice(0, 3).join(' / ') : ''}  合作 ${Object.values(r.cooperations).join('/')}  友好度 ${r.relations.join('/')} 地區 ${r.S.district} 樓層 ${r.S.floors.length} 自薦 ${r.S.stats.walkins?.rookie||0}/${r.S.stats.walkins?.experienced||0} 小助理 Lv${r.S.assistant.lv} 衝刺 ${r.S.stats.sprintSuccess||0}/${r.S.stats.sprintFail||0} 期望 ${r.S.stats.expectDone||0}/${r.S.stats.expectFail||0} 事件種類 ${r.S.stats.eventKinds?.length||0} 連續事件 ${r.S.stats.chains||0}`);
+      console.log(`種子 ${r.seed} [${style}] 結局:${r.ending ? r.ending.icon + r.ending.name + ' 第 ' + r.ending.week + ' 週' : '沒到(停在第 ' + r.week + ' 週)'}  目標週:${Object.entries(r.goals).map(([k, v]) => k + '=' + v).join(' ')}  粉絲 ${fmt(r.fans)}  最低存款 $${fmt(r.minMoney)}  離開 ${r.left} 人  剩 ${r.team} 人  大目標 ${r.careers}/${r.debuted}  練習生出道 ${r.newDebuts}  企劃 ${r.projects} 團體 ${r.groups} 一位 ${r.chartWins} 得獎 ${r.awards}  存檔 ${(r.saveSize / 1024).toFixed(1)}KB  錯誤 ${r.errors.length}${r.errors.length ? ' ' + r.errors.slice(0, 3).join(' / ') : ''}  合作 ${Object.values(r.cooperations).join('/')}  友好度 ${r.relations.join('/')} 地區 ${r.S.district} 樓層 ${r.S.floors.length} 自薦 ${r.S.stats.walkins?.rookie||0}/${r.S.stats.walkins?.experienced||0} 小助理 Lv${r.S.assistant.lv} 衝刺 ${r.S.stats.sprintSuccess||0}/${r.S.stats.sprintFail||0} 期望 ${r.S.stats.expectDone||0}/${r.S.stats.expectFail||0} 事件種類 ${r.S.stats.eventKinds?.length||0} 連續事件 ${r.S.stats.chains||0} 土地 ${r.S.land.length} 房間 ${r.S.floors.length}`);
     }
   }
 }

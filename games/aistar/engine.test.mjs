@@ -1,3 +1,4 @@
+import * as O from './office.js';
 // 純 Node 規則驗收：不需要 DOM、網路或第三方套件。
 import assert from 'node:assert/strict';
 import * as E from './engine.js';
@@ -6,6 +7,7 @@ import * as L from './lines.js';
 import { KIT } from '../../shared/pixelkit/studio.js';
 import { botWeek } from '../../tools/aistar_autoplay.mjs';
 const fresh = seed => E.newGame({seed:seed||123});
+function build(S,type){let p=O.findSpot(S,type);while(!p){let bought=false;for(let cy=5;cy>=0&&!bought;cy--)for(let cx=0;cx<4&&!bought;cx++)if(O.adjacentLand(S,cx,cy)){S.land.push(`${cx},${cy}`);bought=true;}if(!bought)break;p=O.findSpot(S,type);}return p?E.buildFloor(S,type,p.x,p.y):'地不夠,先買地';}
 const settle = S => {while(S.event) E.chooseEvent(S,S.event.choices.length-1);return E.endWeek(S);};
 function opportunity(S,type,id='test') {
   const m=D.MEDIA[type];const op={id,type,req:null,topic:S.trend.topic,title:'測試作品',days:m.days,weeks:m.weeks,left:m.weeks,w:m.w||{sing:1},sw:m.sw,slots:m.slots.map(role=>({role,who:null})),status:'open',bids:[],yields:[],pay:100,fans:100,log:{}};
@@ -13,7 +15,7 @@ function opportunity(S,type,id='test') {
 }
 {
   const S=fresh(), st=S.stars[0];S.ops=[];
-  assert.equal(S.v,8);assert.equal(S.floors.length,5);assert.equal(st.sched.length,7);assert.equal(st.sched[6],'rest');
+  assert.equal(S.v,9);assert.equal(S.floors.length,5);assert.equal(st.sched.length,7);assert.equal(st.sched[6],'rest');
   const one=opportunity(S,'short'), two=opportunity(S,'voice','test2');
   assert.equal(E.assign(S,one.id,0,st.id),null);assert.equal(E.assign(S,two.id,0,st.id),null);
   assert.deepEqual(st.jobs,['test','test2']);assert.equal(E.freeDays(st),4);assert.equal(st.sched[6],'rest');
@@ -43,10 +45,10 @@ function opportunity(S,type,id='test') {
 }
 {
   const S=fresh();S.money=100000;
-  assert.equal(E.buildFloor(S,'sing'),null);S.floors.pop();S.money=100000;
-  S.lv=2;assert.equal(E.floorCost(S,'sing'),1500);assert.equal(E.buildFloor(S,'sing'),null);
+  assert.equal(build(S,'sing'),null);S.floors.pop();S.money=100000;
+  S.lv=2;assert.equal(E.floorCost(S,'sing'),1500);assert.equal(build(S,'sing'),null);
   assert.equal(E.floorCost(S,'act'),2250);assert.equal(E.upgradeCost(S,5),1200);E.upgradeFloor(S,5);assert.equal(S.floors[5].lv,2);
-  assert.equal(E.buildFloor(S,'sing'),null);assert.equal(E.roomLv(S,'sing'),2);
+  assert.equal(build(S,'sing'),null);assert.equal(E.roomLv(S,'sing'),2);
 }
 {
   const S=fresh();S.ops=[];const st=S.stars[0];st.traits=['chill','kind'];st.energy=0;st.mood=40;st.sched=Array(7).fill('rest');
@@ -61,7 +63,7 @@ function opportunity(S,type,id='test') {
   S.ops=[];const op=opportunity(S,'dome');op.weeks=op.left=3;
   for(const [i,st] of S.stars.entries()){st.job=i===0?op.id:null;st.plan='train:talk';delete st.jobs;delete st.sched;delete st.trust;delete st.done;}
   op.slots[0].who=S.stars[0].id;op.status='run';
-  E.migrate(S);assert.equal(S.v,8);assert.equal(S.floors.length,9);assert.equal(op.left,2);assert.equal(op.days,5);
+  E.migrate(S);assert.equal(S.v,9);assert.equal(S.floors.length,9);assert.equal(op.left,2);assert.equal(op.days,5);
   assert.equal(S.stars[0].sched.filter(v=>v==='job:test').length,5);assert.equal(S.floors[1].lv,3);assert.equal(E.roomLv(S,'dance'),3);
   assert.ok(E.ACT_NAMES[S.stars[1].sched[0]]);assert.equal(S.stars[1].sched[6],'rest');assert.equal(S.fac,undefined);
   const same=JSON.stringify(S);E.migrate(S);assert.equal(JSON.stringify(S),same);
@@ -97,7 +99,7 @@ console.log('引擎規則、互動、樓層、多週工作、遷移及固定種�
 
 {
  const S=fresh(911);assert.equal(D.SKILL_IDS.length,5);assert.ok(S.stars.every(st=>st.skills.charm>=1&&st.career&&!st.trainee&&st.pot===1));
- S.money=100000;S.lv=4;E.buildFloor(S,'style');E.buildFloor(S,'scout');
+ S.money=100000;S.lv=4;build(S,'style');build(S,'scout');
  assert.equal(E.floorFor(S,'train:charm'),S.floors.findIndex(f=>f.type==='style'));
  const fashion=opportunity(S,'fashion');assert.equal(E.floorFor(S,'job:'+fashion.id),E.floorFor(S,'train:charm'));
  E.hire(S,'trainer','charm');E.hire(S,'stylist');assert.equal(E.trainingStaff(S,'charm'),1.15*1.2);
@@ -110,7 +112,7 @@ console.log('引擎規則、互動、樓層、多週工作、遷移及固定種�
  const id=S.staff[0].id;E.fireStaff(S,id);assert.ok(!S.staff.some(st=>st.id===id));
 }
 {
- const S=fresh(900);S.money=100000;S.lv=4;S.ops=[];E.buildFloor(S,'scout');const fi=S.floors.findIndex(f=>f.type==='scout');S.floors[fi].lv=3;
+ const S=fresh(900);S.money=100000;S.lv=4;S.ops=[];build(S,'scout');const fi=S.floors.findIndex(f=>f.type==='scout');S.floors[fi].lv=3;
  E.scoutWeek(S);assert.ok(S.scouted.length);const candidate=S.scouted[0];assert.ok(candidate.pot>=.95&&candidate.pot<=1.4);
  assert.equal(E.signScouted(S,candidate.id),null);assert.equal(D.salary(candidate),30);assert.equal(E.traineeCapacity(S),4);
  const op=opportunity(S,'drama');assert.equal(E.isFree(candidate,op),false);assert.ok(E.assign(S,op.id,0,candidate.id));
@@ -142,7 +144,7 @@ console.log('第二階段：魅力、角色里程碑、練習生限制、評鑑�
  const boosted=structuredClone(S);boosted.staff=[{id:'employee',name:'文青',role:'manager',lv:1,weeks:0},{id:'stylist',name:'美晴',role:'stylist',lv:1,weeks:0}];
  const a=settle(S), b=settle(boosted), pay=R=>Number(R.items.find(it=>it.op==='test'&&it.grade).text.match(/!\$([\d,]+)/)[1].replaceAll(',',''));
  assert.ok(Math.abs(pay(b)-pay(a)*1.15)<=1);assert.equal(a.grades[0],b.grades[0]);
- const before=S.stars.length;S.money=100000;S.lv=4;E.buildFloor(S,'scout');S.floors.find(f=>f.type==='scout').lv=3;
+ const before=S.stars.length;S.money=100000;S.lv=4;build(S,'scout');S.floors.find(f=>f.type==='scout').lv=3;
  while(E.team(S).filter(st=>st.trainee).length<E.traineeCapacity(S)){E.scoutWeek(S);for(const st of S.scouted.slice())E.signScouted(S,st.id);}
  E.scoutWeek(S);assert.ok(E.signScouted(S,S.scouted[0].id).includes('名額滿了'));assert.equal(E.debuted(S).length,before);
 }
@@ -159,7 +161,7 @@ console.log('第二階段：魅力、角色里程碑、練習生限制、評鑑�
   const S = fresh(901); S.money = 300000; S.lv = 4; S.event = null;
   // 沒有製作部不能開企劃;蓋了之後可以,同時企劃數 = 製作部 Lv
   assert.match(E.canStartProject(S, 'own_album', 'small'), /製作部/);
-  for (const t of ['production', 'sns', 'sing', 'talk']) assert.equal(E.buildFloor(S, t), null);
+  for (const t of ['production', 'sns', 'sing', 'talk']) assert.equal(build(S, t), null);
   const m0 = S.money;
   assert.equal(E.startProject(S, 'own_album', 'mid'), null); assert.equal(S.money, m0 - 5000);
   assert.match(E.startProject(S, 'own_show', 'small'), /同時只能做 1/);
@@ -191,7 +193,7 @@ console.log('第二階段：魅力、角色里程碑、練習生限制、評鑑�
 }
 {
   const S = fresh(902); S.money = 300000; S.lv = 4; S.event = null;
-  for (const t of ['production', 'sing']) E.buildFloor(S, t);
+  for (const t of ['production', 'sing']) build(S, t);
   const ids = E.debuted(S).slice(0, 3).map(s => s.id);
   assert.match(E.formGroup(S, '', 'cute', ids.slice(0, 2)), /3~5/);
   assert.equal(E.formGroup(S, '測試團', 'cute', ids), null);
@@ -219,17 +221,17 @@ console.log('第二階段：魅力、角色里程碑、練習生限制、評鑑�
 {
   // v3 → v4 遷移
   const S = fresh(903); S.v = 3; delete S.releases; delete S.groups; delete S.chart; delete S.posts; delete S.sns; delete S.actLog;
-  E.migrate(S); assert.equal(S.v, 8); assert.deepEqual(S.groups, []); assert.equal(S.sns.strategy, 'vlog');
+  E.migrate(S); assert.equal(S.v,9); assert.deepEqual(S.groups, []); assert.equal(S.sns.strategy, 'vlog');
   for (const k of ['mixing_console', 'monitor_wall', 'sns_wall', 'heart_sign', 'red_carpet', 'award_trophy', 'confetti', 'album_cover']) { const it = KIT[k], b = it.make(); assert.equal(b.w, it.w); assert.equal(b.h, it.h); }
 }
 console.log('第三階段:製作部企劃/取消/不被接走/分潤遞減、排行、打歌、SNS、團體/C 位/默契、頒獎、遷移、新素材:通過');
 
 // 第 4 階段:邀請、結算與 NPC 不佔玩家名額。
 {
- const S=fresh(44);assert.equal(S.v,8);assert.equal(S.offers.length,0);
+ const S=fresh(44);assert.equal(S.v,9);assert.equal(S.offers.length,0);
  const names=[...S.stars,...S.rivals.flatMap(r=>r.stars)].map(st=>st.name);assert.equal(new Set(names).size,names.length);
  for(const r of S.rivals){assert.equal(r.rel,30);assert.equal(r.stars.length,3);for(const st of r.stars)assert.ok(D.SKILL_IDS.every(k=>st.skills[k]>=3&&st.skills[k]<=7));}
- S.money=100000;S.lv=4;E.buildFloor(S,'meeting');S.floors.at(-1).lv=2;
+ S.money=100000;S.lv=4;build(S,'meeting');S.floors.at(-1).lv=2;
  E.offerWeek(S);assert.equal(S.offers.length,1);let o=S.offers[0];let r=S.rivals[o.partner];const rel=r.rel;E.declineOffer(S,o.id);assert.equal(r.rel,rel-3);
  E.offerWeek(S);o=S.offers[0];r=S.rivals[o.partner];const before=r.rel;S.week++;E.offerWeek(S);assert.equal(r.rel,before-2);assert.ok(S.feed.some(f=>f.text.includes('等不到回覆')));
  o=S.offers[0];assert.equal(E.acceptOffer(S,o.id),null);assert.ok(S.ops.includes(o.op));assert.equal(S.offers.length,0);assert.equal(o.op.own,true);
@@ -252,7 +254,7 @@ for(const type of ['collab','loan','joint']) {
  const S=fresh(81);for(const r of S.rivals)r.rel=70;
  for(let i=0;i<40;i++){const op=opportunity(S,'short','unused'+i);op.bids=[{id:S.stars[0].id}];}
  settle(S);assert.ok(S.feed.some(f=>f.text.includes('被其他小公司接走了')));assert.ok(!S.feed.some(f=>S.rivals.some(r=>f.text.includes('被'+r.name+'接走了'))));
- const old=fresh();old.v=4;delete old.offers;for(const r of old.rivals){delete r.stars;delete r.rel;delete r.collabs;}E.migrate(old);assert.equal(old.v,8);assert.equal(old.rivals[0].stars.length,3);assert.deepEqual(old.offers,[]);
+ const old=fresh();old.v=4;delete old.offers;for(const r of old.rivals){delete r.stars;delete r.rel;delete r.collabs;}E.migrate(old);assert.equal(old.v,9);assert.equal(old.rivals[0].stars.length,3);assert.deepEqual(old.offers,[]);
  for(const [key,w,h] of [['meeting_table',96,40],['projector_screen',64,48],['handshake_sign',32,32],['visitor_badge',12,12]]){assert.equal(KIT[key].w,w);assert.equal(KIT[key].h,h);const b=KIT[key].make();assert.equal(b.w,w);assert.equal(b.h,h);}
 }
 console.log('第四階段:邀請產生/過期/接受/拒絕、NPC 分數與位置、三種合作、友好保護、v5 遷移及四項素材通過');
@@ -273,7 +275,7 @@ console.log('第四階段:邀請產生/過期/接受/拒絕、NPC 分數與位�
  for(const v of [1,2,3,4,5,6,7,8]) {
   const S=fresh(987);S.v=v;
   const code='AISTAR1P:'+Buffer.from(JSON.stringify(S)).toString('base64');
-  const saved=await decodeSave(code);assert.equal(saved.v,8);assert.equal(saved.rivals[0].stars.length,3);
+  const saved=await decodeSave(code);assert.equal(saved.v,9);assert.equal(saved.rivals[0].stars.length,3);
  }
 }
 console.log('邀請頻率/上限、聯演門檻、12 種性格台詞、借將技能門檻與 v1–v7 存檔碼通過');
@@ -286,7 +288,7 @@ console.log('邀請頻率/上限、聯演門檻、12 種性格台詞、借將技
  assert.equal(E.moveDistrict(S,'shops'),null);assert.equal(S.money,money-6000);assert.equal(S.stars[0].mood,Math.min(100,mood+10));assert.equal(S.floors,floors);assert.equal(S.stars,stars);
  assert.ok(E.moveDistrict(S,'alley'));assert.ok(E.moveDistrict(S,'shops'));assert.ok(E.moveDistrict(S,'city'));
  S.lv=4;assert.ok(E.moveDistrict(S,'harbor'));S.stars[0].fans=200000;assert.equal(E.moveDistrict(S,'harbor'),null);
- S.money=0;assert.ok(E.buildFloor(S,'dance'));S.money=1e8;S.lv=1;for(let i=0;i<30;i++)assert.equal(E.buildFloor(S,'dance'),null);assert.equal(S.floors.length,35);
+ S.money=0;assert.ok(build(S,'dance'));S.money=1e8;S.lv=1;for(let i=0;i<30;i++)assert.equal(build(S,'dance'),null);assert.equal(S.floors.length,35);
 }
 {
  const S=fresh(302);S.ops=[];S.event=null;S.money=1e7;for(const st of S.stars)st.sched=Array(7).fill('rest');
@@ -315,7 +317,7 @@ console.log('邀請頻率/上限、聯演門檻、12 種性格台詞、借將技
  const stale=found.find(st=>st!==rookie&&st!==experienced);stale.found=S.week-2;S.walkins=[stale];E.walkinWeek(S);assert.ok(!S.walkins.includes(stale));assert.ok(S.feed.some(f=>f.text.includes('等不到回覆,去別家')));
  const off=S.stars[0];off.needOff=true;off.sched=Array(7).fill('rest');S.ops=[];S.event=null;const T=structuredClone(S);T.stars[0].needOff=false;settle(S);settle(T);assert.equal(T.stars[0].loyalty-S.stars[0].loyalty,3);
  for(const type of ['rookie','experienced'])for(const trait of D.TRAIT_IDS)assert.ok(L.WALKIN[type][trait].length>=2);
- const V=fresh();V.v=5;delete V.district;delete V.walkins;for(const st of V.stars)delete st.salaryBonus;E.migrate(V);assert.equal(V.v,8);assert.equal(V.district,'alley');assert.deepEqual(V.walkins,[]);assert.ok(V.stars.every(st=>st.salaryBonus===0));
+ const V=fresh();V.v=5;delete V.district;delete V.walkins;for(const st of V.stars)delete st.salaryBonus;E.migrate(V);assert.equal(V.v,9);assert.equal(V.district,'alley');assert.deepEqual(V.walkins,[]);assert.ok(V.stars.every(st=>st.salaryBonus===0));
 }
 {
  const {STREET_KIT}=await import('../../shared/pixelkit/street.js');
@@ -373,7 +375,7 @@ console.log('v3-A 補驗:搬家資金、地區機會數、自薦資金/名額/�
  assert.equal([...section.matchAll(/label:/g)].length,[...section.matchAll(/hint:/g)].length);
  const seen=new Set();for(let seed=1;seed<=500;seed++){const S=fresh(seed);for(const st of S.stars){st.lost=3;st.energy=20;}S.week=12;S.staff.push({role:'editor',lv:3});for(let w=0;w<3;w++){if(S.event){assert.ok(S.event.choices.every(c=>typeof c.hint==='string'&&c.hint.length>5));seen.add(S.event.id);E.chooseEvent(S,0);}E.endWeek(S);}}
  assert.ok(seen.size>=20);
- for(let v=1;v<=6;v++){const S=fresh(v);S.v=v;delete S.assistant;delete S.seenTips;delete S.tipsOff;E.migrate(S);assert.equal(S.v,8);assert.equal(S.assistant.lv,0);assert.deepEqual(S.seenTips,[]);assert.equal(S.tipsOff,false);}
+ for(let v=1;v<=6;v++){const S=fresh(v);S.v=v;delete S.assistant;delete S.seenTips;delete S.tipsOff;E.migrate(S);assert.equal(S.v,9);assert.equal(S.assistant.lv,0);assert.deepEqual(S.seenTips,[]);assert.equal(S.tipsOff,false);}
  const S=fresh();S.v=6;S.week=30;delete S.assistant;E.migrate(S);assert.ok(S.assistant);assert.equal(E.assistantAdvice(S),null);
 }
 console.log('v3-B:建議優先序、18 個里程碑、練習公式/週數、適性、三級學費、事件 hint 與 v7 遷移通過');
@@ -384,7 +386,7 @@ console.log('v3-B:建議優先序、18 個里程碑、練習公式/週數、適�
 
 // v3-C:跨週預告的內容與熱門趨勢都不能在開案時重抽。
 {
- const S=fresh(9001), original=structuredClone(S.pipeline);assert.equal(S.v,8);
+ const S=fresh(9001), original=structuredClone(S.pipeline);assert.equal(S.v,9);
  assert.ok(original.some(p=>p.week===2));assert.ok(original.some(p=>p.week===3));
  for(let week=2;week<=3;week++){
   S.week=week;S.ops=[];E.beginWeek(S);
@@ -470,7 +472,7 @@ function showScheduled(S,id,st=S.stars[0]){
  }
  let seen=0;for(let seed=1;seed<=80;seed++){const S=fresh(seed),last={};S.pendingEvents=[];for(let i=0;i<28;i++){S.week++;for(const x of S.stars)x.loyalty=80;E.beginWeek(S);if(S.event&&!S.event.chain){assert.ok(S.week-(last[S.event.id]??-99)>=8);last[S.event.id]=S.week;seen++;}S.event=null;S.ops=[];}}
  assert.ok(seen>900&&seen<1750); // 60% 每週事件率的寬鬆統計檢查。
- const S=fresh(9051);S.v=7;delete S.pipeline;delete S.pendingEvents;E.migrate(S);assert.equal(S.v,8);assert.ok(S.pipeline.some(p=>p.week===S.week+1));assert.ok(S.pipeline.some(p=>p.week===S.week+2));assert.deepEqual(S.pendingEvents,[]);assert.ok(S.stars.every(x=>x.expect===null&&x.sprint===null));
+ const S=fresh(9051);S.v=7;delete S.pipeline;delete S.pendingEvents;E.migrate(S);assert.equal(S.v,9);assert.ok(S.pipeline.some(p=>p.week===S.week+1));assert.ok(S.pipeline.some(p=>p.week===S.week+2));assert.deepEqual(S.pendingEvents,[]);assert.ok(S.stars.every(x=>x.expect===null&&x.sprint===null));
  console.log('v3-C:預告/熱門一致、各角色門檻與配角競標、衝刺/期望生命週期、五條故事雙分支、所有事件提示、8 週不重複、60% 頻率與 v8 遷移通過');
 }
 
@@ -496,3 +498,32 @@ function showScheduled(S,id,st=S.stars[0]){
  assert.equal(st.plan,'live','玩家選的安排下週保留');
  console.log('v4:每週一件事、週日休息、低體力插休息、保留玩家選擇通過');
 }
+
+// v4 配置:每次失敗不得扣款或改動房間。
+{
+ const S=E.newGame({seed:901}),before=JSON.stringify(S.floors),money=S.money;
+ assert.equal(O.canPlaceRoom(S,'sing',-1,0),'超出土地範圍');assert.match(O.canPlaceRoom(S,'sing',0,0),/土地/);
+ assert.match(O.canPlaceRoom(S,'sing',13,43),/重疊/);
+ assert.match(O.canPlaceRoom(S,'lounge',19,43),/走廊|堵住/);
+ assert.equal(E.buildFloor(S,'sing'), '地不夠,先買地');assert.equal(JSON.stringify(S.floors),before);assert.equal(S.money,money);
+ assert.match(E.moveRoom(S,0,8,40),/大廳/);assert.equal(JSON.stringify(S.floors),before);
+ assert.match(O.buyLand(S,0,0),/相鄰/);S.money=0;assert.match(O.buyLand(S,0,5),/要/);S.money=100000;
+ const price=O.landCost(S);assert.equal(O.buyLand(S,0,5),null);assert.equal(S.money,100000-price);assert.equal(O.ownsTile(S,0,40),true);assert.match(O.buyLand(S,0,5),/相鄰/);
+ const spot=O.findSpot(S,'sing');assert.ok(spot);assert.equal(O.canPlaceRoom(S,'sing',spot.x,spot.y),null);assert.equal(E.buildFloor(S,'sing',spot.x,spot.y),null);
+ const i=S.floors.length-1,old=structuredClone(S.floors[i]);assert.match(E.moveRoom(S,i,13,43),/重疊/);assert.deepEqual(S.floors[i],old);assert.equal(E.moveRoom(S,i,old.x,old.y),null);
+ S.land=['1,5','2,5','1,4','2,4','0,5','3,5','0,4','3,4'];assert.match(O.buyLand(S,0,3),/Lv2/);S.lv=2;assert.equal(O.buyLand(S,0,3),null);
+ for(const [count,lv] of [[14,3],[19,4]]){const gated={...S,lv:lv-1,land:Array.from({length:count},(_,i)=>`${i%4},${Math.floor(i/4)}`)};let c;for(let cy=0;cy<6;cy++)for(let cx=0;cx<4;cx++)if(O.adjacentLand(gated,cx,cy))c={cx,cy};assert.match(O.buyLand(gated,c.cx,c.cy),new RegExp('Lv'+lv));gated.lv=lv;gated.money=1000000;assert.equal(O.buyLand(gated,c.cx,c.cy),null);}
+ let moved;for(let y=0;y<48&&!moved;y++)for(let x=0;x<32&&!moved;x++)if((x!==old.x||y!==old.y)&&!O.canPlaceRoom(S,'sing',x,y,i))moved={x,y};assert.ok(moved);const cash=S.money;assert.equal(E.moveRoom(S,i,moved.x,moved.y),null);assert.equal(S.money,cash);assert.equal(S.floors[i].x,moved.x);
+ const blocked={...S,land:['1,5','2,5','1,4','2,4'],floors:[{type:'lobby',lv:1,x:13,y:43},{type:'lounge',lv:1,x:8,y:32}]};
+ // 上方新增房間沒有對外可走的門,雖然不重疊仍拒絕。
+ const isolated={...S,land:['1,5','2,5','1,4','2,4','0,0'],floors:[S.floors[0]]};assert.match(O.canPlaceRoom(isolated,'lounge',1,1),/堵住.*門/);
+ assert.ok(O.walkGrid(blocked).bfs(O.doorOf(O.roomRect(blocked,0)))[48][16]>=0);
+}
+{
+ for(const n of [5,20]){
+ const S=E.newGame({seed:600+n});S.v=8;const types=Object.keys(D.ROOM_SIZE).filter(t=>t!=='lobby');while(S.floors.length<n)S.floors.push({type:types[S.floors.length%types.length],lv:1+S.floors.length%3});
+ const old=S.floors.map(f=>({type:f.type,lv:f.lv})),stars=JSON.stringify(S.stars),cash=S.money;E.migrate(S);assert.equal(S.v,9);assert.equal(S.money,cash);assert.equal(JSON.stringify(S.stars),stars);assert.deepEqual(S.floors.map(({type,lv})=>({type,lv})),old);
+ const g=O.walkGrid(S),dist=g.bfs(O.doorOf(O.roomRect(S,0)));S.floors.forEach((f,i)=>{const r=O.roomRect(S,i),[x,y]=O.doorOf(r);assert.ok(dist[y][x]>=0);assert.equal(O.canPlaceRoom(S,f.type,r.x,r.y,i),null);});
+ }
+}
+console.log('v4:土地邊界/重疊/走廊/門口 BFS、找空位、買地價格/相鄰/Lv/資金、搬移及 20 房間舊檔保留資料通過');

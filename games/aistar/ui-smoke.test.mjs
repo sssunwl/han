@@ -1,3 +1,6 @@
+import * as O from './office.js';
+import { Placer } from '../../shared/tycoon/place.js';
+import { goTo,moveAgent } from '../../shared/tycoon/agent.js';
 // Node 的假 DOM 煙霧測試，只驗證畫面程式能執行，不代表瀏覽器視覺驗收。
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -24,11 +27,11 @@ function node(id='') {
 }
 const document={getElementById:id=>{if(!nodes.has(id))nodes.set(id,node(id));return nodes.get(id);},createElement:()=>node(),addEventListener:noop};
 for(const match of readFileSync(new URL('./index.html',import.meta.url),'utf8').matchAll(/id="([^"]+)"/g))document.getElementById(match[1]);
-document.getElementById('tabs').children=['ops','stars','prod','co'].map(tab=>Object.assign(node(),{dataset:{tab}}));
+document.getElementById('tabs').children=['ops','stars','prod','build','co'].map(tab=>Object.assign(node(),{dataset:{tab}}));
 globalThis.document=document;globalThis.devicePixelRatio=1;globalThis.ImageData=class {constructor(data,w,h){Object.assign(this,{data,width:w,height:h});}};
 const storage=new Map();
 const localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,String(v))};
-const sandbox={localStorage,STREET_KIT,E,D,Bmp,toCanvas,makeFrame,FW,FH,ST,makeAccessory,stWall,Camera,bindPointer,document,devicePixelRatio:1,ImageData:globalThis.ImageData,
+const sandbox={localStorage,O,Placer,goTo,moveAgent,STREET_KIT,E,D,Bmp,toCanvas,makeFrame,FW,FH,ST,makeAccessory,stWall,Camera,bindPointer,document,devicePixelRatio:1,ImageData:globalThis.ImageData,
   console,performance,Date,Math,Map,Set,addEventListener:noop,ResizeObserver:class {observe(){}},requestAnimationFrame:noop,setInterval:noop,setTimeout:()=>1,clearTimeout:noop,
   saveKey:()=> 'test',currentProfile:()=>({name:'測試'}),tone:noop,fanfare:noop,renderWho:noop,lockGestures:noop,escapeHTML:s=>String(s),
   audioPrefs:{sfx:false,music:'off'},saveAudioPrefs:noop,TRACKS:{},playMusic:noop,stopMusic:noop,nowPlaying:()=>null,
@@ -41,11 +44,11 @@ for(const b of document.getElementById('tabs').children) document.getElementById
 AS.tick(1);
 botWeek(S);const R=E.endWeek(S);AS.play(R);assert.match(document.getElementById('nextBtn').textContent,/跳過/);
 AS.tick(10);AS.skip();assert.equal(document.getElementById('nextBtn').disabled,false);assert.ok(document.getElementById('repBox').classList.contains('on'));
-S.money=100000;S.lv=4;for(const type of ['sing','act','talk','lounge'])E.buildFloor(S,type);AS.render();AS.tick(1);
-assert.equal(AS.cam.worldH,S.floors.length*96+184);
-console.log('假 DOM 煙霧測試：五個分頁、大樓繪製、播放、跳過及擴樓可執行（未做瀏覽器視覺驗收）');
+S.money=100000;S.lv=4;S.land=Array.from({length:24},(_,i)=>`${i%4},${Math.floor(i/4)}`);for(const type of ['sing','act','talk','lounge'])E.buildFloor(S,type);AS.render();AS.tick(1);
+assert.equal(AS.cam.worldH,1760);
+console.log('假 DOM 煙霧測試：五個抽屜、地圖繪製、播放、跳過及擴建可執行（未做瀏覽器視覺驗收）');
 
-S.money=100000;S.lv=4;E.buildFloor(S,'style');E.buildFloor(S,'scout');E.hire(S,'trainer','charm');E.hire(S,'manager');E.hire(S,'chef');
+S.money=100000;S.lv=4;S.land=Array.from({length:24},(_,i)=>`${i%4},${Math.floor(i/4)}`);E.buildFloor(S,'style');E.buildFloor(S,'scout');E.hire(S,'trainer','charm');E.hire(S,'manager');E.hire(S,'chef');
 S.floors.find(f=>f.type==='scout').lv=3;E.scoutWeek(S);const candidate=S.scouted[0];E.signScouted(S,candidate.id);
 for(const b of document.getElementById('tabs').children){document.getElementById('tabs').fire('click',{target:{closest:()=>b}});if(b.dataset.tab==='co'){assert.match(document.getElementById('panel').innerHTML,/新人/);assert.match(document.getElementById('panel').innerHTML,/員工/);}if(b.dataset.tab==='stars')assert.match(document.getElementById('panel').innerHTML,/下次評鑑/);if(b.dataset.tab==='prod'){assert.match(document.getElementById('panel').innerHTML,/製作部/);assert.match(document.getElementById('panel').innerHTML,/團體/);assert.match(document.getElementById('panel').innerHTML,/SNS/);}}
 AS.tick(1);AS.openTrainer();assert.match(document.getElementById('roomBody').innerHTML,/魅力/);
@@ -55,14 +58,14 @@ console.log('第二階段假 DOM：星探、員工、明星分區、魅力訓練
 botWeek(S);const workersReport=E.endWeek(S);AS.play(workersReport);AS.tick(27);AS.skip();console.log('員工白天、中午、下班與隔日移動：假 DOM 執行通過');
 
 AS.boot(E.newGame({seed:998}));assert.match(AS.renderPartners(),/蓋 🤝 會議室/);
-AS.S.money=100000;AS.S.lv=4;E.buildFloor(AS.S,'meeting');AS.S.floors.at(-1).lv=3;E.offerWeek(AS.S);
+AS.S.money=100000;AS.S.lv=4;AS.S.land=Array.from({length:24},(_,i)=>`${i%4},${Math.floor(i/4)}`);E.buildFloor(AS.S,'meeting');AS.S.floors.at(-1).lv=3;E.offerWeek(AS.S);
 assert.match(AS.renderPartners(),/接受/);assert.match(AS.renderPartners(),/友好度/);
 AS.openVisit(0);assert.match(document.getElementById('roomBody').innerHTML,/visitCanvas/);assert.match(document.getElementById('roomBody').innerHTML,/已合作/);
 AS.openNpc(AS.S.rivals[0].stars[0].id);assert.match(document.getElementById('roomBody').innerHTML,/舞蹈/);AS.tick(1);
 console.log('第四階段假 DOM:合作公司/邀請卡、參觀 canvas、NPC 資料可 render');
 
 const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');
-assert.equal([...html.matchAll(/data-tab="/g)].length,4);assert.ok(!html.includes('data-tab="feed"'));assert.match(html,/id="logBtn"/);assert.match(html,/id="notifications"/);
+assert.equal([...html.matchAll(/data-tab="/g)].length,5);assert.ok(!html.includes('data-tab="feed"'));assert.match(html,/id="logBtn"/);assert.match(html,/id="notifications"/);
 const U=E.newGame({seed:777});U.money=100000;U.lv=4;U.district='harbor';while(!U.walkins.length)E.walkinWeek(U);AS.boot(U);AS.tick(1);
 AS.openWalkin(U.walkins[0].id);assert.match(document.getElementById('roomBody').innerHTML,/簽約/);assert.match(document.getElementById('roomBody').innerHTML,/婉拒/);assert.match(document.getElementById('roomBody').innerHTML,/潛力/);
 const rookie=U.walkins.find(st=>st.trainee);if(rookie)assert.match(AS.walkinHTML(rookie),/\?/);
@@ -70,11 +73,11 @@ document.getElementById('logBtn').onclick();assert.equal(document.getElementById
 E.feed(U,null,'新通知','sys');AS.render();assert.equal(document.getElementById('bFeed').style.display,'');
 for(let i=0;i<5;i++)AS.notify({text:'公司通知 '+i});assert.equal(vm.runInContext('notifications.length',sandbox),3);AS.tick(5);assert.equal(vm.runInContext('notifications.length',sandbox),0);
 const company=document.getElementById('tabs').children.find(b=>b.dataset.tab==='co');document.getElementById('tabs').fire('click',{target:{closest:()=>company}});assert.match(document.getElementById('panel').innerHTML,/🚚 地區/);
-assert.equal(AS.cam.worldW,416);assert.equal(AS.cam.worldH,U.floors.length*96+184);
-// 出門與回來必須走過人行道,不能在大廳消失。
-const star=U.stars[0];star.sched[0]='off';AS.tick(6);let actor=AS.actors.get(star.id);assert.ok(actor.x < -48 || actor.x > 368);assert.equal(actor.hide,0);assert.equal(Math.round(actor.y),128+(U.floors.length-1)*96+108);
-star.sched[0]='rest';AS.tick(10);actor=AS.actors.get(star.id);assert.equal(actor.fi,U.floors.findIndex(f=>f.type==='dorm'));assert.ok(actor.x>=0&&actor.x<=320);assert.equal(actor.hide,0);
-console.log('v3-A 假 DOM:5 分頁、紀錄/紅點、3 則通知與到期、自薦卡、地區、416 街景及進出人行道通過');
+assert.equal(AS.cam.worldW,1024);assert.equal(AS.cam.worldH,1760);
+// 走到街道端點,返程使用同一張通行表。
+const star=U.stars[0];star.sched[0]='off';AS.tick(20);let actor=AS.actors.get(star.id);assert.ok(actor.x<0);assert.equal(Math.floor(actor.y/32),48);assert.equal(actor.hide,0);
+star.sched[0]='rest';AS.tick(20);actor=AS.actors.get(star.id);assert.equal(actor.fi,U.floors.findIndex(f=>f.type==='dorm'));assert.equal(actor.hide,0);
+console.log('v3-A 假 DOM:抽屜、紀錄/紅點、3 則通知與到期、自薦卡、地區與進出人行道通過');
 
 const B=E.newGame({seed:733});AS.boot(B);AS.openAssistant();assert.match(document.getElementById('roomBody').innerHTML,/教學提示:開/);assert.match(document.getElementById('roomBody').innerHTML,/3,000/);assert.ok(AS.actors.has('assistant'));
 assert.match(AS.adviceCard(),/本週建議/);B.adviceDismissedWeek=B.week;assert.equal(AS.adviceCard(),'');B.week++;assert.match(AS.adviceCard(),/本週建議/);
@@ -94,7 +97,7 @@ const candidateB={...B.stars[1],id:'candidateB',trainee:true,signCost:200};B.wal
 B.scouted=[candidateB];const scoutHTML=vm.runInContext('recruitmentHTML()',sandbox);for(const skill of D.SKILL_IDS)assert.ok(scoutHTML.includes(D.SKILLS[skill].name+' '+candidateB.skills[skill].toFixed(1)));
 B.assistant.lv=3;assert.match(vm.runInContext('opCard(S.ops[0])',sandbox),/🔍 分析師推薦:/);
 document.getElementById('roomBody').onclick({target:{closest:()=>({dataset:{tipsToggle:'1'}})}});assert.equal(B.tipsOff,true);assert.equal(tip.hidden,true);assert.doesNotMatch(AS.scheduleHTML(),/體力 ↑↑/);
-const assistantDay=vm.runInContext('assistantTarget()',sandbox);assert.equal(assistantDay.fi,0);assert.equal(assistantDay.x,48);
+const assistantDay=vm.runInContext('assistantTarget()',sandbox);assert.equal(assistantDay.fi,0);assert.equal(Math.floor(assistantDay.x/32),B.floors[0].x+1);
 assert.equal(vm.runInContext('playback={t:2};assistantTarget().act',sandbox),'eat');assert.equal(vm.runInContext('playback={t:3.6};assistantTarget().outside',sandbox),true);vm.runInContext('playback=null',sandbox);
 B.tipsOff=false;tip.hidden=true;tip.innerHTML='';B.seenTips=[];for(const key of ['ops','sched','stars','prod','co','event','evaluation','awards','offer','walkin'])AS.showTip(key);
 for(let i=0;i<10;i++)document.getElementById('tipUnderstood').onclick();assert.equal(new Set(B.seenTips).size,10);
@@ -116,3 +119,17 @@ console.log('v3-C 假 DOM:工作預告/接案期望與收合記憶、倒數紅�
 // 回歸剛修好的視窗互斥:提示卡必須等其他視窗關閉才顯示。
 C.seenTips=[];C.tipsOff=false;tip.hidden=true;tip.innerHTML='';vm.runInContext('tutorialQueue=[]',sandbox);let modalBlock=true;document.querySelector=()=>modalBlock?{}:null;AS.showTip('ops');assert.equal(tip.hidden,true);assert.ok(vm.runInContext("tutorialQueue.includes('ops')",sandbox));modalBlock=false;AS.render();assert.equal(tip.hidden,false);assert.match(tip.innerHTML,/📋 機會/);assert.equal(C.seenTips.includes('ops'),false);document.getElementById('tipUnderstood').onclick();assert.ok(C.seenTips.includes('ops'));
 console.log('提示卡在其他視窗開啟時排隊,關閉後才顯示:回歸通過');
+
+// v4: 抽屜、建造交易、買地與搬移。保留上面的歷代功能驗收。
+const V=E.newGame({seed:44});V.money=100000;V.lv=4;AS.boot(V);
+assert.match(html,/height:100dvh/);assert.match(html,/grid-template-columns:repeat\(5,1fr\) 1.35fr/);assert.equal((html.match(/data-tab="/g)||[]).length+1,6);
+AS.openBuild();assert.ok(document.getElementById('sheet').classList.contains('on'));assert.match(document.getElementById('panel').innerHTML,/買地/);assert.match(document.getElementById('panel').innerHTML,/data-place="sing"/);
+AS.openLand();assert.equal(AS.landMode,true);let chunk;for(let cy=0;cy<6;cy++)for(let cx=0;cx<4;cx++)if(O.adjacentLand(V,cx,cy))chunk={cx,cy};
+AS.pointerHandlers.onTap(chunk.cx*256+10,chunk.cy*256+10);const owned=V.land.length;AS.confirmPlace();assert.equal(V.land.length,owned+1);
+AS.startRoom('sing');assert.ok(AS.placer.active);AS.cancelPlace();assert.equal(AS.placer.active,false);const n=V.floors.length,p=O.findSpot(V,'sing');assert.ok(p);AS.startRoom('sing');AS.placer.moveTo(p.x,p.y);AS.confirmPlace();assert.equal(V.floors.length,n+1);
+assert.equal(AS.pointerHandlers.onHold((V.floors[0].x+1)*32,(V.floors[0].y+1)*32),false);
+const f=V.floors[1],old={x:f.x,y:f.y};assert.equal(AS.pointerHandlers.onHold((f.x+1)*32,(f.y+1)*32),true);AS.placer.moveTo(-1,0);AS.confirmPlace();assert.ok(AS.placer.active);AS.cancelPlace();assert.deepEqual({x:f.x,y:f.y},old);
+let moved;for(let y=0;y<48&&!moved;y++)for(let x=0;x<32&&!moved;x++)if((x!==f.x||y!==f.y)&&!O.canPlaceRoom(V,f.type,x,y,1))moved={x,y};assert.ok(moved);assert.equal(AS.pointerHandlers.onHold((f.x+1)*32,(f.y+1)*32),true);const moveMoney=V.money;AS.placer.moveTo(moved.x,moved.y);AS.confirmPlace();assert.equal(f.x,moved.x);assert.equal(f.y,moved.y);assert.equal(V.money,moveMoney);
+AS.openFloor(1);assert.doesNotMatch(document.getElementById('roomTitle').textContent,/\dF/);
+AS.tick(20);const walking=AS.actors.get(V.stars[0].id),before={x:walking.x,y:walking.y};V.stars[0].sched[0]='off';AS.tick(.05);assert.ok(Math.hypot(walking.x-before.x,walking.y-before.y)<=8);AS.tick(30);assert.equal(Math.floor(walking.y/32),48);
+console.log('v4 假 DOM:六鍵、全螢幕樣式、五抽屜、建造確認/取消、買地、長按搬移及人物逐步行走通過');

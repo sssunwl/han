@@ -1,3 +1,4 @@
+import { layoutRooms, findSpot, canPlaceRoom } from './office.js';
 /* ============================================================
    AI 明星養成:遊戲引擎(純邏輯,不碰 DOM)
    - 整局狀態都在一個物件 S 裡,直接存檔。亂數用固定種子(狀態 S.rs 也存進存檔),
@@ -128,7 +129,7 @@ export const bestSkill = st => D.SKILL_IDS.reduce((a, k) => (st.skills[k] > st.s
 // ---------- 開新局 ----------
 export function newGame({ seed = (Date.now() % 2147483647) | 0, company = '星光 AI 娛樂', ng = 0, mentor = null, trophies = [] } = {}) {
   const S = {
-    v: 8, pipeline:[], pendingEvents:[], eventHistory:{}, seenTips:[], tipsOff:false, district:'alley', walkins:[], offers:[], staff:[], scouted:[], releases: [], groups: [], chart: [], posts: [], sns: { strategy: 'vlog' }, actLog: [], seed, rs: seed, week: 1, ng, company, lv: 1, floors: initialFloors(), money: 2500,
+    v: 9, pipeline:[], pendingEvents:[], eventHistory:{}, seenTips:[], tipsOff:false, district:'alley', walkins:[], offers:[], staff:[], scouted:[], releases: [], groups: [], chart: [], posts: [], sns: { strategy: 'vlog' }, actLog: [], seed, rs: seed, week: 1, ng, company, lv: 1, floors: initialFloors(), money: 2500,
     stars: [], rel: {}, everRival: [], ops: [], nextId: 1, feed: [], seq: 0, trend: null, nextTrend: null,
     rivals: D.RIVALS.map(r => ({ ...r, fans: Math.round(r.fans * (1 + 0.6 * ng)), g: r.g * (1 + 0.12 * ng) })),
     goals: [], trophies: trophies.slice(), mentor, teamups: [], temp: [], flags: {}, event: null,
@@ -148,6 +149,7 @@ export function newGame({ seed = (Date.now() % 2147483647) | 0, company = '星�
   if (mentor) feed(S, null, `🧑‍🏫 前輩 ${mentor.name} 留下來當老師,大家練習效果 +15%。`, 'sys');
   initPartners(S);
   S.assistant = makeAssistant(S);
+  layoutRooms(S);
   beginWeek(S);
   return S;
 }
@@ -560,29 +562,33 @@ export function floorFor(S, value, op = null) {
 }
 export function floorCost(S,type) { const f=D.FLOORS[type]; return f?.build ? Math.round(f.build*(1+0.25*(S.floors.length-5))/10)*10 : 0; }
 export function upgradeCost(S,i) { const f=S.floors[i]; return f ? D.FLOORS[f.type].cost[f.lv-1] || 0 : 0; }
-export function buildFloor(S,type) {
-  if (!D.FLOORS[type]?.build) return '不能加蓋這種樓層';
+export function buildFloor(S,type,x,y) {
+  if (!D.FLOORS[type]?.build) return '不能加蓋這種房間';
   const cost=floorCost(S,type); if (S.money<cost) return `要 $${fmt(cost)}`;
-  S.money-=cost; S.floors.push({type,lv:1}); feed(S,null,`🏗 蓋好了${D.FLOORS[type].name}！`,'good'); return null;
+  if(x===undefined||y===undefined){const p=findSpot(S,type);if(!p)return '地不夠,先買地';({x,y}=p);}
+  const why=canPlaceRoom(S,type,x,y);if(why)return why;
+  S.money-=cost; S.floors.push({type,lv:1,x,y}); feed(S,null,`🏗 蓋好了${D.FLOORS[type].name}！`,'good'); return null;
 }
 export function upgradeFloor(S,i) {
-  const f=S.floors[i]; if (!f) return '找不到樓層'; if (f.lv>=3) return '已經最高級';
+  const f=S.floors[i]; if (!f) return '找不到房間'; if (f.lv>=3) return '已經最高級';
   const cost=upgradeCost(S,i); if (S.money<cost) return `要 $${fmt(cost)}`;
-  S.money-=cost; f.lv++; feed(S,null,`${D.FLOORS[f.type].icon} ${i+1}F 升到 Lv${f.lv}！`,'good'); return null;
+  S.money-=cost; f.lv++; feed(S,null,`${D.FLOORS[f.type].icon} ${D.FLOORS[f.type].name} 升到 Lv${f.lv}！`,'good'); return null;
 }
 // 舊存檔沒有 st.plan:從現有行程挑最多的那個當這週的安排,下週照自動排
 function guessPlan(st) {
   const n = {}; for (const v of (st.sched || []).slice(0,6)) if (ACT_NAMES[v]) n[v] = (n[v]||0) + 1;
   st.plan = Object.keys(n).sort((a,b)=>n[b]-n[a])[0] || 'rest'; st.planAuto = true;
 }
+export function moveRoom(S,i,x,y){const f=S.floors[i];if(!f)return '找不到房間';if(f.type==='lobby')return '大廳不能搬動';const why=canPlaceRoom(S,f.type,x,y,i);if(why)return why;Object.assign(f,{x,y});return null;}
 export function migrate(S) {
-  if(S.v===8) { for(const st of S.stars||[]) if(!ACT_NAMES[st.plan]) guessPlan(st); return S; }
+  if(S.v===9)return S;
+  if(S.v===8) { for(const st of S.stars||[]) if(!ACT_NAMES[st.plan]) guessPlan(st); layoutRooms(S);S.v=9;return S; }
   if(S.v===7) {
     S.pipeline=[]; S.pendingEvents=[]; S.eventHistory={};
     for(const st of [...S.stars,...(S.audition||[]),...(S.scouted||[]),...(S.walkins||[])]){st.sprint=null;st.expect=null;}
     planWeek(S,S.week+1,S.nextTrend||genTrend(S));planWeek(S,S.week+2,genTrend(S));
     for(const op of S.ops)op.req ??= requirements(S,op.type,op.w);
-    S.v=8;return S;
+    S.v=8;return migrate(S);
   }
   if(S.v===6) {
     S.assistant ||= makeAssistant(S); S.seenTips ||= []; S.tipsOff ??= false;

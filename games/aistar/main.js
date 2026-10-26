@@ -1,7 +1,10 @@
+import * as O from './office.js';
+import { Placer } from '../../shared/tycoon/place.js';
+import { goTo, moveAgent } from '../../shared/tycoon/agent.js';
 /* ============================================================
    AI 明星養成:畫面
-   上:攝影棚(pixelkit 程式畫的場景 + Q 版小人,頭上冒對話泡泡)
-   下:📋 機會 / ⭐ 明星 / 💬 訊息 / 🏢 公司 四個分頁 + ▶ 下一週
+   全螢幕俯視辦公室、走廊尋路、房間擺放與六鍵工具列。
+   抽屜保留機會、明星行程、製作及公司管理。
    遊戲規則全部在 engine.js,這裡只負責畫出來、把玩家的點擊交給引擎。
    ============================================================ */
 import '../../shared/offline.js';
@@ -71,15 +74,15 @@ const careerTag=st=>`${D.CAREERS[st.career].icon} ${D.CAREERS[st.career].name} $
 const ptImg = (st, cls = 'pt') => st ? `<img class="${cls}" style="--g:${st.glow}22" src="${portrait(st).url}" alt="">` : '';
 const nameTag = st => `<b style="--c:${st.glow};color:${st.glow}">${esc(st.name)}</b>`;
 
-// 公司剖面：世界座標由樓頂向下，樓層索引仍由 1F 往上。
-const RW = 416, TX = 48;
+// 世界座標為 32px 方格,房間索引保持與引擎相同。
+const TX = 0;
 const cv = $('cv'), ctx = cv.getContext('2d');
-const cam = new Camera(cv, { worldW:416, worldH:664, maxScale:3 });
+const cam = new Camera(cv, { worldW:1024, worldH:1760, maxScale:3 });
 const view = {ctx, get w(){return cam.w;}, get h(){return cam.h;}, get dpr(){return cam.dpr;}};
 let sceneKey='', bgCanvas=null, playback=null, speed=1, sceneTime=0;
 const actors = new Map(), sprCache={};
 const spr = k => sprCache[k] ||= toCanvas(ST[k].make());
-const floorY = i => 128 + (S.floors.length-1-i)*96;
+
 const roomIndex = type => S.floors.findIndex(f=>f.type===type);
 // 每種房間都有四個可用站位；家具按等級累加。
 const ROOMS = {
@@ -98,68 +101,66 @@ const ROOMS = {
  sns:{color:'#d79abd',kind:'carpet', furniture:[['sns_wall',14,4,1],['desk_pc',100,30,1],['heart_sign',188,10,2],['ring_light',240,28,3]], spots:[[64,80],[130,78],[200,80],[252,80]]},
  lounge:{color:'#9eb7b2',kind:'carpet', furniture:[['massage_chair',22,38,1],['sofa_mint',113,36,1],['foot_bath',210,57,2],['massage_chair',250,38,3]], spots:[[38,75],[128,75],[157,75],[225,76]]},
 };
+const MAP_ROOMS=Object.fromEntries(Object.entries(ROOMS).map(([type,room])=>{
+ const {w,h}=D.ROOM_SIZE[type];
+ return [type,{furniture:room.furniture.map(([key,x,y,lv])=>[key,12+x/288*(w*32-40),22+y/96*(h*32-65),lv]),spots:Array.from({length:(w-2)*(h-2)},(_,i)=>[1+i%(w-2),1+Math.floor(i/(w-2))])}];
+}));
 function layout(initial=false) {
-  const nextH=(S?.floors.length||5)*96+184, delta=nextH-cam.worldH;
-  cam.worldH=nextH;
-  if(!initial && delta){cam.y+=delta;for(const a of actors.values()){a.y+=delta;if(a.dest)a.dest.y+=delta;}}
   cam.resize();
-  if(initial) {cam.s=cam.w/RW;cam.x=0;cam.y=cam.worldH-cam.h/cam.s;cam.clamp();}
+  if(initial){cam.s=Math.max(cam.minScale,Math.min(cam.w/512,(cam.h-140)/640,cam.maxScale));cam.x=512-cam.w/cam.s/2;cam.y=1640-(cam.h-70)/cam.s;cam.clamp();}
 }
 new ResizeObserver(()=>layout()).observe(cv);
-function buildBg() {
-  const c=document.createElement('canvas');c.width=416;c.height=cam.worldH;
-  const g=c.getContext('2d');g.imageSmoothingEnabled=false;
-  drawStreet(g);g.save();g.translate(TX,0);
-  S.floors.forEach((f,i)=>{
-    const y=floorY(i), r=ROOMS[f.type], wall=toCanvas(stWall({color:r.color}));
-    g.save();g.beginPath();g.rect(0,y,288,48);g.clip();
-    for(let x=0;x<288;x+=32)g.drawImage(wall,x,y);g.restore();
-    for(let yy=48;yy<96;yy+=32)for(let x=0;x<288;x+=32)g.drawImage(spr('floor_'+r.kind),x,y+yy,32,Math.min(32,96-yy));
-    for(const [k,x,yy,lv] of r.furniture) if(f.lv>=lv)g.drawImage(spr(k),x,y+yy);
-    g.fillStyle='#35344f';g.fillRect(288,y,32,96);
-    g.strokeStyle='#e6e2fa';g.strokeRect(0,y,320,96);
-    g.fillStyle='#fff';g.font='bold 9px sans-serif';g.textAlign='left';g.fillText(`${i+1}F ${D.FLOORS[f.type].name} Lv${f.lv}`,4,y+11);
-  });
-  g.drawImage(spr('roof_sign'),110,102);
-  g.fillStyle='#fff';g.font='bold 10px sans-serif';g.textAlign='center';g.fillText(S.company.slice(0,12),158,116,86);
-  {g.fillStyle='#ffffff35';g.fillRect(0,8,320,86);g.strokeStyle='#fff9';g.setLineDash([5,5]);g.strokeRect(2,10,316,82);g.setLineDash([]);g.fillStyle='#fff';g.font='14px sans-serif';g.fillText('🏗 ＋ 蓋新樓層',160,60);}
-  g.drawImage(streetSprite('door_glass'),0,floorY(0)+56);g.restore();
-  bgCanvas=c;sceneKey=JSON.stringify([S.floors,S.company,S.lv,S.district]);
+let officeGrid=null;
+function buildBg(){
+ const c=document.createElement('canvas');c.width=1024;c.height=1760;const g=c.getContext('2d');g.imageSmoothingEnabled=false;
+
+ for(let y=0;y<55;y++)for(let x=0;x<32;x++){
+  if(y>=51){g.drawImage(spr(y===51?'sidewalk_top':'ground_'+S.district),x*32,y*32);if(y>51){g.fillStyle='#10152c33';g.fillRect(x*32,y*32,32,32);}continue;}
+  if(y>=48){g.drawImage(spr(y===48?'sidewalk_top':'road_top'),x*32,y*32);continue;}
+  g.fillStyle='#b6b5a1';g.fillRect(x*32,y*32,32,32);if(!O.ownsTile(S,x,y))g.drawImage(spr('ground_'+S.district),x*32,y*32);g.fillStyle='#ffffff10';g.fillRect(x*32,y*32,31,1);
+  if(!O.ownsTile(S,x,y)){g.fillStyle='#10152c40';g.fillRect(x*32,y*32,32,32);}
+ }
+ for(let i=0;i<S.floors.length;i++){
+  const f=S.floors[i],r=O.roomRect(S,i),[dx,dy]=O.doorOf(r);
+  for(let y=0;y<r.h;y++)for(let x=0;x<r.w;x++)g.drawImage(spr('floor_'+f.type),(r.x+x)*32,(r.y+y)*32);
+  for(let x=0;x<r.w;x++){g.drawImage(spr('wall_top'),(r.x+x)*32,r.y*32);g.drawImage(spr(r.x+x===dx?'door_top':'wall_top'),(r.x+x)*32,(r.y+r.h-1)*32+16);}
+  for(let y=0;y<r.h;y++){g.drawImage(spr('wall_side'),r.x*32,(r.y+y)*32);g.drawImage(spr('wall_side'),(r.x+r.w)*32-8,(r.y+y)*32);}
+  g.save();g.beginPath();g.rect(r.x*32+8,r.y*32+17,r.w*32-16,r.h*32-49);g.clip();
+  for(const [k,x,y,lv] of MAP_ROOMS[f.type].furniture)if(f.lv>=lv){const asset=spr(k);g.drawImage(asset,r.x*32+x,r.y*32+y,asset.width*.65,asset.height*.65);}
+  g.restore();g.fillStyle='#27243edb';g.fillRect(r.x*32+6,r.y*32+3,r.w*32-12,17);g.fillStyle='#fff';g.font='bold 10px sans-serif';g.textAlign='left';g.fillText(D.FLOORS[f.type].name+' Lv'+f.lv,r.x*32+10,r.y*32+15);
+ }
+ if(S.district==='harbor')for(let x=0;x<32;x++)for(let y=46;y<48;y++)if(!O.ownsTile(S,x,y)){g.drawImage(spr('floor_wood'),x*32,y*32);}
+ if(S.district==='shops')for(const x of [25,890])g.drawImage(streetSprite('shop_awning'),x,1450);
+ for(let x=32;x<1024;x+=192){const a=streetSprite(S.district==='harbor'?'palm':S.district==='alley'?'power_pole':'street_lamp');g.drawImage(a,x+96,1662-a.height);}
+ bgCanvas=c;officeGrid=O.walkGrid(S);sceneKey=JSON.stringify([S.floors,S.company,S.lv,S.district,S.land]);
+ for(const a of actors.values())a.routeKey='';
 }
-function currentDay() {return playback?.R.timeline[Math.min(6,Math.floor(playback.t/4))];}
-function targetOf(st,idx) {
-  if(st.id==='assistant') return assistantTarget();
-  if(st.role) return staffTarget(st,idx);
-  const day=currentDay(), p=playback?(playback.t%4)/4:0.3;
-  let act=day?.acts[st.id] || st.sched[0], fi=day?.floorOf[st.id] ?? E.floorFor(S,act);
-  if(playback && p>=0.45 && p<0.60 && fi!==-1) {act='eat';fi=roomIndex('cafe');if(fi<0)fi=day.floorOf[st.id];}
-  else if(playback && p>=(fi===-1?0.7:0.85)) {
-    if(p<0.93 && roomIndex('lounge')>=0 && !act.startsWith('job:')) {act='relax';fi=roomIndex('lounge');}
-    else {act='sleep';fi=roomIndex('dorm');if(fi<0)fi=0;}
-  }
-  const outside=fi===-1; if(outside)fi=0;
-  const spots=ROOMS[S.floors[fi]?.type||'lobby'].spots;
-  let [x,y]=spots[idx%spots.length];
-  if(S.floors[fi]?.type==='studio' && !['eat','sleep','relax'].includes(act)) {
-    const type=act.startsWith('job:') ? (playback?.R.opTypes?.[act.slice(4)] || E.opById(S,act.slice(4))?.type) : '';
-    x=act==='live'||type==='live'||type==='holo'?238:act==='train:talk'||type==='podcast'?146:act==='train:sing'?95:40;
-    x+=(idx%2)*15;y=76;
-  }
-  const sulk=(day?.sulkOf?.[st.id] ?? !!st.sulk) && act.startsWith('train:');
-  return {fi,x:outside?10:sulk?266:x+Math.floor(idx/spots.length)*9,y:floorY(fi)+y,act,outside};
+function currentDay() {return playback?.R?.timeline?.[Math.min(6,Math.floor(playback.t/4))];}
+function targetOf(st,idx){
+ const day=currentDay(),p=playback?(playback.t%4)/4:.3;
+ let act=st.sched?.[0]||'staff',fi=0;
+ if(st.id==='assistant')fi=0;
+ else if(st.role)fi=Math.max(0,roomIndex(st.role==='trainer'?(st.skill==='charm'?'style':st.skill):D.STAFF_ROLES[st.role].floor));
+ else {act=day?.acts[st.id]||act;fi=day?.floorOf[st.id]??E.floorFor(S,act);}
+ if(playback&&p<.12){fi=roomIndex('dorm');act='sleep';}
+ else if(playback&&p>=.45&&p<.60&&fi>=0&&roomIndex('cafe')>=0){fi=roomIndex('cafe');act='eat';}
+ else if(playback&&p>=.85){fi=st.role||st.id==='assistant'?-1:roomIndex('dorm');act='sleep';}
+ if(fi<0)return {fi:-1,x:-24,y:1559,act,outside:true};
+ const r=O.roomRect(S,fi),spots=MAP_ROOMS[S.floors[fi].type].spots,[sx,sy]=spots[idx%spots.length],tx=r.x+sx,ty=r.y+sy;
+ return {fi,x:(tx+.5)*32,y:(ty+.8)*32,act,outside:false};
 }
-function placeActors(snap=false) {
-  const team=[...E.team(S),...S.staff,S.assistant],used={};
-  for(const id of actors.keys())if(!team.some(st=>st.id===id))actors.delete(id);
-  for(const st of team) {
-    const fi=currentDay()?.floorOf[st.id] ?? E.floorFor(S,st.sched?.[0]||'rest');
-    const idx=used[fi]||0;used[fi]=idx+1;
-    const dest=targetOf(st,idx);
-    let a=actors.get(st.id);
-    if(!a){a={x:304,y:floorY(0)+78,fi:0,t:0,phase:'walk',hide:0,dir:'down'};actors.set(st.id,a);}
-    a.dest=dest;a.act=dest.act;
-    if(snap){Object.assign(a,{x:dest.x,y:dest.y,fi:dest.fi,phase:'walk',hide:0});}
-  }
+function placeActors(snap=false){
+ if(!S)return;
+ const people=[...E.team(S),...S.staff,S.assistant,...S.walkins,...S.scouted.slice(0,1)];
+ if(S.offers.length){const st=S.rivals[S.offers[0].partner].stars[0];people.push({...st,id:'rep:'+st.id});}
+ for(const v of playback?.R.visitors||[])if(currentDay()?.acts[v.our]?.includes(v.op))for(const st of v.npc)people.push({...st,id:'npc:'+st.id,visitorOf:v.our});
+ const used={};for(const a of actors.values())a.present=false;
+ people.forEach(st=>{const extra=S.walkins.includes(st)||S.scouted.includes(st)||st.id.startsWith('rep:');let dest=extra?targetOf(S.assistant,(used[0]||0)+2):targetOf(st,used[st.role||'star']||0);
+ if(st.visitorOf){const own=E.starById(S,st.visitorOf);if(own)dest=targetOf(own,2);}
+ used[st.role||'star']=(used[st.role||'star']||0)+1;
+ let a=actors.get(st.id);if(!a){a={x:16,y:1559,t:0,hide:0,dir:'down'};actors.set(st.id,a);if(snap&&!extra){a.x=dest.x;a.y=dest.y;}}
+ a.st=st;a.present=true;a.dest=dest;a.act=dest.act;a.fi=dest.fi;
+ });for(const [id,a] of actors)if(!a.present){if(a.x<=-23&&Math.floor(a.y/32)===48)actors.delete(id);else{a.dest={fi:-1,x:-24,y:1559,act:'off',outside:true};a.act='off';a.fi=-1;}}
 }
 function step(dt) {
   sceneTime+=dt;
@@ -171,54 +172,28 @@ function step(dt) {
     if(p>=0.3 && !playback.said.has(d)) {playback.said.add(d);for(const f of playback.R.timeline[d].says){const q=bubQ.get(f.id)||[];q.push(f);bubQ.set(f.id,q);}}
     if(playback.t>=28){skip();return;}
   }
+  if(sceneKey!==JSON.stringify([S.floors,S.company,S.lv,S.district,S.land]))buildBg();
   placeActors();
   const motionDt=dt*(playback?speed:1);
-  for(const a of actors.values()) {
-    a.t+=motionDt; const dest=a.dest;
-    if(a.wasOutside&&!dest.outside)a.returning=true;
-    a.wasOutside=dest.outside;
-    if(a.phase==='lift') {
-      a.hide=1;a.wait-=motionDt;
-      if(a.wait<=0){a.fi=dest.fi;a.y=floorY(a.fi)+78;a.x=304;a.hide=0;a.phase='walk';}
-      continue;
-    }
-    const changing=a.fi!==dest.fi;
-    const ground=floorY(0)+108, exit=a.dest.x<160?-TX-24:RW-TX+24;
-    let tx=changing?304:dest.x, ty=changing?floorY(a.fi)+78:dest.y;
-    if(!changing&&dest.outside){if(a.y<ground-1){tx=8;ty=Math.abs(a.x-8)>2?floorY(0)+78:ground;}else{tx=exit;ty=ground;}}
-    else if(a.y>floorY(0)+96){tx=8;ty=Math.abs(a.x-8)>2?ground:floorY(0)+78;}
-
-    const dx=tx-a.x,dy=ty-a.y,dist=Math.hypot(dx,dy),v=Math.min(dist,motionDt*(a.returning?500:dest.outside?350:170));
-    a.moving=dist>1;
-    if(a.moving){a.hide=0;a.x+=dx/dist*v;a.y+=dy/dist*v;a.dir=dx<0?'left':'right';}
-    else if(changing){a.phase='lift';a.wait=a.returning?0.12:0.4;a.hide=1;}
-    else {a.dir='down';a.hide=0;if(!dest.outside)a.returning=false;}
+  if(!officeGrid)buildBg();
+  for(const a of actors.values()){
+   a.t+=motionDt;const dest=a.dest,key=dest.x+','+dest.y;
+   if(a.routeKey!==key){a.routeKey=key;const tile=[Math.max(0,Math.floor(dest.x/32)),Math.floor(dest.y/32)],from=[Math.max(0,Math.floor(a.x/32)),Math.floor(a.y/32)];
+    if(!goTo(officeGrid,a,tile,null,{from})){console.warn('[AI Star] 找不到路徑,移至目標',a.st.id);a.x=dest.x;a.y=dest.y;a.path=[];}else if(dest.outside)a.path.push([dest.x,dest.y]);
+   }
+   moveAgent(a,motionDt,playback?420:150);a.dir=['right','up','left','down'][typeof a.dir==='number'?a.dir:3];
   }
 }
-function draw(now) {
-  if(!S)return;
-  if(sceneKey!==JSON.stringify([S.floors,S.company,S.lv,S.district])) {layout();buildBg();}
-  ctx.setTransform(cam.dpr,0,0,cam.dpr,0,0);
-  const p=playback?(playback.t%4)/4:0.3, night=p>0.85;
-  const sky=ctx.createLinearGradient(0,0,0,cam.h);sky.addColorStop(0,night?'#172447':'#72bce9');sky.addColorStop(1,night?'#443e72':'#e3f4ff');ctx.fillStyle=sky;ctx.fillRect(0,0,cam.w,cam.h);
-  cam.apply(ctx);ctx.drawImage(bgCanvas,0,0);
-  const traffic=sceneTime%8;ctx.drawImage(streetSprite(Math.floor(sceneTime/8)%3?'car':'bus'),-70+traffic*70,floorY(0)+122);
-  ctx.save();ctx.translate(TX,0);
-  S.floors.forEach((f,i)=>{
-    const near=[...actors.values()].filter(a=>(a.phase==='lift'&&(a.fi===i||a.dest.fi===i)) || (a.fi===i && a.x>284 && a.moving));
-    const open=near.reduce((v,a)=>Math.max(v,a.phase==='lift'?Math.min(1,(0.45-a.wait)*8):Math.max(0,1-Math.abs(a.x-304)/24)),0);
-    const frame=Math.round(open*4), key='lift_'+frame;
-    sprCache[key] ||= toCanvas(ST.elevator_door.make({open:frame/4}));
-    ctx.drawImage(sprCache[key],288,floorY(i)+24);
-  });
-  S.floors.forEach((f,i)=>{for(const [k,x,y,lv] of ROOMS[f.type].furniture) if(k==='camera' && f.lv>=lv){ctx.fillStyle=Math.floor(sceneTime*3)%2?'#ff5969':'#542d45';ctx.fillRect(x+8,floorY(i)+y+15,3,3);}});
-  for(const [id,a] of [...actors].sort((a,b)=>a[1].y-b[1].y)) {const st=E.starById(S,id)||S.staff.find(st=>st.id===id)||(id==='assistant'?S.assistant:null);if(st && !a.hide)drawActor(st,a,now);}
-  const aa=actors.get('assistant');if(aa&&!aa.hide){ctx.font='13px sans-serif';ctx.fillText('💡',aa.x-6,aa.y-34);}
-  if(S.scouted.length){const st=S.scouted[0];ctx.drawImage(portrait(st).canvas,66,floorY(0)+48);ctx.drawImage(spr('visitor_sign'),70,floorY(0)+30);}
-  if(S.offers.length&&!night){const r=S.rivals[S.offers[0].partner];ctx.drawImage(portrait(r.stars[0]).canvas,194,floorY(0)+48);ctx.drawImage(spr('visitor_badge'),209,floorY(0)+68);ctx.font='14px sans-serif';ctx.fillText(r.icon,205,floorY(0)+37);if(Math.floor(sceneTime)%7<4){ctx.fillStyle='#fffdf5';ctx.fillRect(32,floorY(0)-18,235,29);ctx.fillStyle='#554466';ctx.font='10px sans-serif';ctx.textAlign='left';const text=S.offers[0].greeting||'期待一起合作!';ctx.fillText(text.slice(0,21),38,floorY(0)-6);ctx.fillText(text.slice(21),38,floorY(0)+5);}}
-  if(!night)for(const v of (playback?.R.visitors||[])){const day=currentDay();if(!day?.acts[v.our]?.includes(v.op))continue;const fi=day.floorOf[v.our];if(fi==null||fi<0)continue;/* 跟我們的明星同一層 */v.npc.forEach((st,i)=>ctx.drawImage(portrait(st,'down',Math.floor(sceneTime*2)%2?'idle0':'walk1').canvas,210+i*28,floorY(fi)+48));}
-  drawWalkins();ctx.restore();
-  ctx.globalAlpha=1;
+function draw(){
+ if(!S)return;
+ if(sceneKey!==JSON.stringify([S.floors,S.company,S.lv,S.district,S.land])){layout();buildBg();}
+ ctx.setTransform(cam.dpr,0,0,cam.dpr,0,0);ctx.fillStyle='#242637';ctx.fillRect(0,0,cam.w,cam.h);cam.apply(ctx);ctx.drawImage(bgCanvas,0,0);
+ ctx.drawImage(streetSprite(Math.floor(sceneTime/8)%3?'car':'bus'),-70+(sceneTime%16)*75,1580);
+ for(const a of [...actors.values()].sort((a,b)=>a.y-b.y)){drawActor(a.st,a);if(a.st.id==='assistant'||S.walkins.some(st=>st.id===a.st.id)){ctx.fillStyle='#fff';ctx.font='14px sans-serif';ctx.fillText(a.st.id==='assistant'?'💡':'❔',a.x-7,a.y-35);}}
+ S.floors.forEach((f,i)=>{const r=O.roomRect(S,i),count=[...actors.values()].filter(a=>a.fi===i).length;ctx.fillStyle='#fff';ctx.font='10px sans-serif';ctx.textAlign='right';ctx.fillText('👥 '+count+(['sing','dance','act','talk','style'].includes(f.type)?'/'+(f.lv+1):''),(r.x+r.w)*32-10,r.y*32+30);});
+ if(landMode)for(let cy=0;cy<6;cy++)for(let cx=0;cx<4;cx++)if(O.adjacentLand(S,cx,cy)){ctx.fillStyle=landPick?.cx===cx&&landPick?.cy===cy?'#80efb966':'#f9d78133';ctx.fillRect(cx*256,cy*256,256,256);ctx.strokeStyle='#ffe9a2';ctx.strokeRect(cx*256,cy*256,256,256);ctx.fillStyle='#fff';ctx.font='bold 18px sans-serif';ctx.textAlign='center';ctx.fillText('$'+fmt(O.landCost(S)),cx*256+128,cy*256+128);}
+ if(placer.active){const p=placer.p;ctx.fillStyle=p.reason?'#ff526d88':'#60efa488';ctx.fillRect(p.x*32,p.y*32,p.w*32,p.h*32);ctx.strokeStyle=p.reason?'#ff5577':'#b4ffd1';ctx.lineWidth=3;ctx.strokeRect(p.x*32,p.y*32,p.w*32,p.h*32);}
+ ctx.globalAlpha=1;
 }
 function drawActor(st,a) {
   const act=a.act, type=act?.startsWith('job:') ? (playback?.R.opTypes?.[act.slice(4)] || E.opById(S,act.slice(4))?.type) : '';
@@ -254,7 +229,7 @@ let lastT=performance.now();
 function frame(now){const dt=Math.min(0.05,(now-lastT)/1000);lastT=now;if(running&&S){step(dt);draw(now);updateBubbles(now);}requestAnimationFrame(frame);}
 function play(R) {
   if(!R?.timeline)return;
-  playback={R,t:0,said:new Set()};
+  cancelPlace();closeSheet();playback={R,t:0,said:new Set()};
   bubQ.clear();for(const b of bubOn.values())b.el.remove();bubOn.clear();
   pumpFeed(); bubbleSeen=S.seq; $('playControls').hidden=false;
   $('repBox').classList.remove('on');
@@ -267,17 +242,25 @@ function skip() {
 }
 $('speedBtn').onclick=()=>{speed=speed===4?1:speed*2;$('speedBtn').textContent=`⏩ ${speed}×`;};
 $('skipBtn').onclick=skip;
-bindPointer(cv,cam,{blocked:()=>!S,onTap:(x,y)=>{
-  x-=TX;
-  if(playback)return;
-  const wi=S.walkins.find((st,i)=>Math.abs(x-[110,151,263][i])<18&&Math.abs(y-floorY(0)-92)<20);if(wi){openWalkin(wi.id);return;}
-  if(S.offers.length&&Math.abs(x-206)<22&&Math.abs(y-floorY(0)-65)<35){openCompany('partners');toast(S.offers[0].greeting||'歡迎合作!');return;}
-  if(S.scouted.length&&Math.abs(x-78)<20&&Math.abs(y-floorY(0)-65)<35){openCompany('scouted');return;}
-  for(const [id,a] of actors)if(!a.hide&&Math.abs(a.x-x)<17&&Math.abs(a.y-16-y)<21){if(id==='assistant')openAssistant();else if(E.starById(S,id))openInteract(id);else openCompany();return;}
-  if(y<96 && x>=0 && x<320){openBuild();return;}
-  if(x<0||x>320)return;
-  const i=S.floors.length-1-Math.floor((y-128)/96);if(i>=0&&i<S.floors.length)openFloor(i);
-}});
+let landMode=false,landPick=null;
+const placer=new Placer({canPlace:p=>O.canPlaceRoom(S,p.type,p.x,p.y,p.index),onChange:p=>{ $('placeBar').hidden=false;$('placeText').textContent=p.reason?'⚠ '+p.reason:'用手指拖曳房間,綠色就能蓋';$('placeOk').disabled=!!p.reason;$('placeOk').textContent=p.index>=0?'✅ 搬到這裡(免費)':'✅ 蓋在這裡 $'+fmt(E.floorCost(S,p.type));}});
+function closeSheet(){$('sheet').classList.remove('on');}
+function openSheet(){$('sheet').classList.add('on');}
+function startRoom(type,index=-1){if(playback)return false;if(index>=0&&type==='lobby'){toast('大廳不能搬動');return false;}landMode=false;closeSheet();const spot=index<0&&O.findSpot(S,type);if(index<0&&!spot)toast('地不夠了,可以先到 🏗 建造 → 🗺 買地');if(spot){const k=D.ROOM_SIZE[type];cam.x=(spot.x+k.w/2)*32-cam.w/cam.s/2;cam.y=(spot.y+k.h/2)*32-(cam.h-140)/cam.s/2;cam.clamp();}const r=index>=0?O.roomRect(S,index):spot?{...spot,...D.ROOM_SIZE[type]}:{x:Math.round((cam.x+cam.w/cam.s/2)/32-D.ROOM_SIZE[type].w/2),y:Math.round((cam.y+cam.h/cam.s/2)/32-D.ROOM_SIZE[type].h/2),...D.ROOM_SIZE[type]};placer.start({...r,type,index});return true;}
+function cancelPlace(){placer.cancel();landMode=false;landPick=null;$('placeBar').hidden=true;}
+function confirmPlace(){let err;if(landMode){if(!landPick)return;err=O.buyLand(S,landPick.cx,landPick.cy);}else{const p=placer.confirm();if(!p)return;err=p.index>=0?E.moveRoom(S,p.index,p.x,p.y):E.buildFloor(S,p.type,p.x,p.y);}if(err){toast(err);return;}cancelPlace();sceneKey='';save();render();}
+function openLand(){placer.cancel();landMode=true;landPick=null;closeSheet();$('placeBar').hidden=false;$('placeText').textContent='點選相鄰土地 · 需要公司 Lv'+O.landNeed(S);$('placeOk').textContent='🗺 確認買地 $'+fmt(O.landCost(S));$('placeOk').disabled=true;}
+$('placeOk').onclick=confirmPlace;$('placeCancel').onclick=cancelPlace;$('sheetClose').onclick=closeSheet;
+let sheetDown=0;$('sheetHandle').addEventListener('pointerdown',e=>{sheetDown=e.clientY;$('sheetHandle').setPointerCapture?.(e.pointerId);});$('sheetHandle').addEventListener('pointerup',e=>{if(e.clientY-sheetDown>45)closeSheet();});
+$('zoomIn').onclick=()=>cam.zoomAt(1.25,cam.w/2,cam.h/2);$('zoomOut').onclick=()=>cam.zoomAt(.8,cam.w/2,cam.h/2);
+const roomAt=(x,y)=>S.floors.findIndex((f,i)=>{const r=O.roomRect(S,i);return x>=r.x*32&&x<(r.x+r.w)*32&&y>=r.y*32&&y<(r.y+r.h)*32;});
+const pointerHandlers={blocked:()=>!S,ghostHit:(x,y)=>placer.active&&x>=placer.p.x*32&&x<(placer.p.x+placer.p.w)*32&&y>=placer.p.y*32&&y<(placer.p.y+placer.p.h)*32,onGhostGrab:(x,y)=>placer.grab(x,y),onGhostDrag:(x,y)=>placer.dragTo(x,y),onHold:(x,y)=>{if(playback||landMode)return false;const i=roomAt(x,y);return i>=0&&startRoom(S.floors[i].type,i);},onTap:(x,y)=>{
+ if(landMode){const cx=Math.floor(x/256),cy=Math.floor(y/256);if(!O.adjacentLand(S,cx,cy))return;landPick={cx,cy};$('placeOk').disabled=S.lv<O.landNeed(S)||S.money<O.landCost(S);$('placeText').textContent='買下這塊地? 需要公司 Lv'+O.landNeed(S);return;}
+ if(placer.active||playback)return;
+ for(const [id,a] of actors)if(Math.abs(a.x-x)<17&&Math.abs(a.y-16-y)<21){if(id==='assistant')openAssistant();else if(S.walkins.some(st=>st.id===id))openWalkin(id);else if(id.startsWith('rep:')){openCompany('partners');toast(S.offers[0]?.greeting||'期待一起合作!');}else if(id.startsWith('npc:'))openNpc(id.slice(4));else if(S.scouted.some(st=>st.id===id))openCompany('scouted');else if(E.starById(S,id))openInteract(id);else openCompany();return;}
+ const i=roomAt(x,y);if(i>=0)openFloor(i);
+}};
+bindPointer(cv,cam,pointerHandlers);
 
 // ---------- 對話泡泡 ----------
 const bubQ = new Map();          // 明星 id → 等著講的話
@@ -364,14 +347,14 @@ function renderGoal() {
 }
 $('tabs').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
-  tab = b.dataset.tab; sfx.tap();
+  if(!b.dataset.tab)return;tab = b.dataset.tab; openSheet();sfx.tap();
   for (const x of $('tabs').children) x.classList.toggle('on', x === b);
   $('panel').scrollTop = 0;
   render();
 });
 function renderTab() {
   const p = $('panel'), y = p.scrollTop;
-  p.innerHTML = tab === 'ops' ? opsHTML() : tab === 'stars' ? starsHTML() : tab === 'prod' ? prodHTML() : coHTML();
+  p.innerHTML = tab === 'ops' ? opsHTML() : tab === 'stars' ? starsHTML() : tab === 'prod' ? prodHTML() : tab === 'build' ? buildHTML() : coHTML();
   if(playback) {                                   // 播放中:先看就好,只有「看事件」可以按
     p.innerHTML='<div class="card2" style="background:#efe9ff"><b>▶ 這週播放中</b><div class="meta">按下面的「⏭ 跳過播放」或右上角 ⏭ 就能馬上排下一週。</div></div>'+p.innerHTML;
     p.querySelectorAll('button:not([data-ev])').forEach(b=>b.disabled=true);
@@ -486,10 +469,10 @@ function starRow(st){
   const open=openCards.has(st.id);
   return `<div class="card2 starRow${open?' open':''}"><div class="starHead" data-fold-star="${st.id}"><img class="pt" style="--g:${st.glow}33" src="${portrait(st).url}" alt=""><div class="body"><div class="nm" style="color:${st.glow}">${st.emoji} ${esc(st.name)} <span class="tag">${careerTag(st)}</span></div><div class="scheduleStats">${scheduleStats(st)}</div></div><span class="fold">${open?'▾':'▸'}</span></div>
     ${st.sprint?`<div class="scheduleNote">🎯 衝刺:${D.SKILLS[st.sprint.skill].name} ${st.skills[st.sprint.skill].toFixed(1)} → ${st.sprint.target}(${st.sprint.left} 週)</div>`:''}
-    ${planRow(st)}${open?starCard(st):''}</div>`;
+    ${planRow(st)}${open?starCard(st,false,true):''}</div>`;
 }
 function switchSchedule() {
-  $('starBox').classList.remove('on');tab='stars';
+  $('starBox').classList.remove('on');openSheet();tab='stars';
   for(const b of $('tabs').children)b.classList.toggle('on',b.dataset.tab===tab);
   render();
 }
@@ -501,24 +484,16 @@ function cycleDay(id,d) {
   const err=E.setDay(S,id,d,options[(options.indexOf(v)+1)%options.length]);
   if(err)toast(err);saveSoon();render();
 }
-function floorListHTML() {
-  return S.floors.map((f,i)=>({f,i})).reverse().map(({f,i})=>`<div class="floorRow"><div><b>${i+1}F ${D.FLOORS[f.type].icon} ${D.FLOORS[f.type].name} Lv${f.lv}</b><div class="muted">${D.FLOORS[f.type].desc}</div></div>${f.lv<3?`<button class="sbtn ghost" data-floor="${i}" ${S.money<E.upgradeCost(S,i)?'disabled':''}>升級 $${fmt(E.upgradeCost(S,i))}</button>`:'最高級'}</div>`).join('');
-}
 function openFloor(i) {
   const f=S.floors[i], def=D.FLOORS[f.type];
-  const here=[...actors].filter(([,a])=>a.fi===i&&!a.hide).map(([id])=>(E.starById(S,id)||S.staff.find(st=>st.id===id)||(id==='assistant'?S.assistant:null)).name);
-  $('roomTitle').textContent=`${i+1}F ${def.icon} ${def.name} Lv${f.lv}`;
-  $('roomBody').innerHTML=`<p class="txt">${def.desc}</p><p class="txt">今天在這層：${here.map(esc).join('、')||'大家都去別處忙了'}</p>${f.lv<3?`<button class="choice" data-room-up="${i}" ${S.money<E.upgradeCost(S,i)?'disabled':''}>升級 $${fmt(E.upgradeCost(S,i))}${S.money<E.upgradeCost(S,i)?'（錢不夠）':''}</button>`:'<p class="muted">已經是最高級！</p>'}`;
+  const here=[...actors].filter(([,a])=>a.fi===i&&!a.hide).map(([,a])=>a.st.name);
+  $('roomTitle').textContent=`${def.icon} ${def.name} Lv${f.lv}`;
+  $('roomBody').innerHTML=`<p class="txt">${def.desc}</p><p class="txt">今天在這間房：${here.map(esc).join('、')||'大家都去別處忙了'}</p>${f.lv<3?`<button class="choice" data-room-up="${i}" ${S.money<E.upgradeCost(S,i)?'disabled':''}>升級 $${fmt(E.upgradeCost(S,i))}${S.money<E.upgradeCost(S,i)?'（錢不夠）':''}</button>`:'<p class="muted">已經是最高級！</p>'}`;
   $('roomBox').classList.add('on');
 }
-function openBuild() {
-  $('roomTitle').textContent='🏗 蓋新樓層';
-  const full=false;
-  $('roomBody').innerHTML=`<p class="txt">目前 ${S.floors.length} 層${full?'，公司要升級才能再往上蓋。':''}</p>`+Object.entries(D.FLOORS).filter(([,f])=>f.build).map(([type,f])=>{
-    const cost=E.floorCost(S,type), reason=full?'公司要先升級':S.money<cost?'錢不夠':'';
-    return `<button class="choice" data-room-build="${type}" ${reason?'disabled':''}>${f.icon} ${f.name} $${fmt(cost)}<div class="muted">${f.desc}${reason?' · '+reason:''}</div></button>`;
-  }).join('');$('roomBox').classList.add('on');
-}
+function buildHTML(){return `<div class="card2"><b>🏗 蓋新房間</b><p>保留一格走廊,大廳不能移動。長按房間 450ms 可搬動。</p><button class="choice" data-land="1">🗺 買地 $${fmt(O.landCost(S))} · 公司 Lv${O.landNeed(S)} · 已有 ${S.land.length} 塊</button></div>`+Object.entries(D.FLOORS).filter(([,f])=>f.build).map(([type,f])=>{const cost=E.floorCost(S,type),r=D.ROOM_SIZE[type],why=S.money<cost?'錢不夠':'';return `<button class="choice" data-place="${type}" ${why?'disabled':''}>${f.icon} ${f.name} $${fmt(cost)} · ${r.w}×${r.h}<div class="muted">${f.desc}${why?' · '+why:''}</div></button>`;}).join('');}
+function openBuild(){tab='build';render();openSheet();}
+$('panel').addEventListener('click',e=>{const b=e.target.closest('[data-place],[data-land]');if(!b||playback)return;if(b.dataset.land)openLand();else if(b.dataset.place)startRoom(b.dataset.place);});
 function openInteract(id) {
   const st=E.starById(S,id);$('roomTitle').textContent=`${st.emoji} ${st.name} · ${careerTag(st)} · 信任 ${Math.round(st.trust)}`;
   $('roomBody').innerHTML=`<div style="text-align:center">${ptImg(st)}</div>`+[['chat','💬 聊天'],['snack','🍪 點心 $60'],['cheer','👏 鼓勵'],['talk','☕ 談心 $150']].map(([kind,label])=>`<button class="choice" data-interact="${kind}" data-id="${id}" ${st.done[kind]?'disabled':''}>${label}${st.done[kind]?'（這週做過了）':''}</button>`).join('')+`<button class="choice" data-room-star="${id}">📋 資料</button><button class="choice" data-analysis="${id}">📈 發展分析</button>`;
@@ -536,7 +511,7 @@ $('roomBody').onclick=e=>{
   if(d.assistantUp){err=E.upgradeAssistant(S);if(err)toast(err);openAssistant();save();render();return;}
   if(d.tipsToggle){S.tipsOff=!S.tipsOff;if(S.tipsOff){tutorialQueue=[];$('tutorialCard').hidden=true;$('tutorialCard').innerHTML='';}openAssistant();save();render();return;}
   if(d.roomUp!==undefined)err=E.upgradeFloor(S,+d.roomUp);
-  if(d.roomBuild)err=E.buildFloor(S,d.roomBuild);
+  if(d.roomBuild){$('roomBox').classList.remove('on');startRoom(d.roomBuild);return;}
   if(d.roomStar){$('roomBox').classList.remove('on');openStar(d.roomStar);return;}
   if(d.interact){const st=E.starById(S,d.id), already=st.done[d.interact];
     const result=E.interact(S,d.id,d.interact);err=typeof result==='string' && (already || !st.done[d.interact])?result:null;}
@@ -551,12 +526,12 @@ function starsHTML() {
   if (S.mentor) h += `<div class="card2"><b>🧑‍🏫 前輩 ${esc(S.mentor.name)}</b><div class="meta">上一季留下來的前輩,不搶工作,教大家練習(練習效果 +15%、演出 +3)。</div></div>`;
   return h;
 }
-function starCard(st, full = false) {
+function starCard(st, full = false, inRow = false) {
   const fr = E.friendsOf(S, st), rv = E.rivalsOf(S, st);
   const sk = D.SKILL_IDS.map(k => `<div class="${k === E.bestSkill(st) ? 'sp' : ''}">${D.SKILLS[k].icon}${st.skills[k].toFixed(1)}</div>`).join('');
   const plans = full ? `<button class="miniSched" data-schedule="1" aria-label="查看這週行程">${st.sched.map(v=>`<span>${actIcon(v)}</span>`).join('')}</button>` : '';
-  return `<div class="card2"><div class="star"><img class="pt big" data-open="${st.id}" style="--g:${st.glow}33" src="${portrait(st).url}" alt="">
-    <div class="body"><div class="nm" style="color:${st.glow}">${st.emoji} ${esc(st.name)} <span class="tag">${st.traits.map(t => D.TRAITS[t].icon + D.TRAITS[t].name).join(' · ')}</span></div>
+  return `<div class="${inRow?'rowMore':'card2'}"><div class="star">${inRow?'':`<img class="pt big" data-open="${st.id}" style="--g:${st.glow}33" src="${portrait(st).url}" alt="">`}
+    <div class="body"><div class="nm" style="color:${st.glow}">${inRow?`<button class="sbtn ghost" data-open="${st.id}">📋 完整資料</button>`:`${st.emoji} ${esc(st.name)}`} <span class="tag">${st.traits.map(t => D.TRAITS[t].icon + D.TRAITS[t].name).join(' · ')}</span></div>
     <div class="meta">${careerTag(st)} · 潛力 ${S.assistant.lv>=1?E.potentialStars(st):'?'}${(g => g ? ` · 👯 ${esc(g.name)}${g.center === st.id ? '・C 位' : ''}` : '')(E.groupOf(S, st.id))}</div><div class="sk">${sk}</div>
     <div class="bars"><div>${moodFace(st.mood)} 心情${bar(st.mood, '#ff8fb1')}</div><div>⚡ 體力${bar(st.energy, st.energy < 25 ? '#ff6f6f' : '#7fdc8a')}</div><div>💗 歸屬${bar(st.loyalty, st.loyalty < 30 ? '#ff6f6f' : '#b98cff')}</div></div>
     <div class="wish">👥 粉絲 ${fmt(st.fans)}${st.wish ? ` · 💭 ${esc(E.wishText(S, st))}(剩 ${st.wish.left} 週)` : ''}${st.lost >= 2 ? ` · 連續 ${st.lost} 次沒選上` : ''}</div>
@@ -584,8 +559,8 @@ function coHTML() {
   let h = `<div class="card2"><div class="lvbox"><div><b>🏢 Lv${S.lv} ${lv.name}</b><div class="meta">明星 ${E.debuted(S).length}/${lv.max} 位 · 每週 ${lv.ops} 個機會 · 房租 $${fmt(lv.rent)}/週</div></div>
     ${nx ? `<button class="sbtn" data-up="1" ${why ? 'disabled' : ''}>升級 $${fmt(nx.cost)}</button>` : '<span class="tag">最高級</span>'}</div>
     ${nx ? `<div class="meta">下一級:${nx.name}(要粉絲 ${fmt(nx.fans)}、$${fmt(nx.cost)})→ ${nx.max} 位明星、每週 ${nx.ops} 個機會${S.lv + 1 === 3 ? '、解鎖虛擬演唱會和舞台' : S.lv + 1 === 2 ? '、解鎖廣告/遊戲代言/選秀' : ''}${why ? ' · <b>還差:' + why + '</b>' : ''}</div>` : ''}
-    <div class="meta">目前 ${S.floors.length} 層。</div></div>`;
-  h += `<div class="card2"><b>🏢 公司樓層</b>${floorListHTML()}<button class="sbtn" data-build="1">🏗 蓋新樓層</button></div>`;
+    <div class="meta">目前 ${S.floors.length} 間房。</div></div>`;
+
   h += recruitmentHTML();
   // 試鏡
   h += `<div class="card2"><b>🎙 試鏡</b>`;
@@ -737,6 +712,7 @@ $('evChoices').addEventListener('click', e => {
 $('nextBtn').addEventListener('click', () => {
   if (!S) return;
   if (playback) { skip(); return; }                // 播放中按下面的按鈕 = 跳過播放
+  if(placer.active||landMode){toast('先完成建造或按取消');return;}
   if ($('repBox').classList.contains('on')) { $('repGo').click(); return; }   // 週報還開著:先收起來
   if (S.event) { openEvent(); return; }
   const unassigned = S.ops.filter(o => o.status === 'open' && !o.slots[0].who && o.type !== 'dome').length;
@@ -754,7 +730,7 @@ function playBtnText() { $('noPlayBtn').textContent = noPlay ? '🎬 播放:關'
 $('noPlayBtn').addEventListener('click', () => {
   noPlay = !noPlay; playBtnText(); sfx.tap();
   try { localStorage.setItem('aistar-noplay', noPlay ? '1' : '0'); } catch (e) { /* 存不了就只在這次有效 */ }
-  toast(noPlay ? '之後按「開始這週」會直接出週報' : '之後會在大樓裡播完一週');
+  toast(noPlay ? '之後按「開始這週」會直接出週報' : '之後會在辦公室播完一週');
 });
 playBtnText();
 function showReport(R) {
@@ -850,8 +826,8 @@ const newSeed = () => (Date.now() % 2147483647) || 1;
 function show(id) { for (const s of ['startScreen', 'gameScreen']) $(s).classList.toggle('on', s === id); }
 /** 把一份存檔放進遊戲(開始、讀存檔碼、第二季都走這裡) */
 function boot(sv) {
-  S = E.migrate(sv); assistantBubbleWeek=0; tutorialQueue=[]; $('tutorialCard').hidden=true;$('tutorialCard').innerHTML=''; playback=null; sceneKey=''; $('playControls').hidden=true; $('nextBtn').disabled=false;
-  for(const n of notifications)n.el.remove();notifications=[];walkinArrival.clear();
+  cancelPlace();actors.clear();officeGrid=null;S = E.migrate(sv); assistantBubbleWeek=0; tutorialQueue=[]; $('tutorialCard').hidden=true;$('tutorialCard').innerHTML=''; playback=null; sceneKey=''; $('playControls').hidden=true; $('nextBtn').disabled=false;
+  for(const n of notifications)n.el.remove();notifications=[];
   actors.clear(); bubQ.clear(); for (const [, b] of bubOn) b.el.remove(); bubOn.clear();
   ptCache.clear(); bgCanvas = null;
   bubbleSeen = Math.max(0, S.seq - 6);           // 開場只冒最近幾句
@@ -938,23 +914,13 @@ requestAnimationFrame(frame);
 
 // 開發用:自動玩家、快轉
 if (import.meta.env?.DEV !== false) window.AS = {   // 開發用(正式版沒有;Node 假 DOM 測試也要用)
-  get S() { return S; }, openAssistant, adviceCard, showTip, analysisHTML, scheduleHTML, openStar, openPicker, cycleDay, openWalkin, notify, walkinHTML, openVisit, openNpc, renderPartners, openEvaluation, openTrainer, openAwards, openProjectWizard, openGroupWizard, actors, cam, view, E, D, play, skip, render, save, boot, showEnding, openEvent, refreshStart, loadBest: () => loadBest(SAVE_KEY),
+  get S() { return S; }, O, placer, pointerHandlers, startRoom, confirmPlace, cancelPlace, openLand, openBuild, openFloor, closeSheet, openSheet, get landMode(){return landMode;}, openAssistant, adviceCard, showTip, analysisHTML, scheduleHTML, openStar, openPicker, cycleDay, openWalkin, notify, walkinHTML, openVisit, openNpc, renderPartners, openEvaluation, openTrainer, openAwards, openProjectWizard, openGroupWizard, actors, cam, view, E, D, play, skip, render, save, boot, showEnding, openEvent, refreshStart, loadBest: () => loadBest(SAVE_KEY),
   next() { $('nextBtn').click(); }, closeReport() { $('repGo').click(); },
   // 窗格在背景時 requestAnimationFrame 不跑:手動推進 sec 秒的畫格
   tick(sec = 1) { const t0 = performance.now(); for (let t = 0; t < sec; t += 0.05) { step(0.05); updateBubbles(t0 + t * 1000); } draw(t0 + sec * 1000); updateBubbles(t0 + sec * 1000); },
 };
 
-function staffTarget(st,idx) {
- const p=playback?(playback.t%4)/4:0.3;
- let type=st.role==='trainer'?(st.skill==='charm'?'style':st.skill):D.STAFF_ROLES[st.role].floor;
- let fi=roomIndex(type);if(fi<0)fi=0;
- const outside=!!playback&&p>=0.85;
- if(outside)fi=0;
- else if(playback&&p>=0.45&&p<0.60){fi=Math.max(0,roomIndex('cafe'));}
- let [x,y]=ROOMS[S.floors[fi].type].spots[idx%4];
- if(!(playback&&p>=0.45&&p<0.60)){[x,y]=st.role==='chef'?[40,59]:st.role==='manager'?[85,78]:st.role==='trainer'?[244,79]:st.role==='scout'?[48,73]:[42,77];}
- return {fi,x:outside?10:x,y:floorY(fi)+y,act:p>=0.45&&p<0.60?'eat':'staff',outside};
-}
+function staffTarget(st,idx){return targetOf(st,idx);}
 function recruitmentHTML() {
  const lv=E.roomLv(S,'scout'), reveal=S.assistant.lv>=2||lv>=3||S.staff.some(st=>st.role==='scout'&&st.lv===3);
  return districtHTML()+`<div class="card2" id="scouted"><b>🙋 新人(自薦/星探)</b><div class="meta">練習生 ${E.team(S).filter(st=>st.trainee).length}/${E.traineeCapacity(S)} 位${lv?'':' · 蓋星探部就能找新人'}</div>`+S.walkins.map(st=>walkinHTML(st)).join('')+S.scouted.map(st=>`<div class="bid">${ptImg(st)}<div class="say">${nameTag(st)}<div class="why">${st.traits.map(t=>D.TRAITS[t].name).join(' · ')}<br>${careerTag(st)} · 潛力 ${S.assistant.lv>=1||lv>=2?E.potentialStars(st):'?'}${S.assistant.lv>=2?' · '+D.SKILL_IDS.map(k=>D.SKILLS[k].name+' '+st.skills[k].toFixed(1)).join(' · '):reveal?' · 專長 '+D.SKILLS[E.bestSkill(st)].name:''}<br>${esc(st.intro)}</div><button class="sbtn" data-scout-sign="${st.id}">簽成練習生 $300</button> <button class="sbtn ghost" data-scout-no="${st.id}">不用了</button></div></div>`).join('')+`</div><div class="card2"><b>👥 員工 (${S.staff.length}/${1+S.lv})</b>`+S.staff.map(st=>`<div class="floorRow"><div>${D.STAFF_ROLES[st.role].icon} ${esc(st.name)} Lv${st.lv}${st.skill?' · '+D.SKILLS[st.skill].name:''}<div class="meta">${D.STAFF_ROLES[st.role].desc} · 週薪 $${D.staffSalary(st)}</div></div><button class="sbtn ghost" data-fire="${st.id}">謝謝你，再見</button></div>`).join('')+`<div class="h4">請人 $${600+300*S.staff.length}</div>`+Object.entries(D.STAFF_ROLES).map(([role,r])=>{const why=E.canHire(S,role);return `<button class="choice" data-hire="${role}" ${why?'disabled':''}>${r.icon} ${r.name}<div class="meta">${r.desc}${why?' · '+why:''}</div></button>`;}).join('')+'</div>';
@@ -980,7 +946,7 @@ function openEvaluation(R) {
 }
 
 function openCompany(section) {
- tab='co';for(const b of $('tabs').children)b.classList.toggle('on',b.dataset.tab===tab);
+ openSheet();tab='co';for(const b of $('tabs').children)b.classList.toggle('on',b.dataset.tab===tab);
  render();if(section)$(section)?.scrollIntoView?.({block:'nearest'});
 }
 
@@ -990,7 +956,7 @@ function openCompany(section) {
 function prodHTML() {
   const lv = E.roomLv(S, 'production');
   let h = `<div class="card2"><b>🎛 製作部</b>`;
-  if (!lv) h += `<div class="meta">先蓋 🎛 製作部,就能自己做單曲、短劇、綜藝和團體專輯。做好了每週都有播放分潤。</div><button class="sbtn" data-gotobuild="1">🏗 去蓋樓層</button></div>`;
+  if (!lv) h += `<div class="meta">先蓋 🎛 製作部,就能自己做單曲、短劇、綜藝和團體專輯。做好了每週都有播放分潤。</div><button class="sbtn" data-gotobuild="1">🏗 去蓋房間</button></div>`;
   else h += `<div class="meta">Lv${lv} · 同時可以做 ${E.projectSlots(S)} 個企劃(現在 ${E.projectsRunning(S)} 個)</div><button class="sbtn" data-proj-new="1" ${E.projectsRunning(S) >= E.projectSlots(S) ? 'disabled' : ''}>＋ 新企劃</button></div>`;
   for (const op of S.ops.filter(o => o.project)) h += op.status === 'open' ? opCard(op, `<div class="acts"><button class="sbtn ghost" data-proj-cancel="${op.id}">取消企劃(退一半預算)</button></div>`) : runCard(op);
   // 音樂排行
@@ -1014,7 +980,7 @@ function prodHTML() {
   h += `<div class="meta">選 3~5 位已出道的明星組團,團員感情越好默契越高;做專輯時大家會搶 C 位!</div><button class="sbtn" data-grp-new="1" ${can < 3 ? 'disabled' : ''}>＋ 成立新團體($${fmt(D.GROUP_COST)})</button>${can < 3 ? '<span class="muted"> 沒有團的已出道明星要 3 位以上</span>' : ''}</div>`;
   // SNS
   h += `<div class="card2"><b>📱 SNS</b>`;
-  if (!E.roomLv(S, 'sns')) h += `<div class="meta">蓋 📱 SNS 部門之後,每週選一種貼文策略,大家會被動漲粉。</div><button class="sbtn" data-gotobuild="1">🏗 去蓋樓層</button>`;
+  if (!E.roomLv(S, 'sns')) h += `<div class="meta">蓋 📱 SNS 部門之後,每週選一種貼文策略,大家會被動漲粉。</div><button class="sbtn" data-gotobuild="1">🏗 去蓋房間</button>`;
   else h += `<div class="meta">這週的貼文策略(SNS 部門 Lv${E.roomLv(S, 'sns')}):</div><div class="snsOpts">${Object.entries(D.SNS).map(([k, v]) => `<button data-sns="${k}" class="${S.sns.strategy === k ? 'on' : ''}">${v.icon} ${v.name}<div class="muted">${v.desc}</div></button>`).join('')}</div>`;
   h += (S.posts || []).slice(0, 6).map(p => { const st = E.starById(S, p.id); return st ? `<div class="post">${ptImg(st)}<div><b style="color:${st.glow}">${esc(st.name)}</b> <span class="muted">第 ${p.week} 週</span><div>${esc(p.text)}</div><div class="lk">♥ ${fmt(p.likes)}</div></div></div>` : ''; }).join('');
   return h + '</div>';
@@ -1069,8 +1035,8 @@ $('roomBody').addEventListener('click', e => {
   if (k === 'budget') {
     const err = E.startProject(S, wiz.type, v, wiz.groupId);
     if (err) { toast('⚠ ' + err); sfx.bad(); return; }
-    sfx.pick(); $('roomBox').classList.remove('on'); toast(`🎛 企劃開始了!到「🎛 製作」選人`);
-    tab = 'prod'; for (const x of $('tabs').children) x.classList.toggle('on', x.dataset.tab === tab);
+    sfx.pick(); $('roomBox').classList.remove('on');openSheet(); toast(`🎛 企劃開始了!到「🎛 製作」選人`);
+    openSheet();tab = 'prod'; for (const x of $('tabs').children) x.classList.toggle('on', x.dataset.tab === tab);
     save(); render(); return;
   }
   if (k === 'concept') { grpConcept = v; for (const x of $('grpConcepts').children) x.classList.toggle('on', x.dataset.v === v); sfx.tap(); return; }
@@ -1127,7 +1093,7 @@ function closeAwards() { $('awardBox').classList.remove('on'); award = null; ren
 
 function renderPartners(){
  let h='<div class="card2" id="partners"><b>🤝 合作</b>';
- if(!E.roomLv(S,'meeting'))h+='<p>蓋 🤝 會議室，別家公司就會來找你合作</p><button class="sbtn" data-gotobuild="1">去蓋樓</button>';
+ if(!E.roomLv(S,'meeting'))h+='<p>蓋 🤝 會議室，別家公司就會來找你合作</p><button class="sbtn" data-gotobuild="1">去蓋房間</button>';
  h+=S.rivals.map((r,i)=>`<div class="card2"><b>${r.icon} ${esc(r.name)}</b><div>粉絲 ${fmt(r.fans)} · 友好度 ${r.rel}/100</div><progress max="100" value="${r.rel}" style="width:100%"></progress><div>${r.stars.map(st=>`<button class="sbtn ghost" data-npc="${st.id}" aria-label="${esc(st.name)}">${ptImg(st)}</button>`).join('')}<button class="sbtn" data-visit="${i+1}">👀 參觀</button></div></div>`).join('');
  h+=S.offers.map(o=>`<div class="card2"><b>${esc(S.rivals[o.partner].name)} · ${D.OFFERS[o.type].name}</b><p>派 ${o.op.slots.length} 人 · 每週 ${o.op.days} 天、${o.op.weeks} 週${o.type==='loan'?` · ${D.SKILLS[o.op.loanSkill].name} ≥ 5`:''}</p><div>預估酬勞 $${fmt(E.cooperationPreview(S,o.op).money)} · 粉絲 +${fmt(E.cooperationPreview(S,o.op).fans)}</div><div class="muted">本週內回覆，實際成果依演出評價。</div><button class="sbtn" data-offer-yes="${o.id}">接受</button> <button class="sbtn ghost" data-offer-no="${o.id}">婉拒</button></div>`).join('');
  return h+'</div>';
@@ -1142,30 +1108,19 @@ function openVisit(i){
  const animate=()=>{if(!$('roomBox').classList.contains('on')||$('visitCanvas')!==c)return;g.drawImage(base,0,0);r.stars.forEach((st,j)=>g.drawImage(portrait(st,'down',Math.floor(performance.now()/600)%2?'idle0':'walk1').canvas,90+j*45,(r.rooms.length-2-j)*96+48));requestAnimationFrame(animate);};$('roomBox').classList.add('on');animate();
 }
 
-const streetCache={}, walkinArrival=new Map();
+const streetCache={};
 function streetSprite(k){return streetCache[k] ||= toCanvas(STREET_KIT[k].make());}
-function drawStreet(g){
- const id=S.district, ground=floorY(0)+96;
- g.drawImage(streetSprite('skyline_'+id),0,ground-180);
- for(let y=ground-96;y>30;y-=96)for(const [x,k] of [[0,'a'],[368,'b']])g.drawImage(streetSprite('neighbor_'+id+'_'+k),x,y);
- for(let x=0;x<RW;x+=32){g.drawImage(streetSprite('sidewalk'),x,ground);g.drawImage(streetSprite('road'),x,ground+24);}
- for(const x of [27,386])g.drawImage(streetSprite('street_lamp'),x,ground-37);
- g.drawImage(streetSprite(id==='harbor'?'palm':'tree'),2,ground-35);
- const prop={alley:'cat',shops:'shop_awning',city:'big_screen_out',avenue:'neon_arrow',harbor:'palm'}[id];
- g.drawImage(streetSprite(prop),368,ground-(id==='alley'?2:70));if(id==='alley')g.drawImage(streetSprite('power_pole'),30,ground-64);
-}
 let notifications=[];
 function notify(f){const el=document.createElement('div');el.className='notice';el.textContent=f.text;$('notifications').appendChild(el);notifications.push({el,until:performance.now()+4000});while(notifications.length>3)notifications.shift().el.remove();}
 $('logBtn').onclick=()=>{feedSeen=S.seq;$('bFeed').style.display='none';$('roomTitle').textContent='📜 紀錄';$('roomBody').innerHTML=feedHTML();$('roomBox').classList.add('on');};
 const conditionText=st=>({lead:'想當主角',album:'想要自己的單曲',off:'每週至少一天放假'}[st.walkinCondition]||'沒有額外條件');
 function walkinHTML(st){return `<div class="card2">${ptImg(st)}<b>${esc(st.name)} · ${st.trainee?'🌱 素人':'⭐ 有經驗的明星'}</b><p>${esc(st.intro)}</p><p>${st.traits.map(t=>D.TRAITS[t].name).join(' · ')} · ${careerTag(st)}</p><p>${D.SKILL_IDS.map(k=>D.SKILLS[k].name+':'+(S.assistant.lv>=2||!st.trainee||k===E.bestSkill(st)?st.skills[k].toFixed(1):'?')).join(' · ')}</p><p>潛力 ${S.assistant.lv>=1||E.roomLv(S,'scout')>=2?E.potentialStars(st):'?'} · ${conditionText(st)}</p><button class="sbtn" data-walkin-sign="${st.id}">簽約 $${fmt(st.signCost)}</button> <button class="sbtn ghost" data-walkin-no="${st.id}">婉拒</button></div>`;}
 function openWalkin(id){const st=S.walkins.find(s=>s.id===id);if(!st)return;$('roomTitle').textContent='🙋 自薦';$('roomBody').innerHTML=walkinHTML(st);$('roomBox').classList.add('on');}
-function drawWalkins(){ctx.globalAlpha=1;ctx.textAlign='left';S.walkins.forEach((st,i)=>{const t=Math.min(1,(sceneTime-(walkinArrival.has(st.id)?walkinArrival.get(st.id):(walkinArrival.set(st.id,sceneTime),sceneTime)))/3),x=t<0.5?-60+t*136:8+(t-0.5)*2*(([110,151,263][i]-8)),y=t<0.5?floorY(0)+108:floorY(0)+108-(t-0.5)*32;ctx.drawImage(portrait(st,t<1?'right':'down',t<1?'walk1':'idle0').canvas,x-12,y-30);ctx.font='14px sans-serif';ctx.fillText('❔',x-6,y-34);});}
 function districtHTML(){const d=E.district(S),n=D.DISTRICTS[D.DISTRICTS.indexOf(d)+1];return `<div class="card2"><b>🚚 地區 · ${d.icon} ${d.name}</b><img style="width:100%;height:48px;object-fit:cover;image-rendering:pixelated" src="${streetSprite('skyline_'+d.id).toDataURL()}" alt="${d.name}街景"><p>房租 ×${d.rent} · 粉絲/酬勞 +${Math.round(d.bonus*100)}% · 每週機會 +${d.ops}</p>${n?`<p>下一站:${n.icon} ${n.name} · 公司 Lv${n.lv}${n.fans?' · 粉絲 '+fmt(n.fans):''} · $${fmt(n.cost)}<br>房租 ×${n.rent} · 粉絲/酬勞 +${n.bonus*100}% · 每週機會 +${n.ops}</p><button class="sbtn" data-move="${n.id}" ${E.canMoveDistrict(S,n.id)?'disabled':''}>搬家</button>`:'已到最終地區'}</div>`;}
-for(const id of ['panel','roomBody'])$(id).addEventListener('click',e=>{const b=e.target.closest('[data-walkin-sign],[data-walkin-no],[data-move]');if(!b||playback)return;let err;if(b.dataset.move){if(!confirm('確定搬家?所有樓層、明星和員工都會一起搬。'))return;err=E.moveDistrict(S,b.dataset.move);}else if(b.dataset.walkinSign)err=E.signWalkin(S,b.dataset.walkinSign);else E.declineWalkin(S,b.dataset.walkinNo);if(err)toast(err);else{$('roomBox').classList.remove('on');render();save();}});
+for(const id of ['panel','roomBody'])$(id).addEventListener('click',e=>{const b=e.target.closest('[data-walkin-sign],[data-walkin-no],[data-move]');if(!b||playback)return;let err;if(b.dataset.move){if(!confirm('確定搬家?所有房間、明星和員工都會一起搬。'))return;err=E.moveDistrict(S,b.dataset.move);}else if(b.dataset.walkinSign)err=E.signWalkin(S,b.dataset.walkinSign);else E.declineWalkin(S,b.dataset.walkinNo);if(err)toast(err);else{$('roomBox').classList.remove('on');render();save();}});
 
 let assistantBubbleWeek=0;
-function assistantTarget(){const p=playback?(playback.t%4)/4:0.3,eat=!!playback&&p>=0.45&&p<0.60,outside=!!playback&&p>=0.85,fi=eat?Math.max(0,roomIndex('cafe')):0;return {fi,x:outside?10:eat?155:48,y:floorY(fi)+78,act:eat?'eat':'staff',outside};}
+function assistantTarget(){return targetOf(S.assistant,0);}
 const impact=t=>S.tipsOff?'':`<div class="impact">${esc(t)}</div>`;
 function scoreHTML(st,op,slot){return S.assistant.lv>=3?`<small>${Math.round(E.perf(S,st,op,slot,false))}</small>`:'';}
 function gradeLabel(st,op,slot){return E.estimate(S,st,op,slot).g+(S.assistant.lv>=3?' '+Math.round(E.perf(S,st,op,slot,false)):'');}
@@ -1174,7 +1129,7 @@ function openAssistant(){$('roomTitle').textContent='💡 小助理';$('roomBody
 function analysisHTML(st){const a=E.analyzeStar(S,st),k=a.strongest;return `<div id="developmentAnalysis" class="card2"><b>📈 發展分析</b><p>最突出:${D.SKILLS[k.skill].name} ${k.value.toFixed(1)},全公司第 ${k.rank}。${esc(a.trait)}</p><p>下一個目標:${esc(a.next.text)}<br>${esc(a.next.progress)}</p><p>建議練習:${esc(a.advice)}</p>${a.aptitude.length?`<p>🧭 適性:${a.aptitude.slice(0,3).map(x=>x.name+' '+x.score).join('、')}${a.aptitude[0].id!==st.career?'<br>其實他也很適合當 '+a.aptitude[0].name:''}</p>`:''}</div>`;}
 function scheduleStats(st){return D.SKILL_IDS.map(k=>`${k===E.bestSkill(st)?'<b>':''}${D.SKILLS[k].icon}${st.skills[k].toFixed(1)}${k===E.bestSkill(st)?'</b>':''}`).join(' ')+` · ⚡${Math.round(st.energy)} ${moodFace(st.mood)}`;}
 function scheduleGains(st){return D.SKILL_IDS.map(k=>{const days=st.sched.filter(v=>v==='train:'+k).length;return days?'本週 '+D.SKILLS[k].icon+' +'+E.trainingGain(S,st,k,days).toFixed(1):'';}).filter(Boolean).join(' · ');}
-const TIP_TEXT={ops:['📋 機會','先看技能與預估評價,再選適合的人。','沒人接的機會,下週會被別家公司接走。'],sched:['📅 行程','每人每週選一件事就好。','工作天照預約,週日固定休息。'],stars:['⭐ 明星與行程','每人每週選一件事:練哪項、直播、休息或放假。','工作天照預約,週日固定休息;點名字展開資料。'],prod:['🎛 製作','蓋製作部後,可以做自己的作品。','上架後每週都有播放分潤。'],co:['🏢 公司','在這裡升級公司、擴樓、找新人和員工。','搬到新地區也能提高曝光。'],event:['📣 事件','每個選擇都有不同影響。','處理事件後才能進到下一週。'],evaluation:['🌱 月末評鑑','每四週檢查練習生的進步。','準備好了就能安排出道。'],awards:['🏆 頒獎','每二十四週舉辦頒獎典禮。','作品與粉絲都是努力的成果。'],offer:['🤝 合作邀請','別家公司會提出合作。','注意天數、技能要求與回覆期限。'],walkin:['🙋 自薦','有人來公司毛遂自薦。','兩週沒回覆就會離開,記得看條件。']};
+const TIP_TEXT={ops:['📋 機會','先看技能與預估評價,再選適合的人。','沒人接的機會,下週會被別家公司接走。'],sched:['📅 行程','每人每週選一件事就好。','工作天照預約,週日固定休息。'],stars:['⭐ 明星與行程','每人每週選一件事:練哪項、直播、休息或放假。','工作天照預約,週日固定休息;點名字展開資料。'],prod:['🎛 製作','蓋製作部後,可以做自己的作品。','上架後每週都有播放分潤。'],co:['🏢 公司','在這裡升級公司、擴建、找新人和員工。','搬到新地區也能提高曝光。'],event:['📣 事件','每個選擇都有不同影響。','處理事件後才能進到下一週。'],evaluation:['🌱 月末評鑑','每四週檢查練習生的進步。','準備好了就能安排出道。'],awards:['🏆 頒獎','每二十四週舉辦頒獎典禮。','作品與粉絲都是努力的成果。'],offer:['🤝 合作邀請','別家公司會提出合作。','注意天數、技能要求與回覆期限。'],walkin:['🙋 自薦','有人來公司毛遂自薦。','兩週沒回覆就會離開,記得看條件。']};
 let tutorialQueue=[];
 function showTip(key){
  if(!S||S.tipsOff||S.seenTips.includes(key)||!TIP_TEXT[key])return;
