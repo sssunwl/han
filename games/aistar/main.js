@@ -105,11 +105,22 @@ const MAP_ROOMS=Object.fromEntries(Object.entries(ROOMS).map(([type,room])=>{
  const {w,h}=D.ROOM_SIZE[type];
  return [type,{furniture:room.furniture.map(([key,x,y,lv])=>[key,12+x/288*(w*32-40),22+y/96*(h*32-65),lv]),spots:Array.from({length:(w-2)*(h-2)},(_,i)=>[1+i%(w-2),1+Math.floor(i/(w-2))])}];
 }));
+let initialLayoutPending=false, layoutQueued=false;
 function layout(initial=false) {
+  initialLayoutPending ||= initial;
+  const rect=cv.getBoundingClientRect();
+  if(!rect.width || !rect.height){
+    if(!layoutQueued){layoutQueued=true;requestAnimationFrame(()=>{layoutQueued=false;layout();});}
+    return;
+  }
+  initial=initialLayoutPending;initialLayoutPending=false;
   cam.resize();
   if(initial){cam.s=Math.max(cam.minScale,Math.min(cam.w/512,(cam.h-140)/640,cam.maxScale));cam.x=512-cam.w/cam.s/2;cam.y=1640-(cam.h-70)/cam.s;cam.clamp();}
 }
 new ResizeObserver(()=>layout()).observe(cv);
+window.visualViewport?.addEventListener('resize',()=>layout());
+addEventListener('resize',()=>layout());
+cv.addEventListener('contextmenu',e=>e.preventDefault());
 let officeGrid=null;
 function buildBg(){
  const c=document.createElement('canvas');c.width=1024;c.height=1760;const g=c.getContext('2d');g.imageSmoothingEnabled=false;
@@ -127,7 +138,7 @@ function buildBg(){
   for(let y=0;y<r.h;y++){g.drawImage(spr('wall_side'),r.x*32,(r.y+y)*32);g.drawImage(spr('wall_side'),(r.x+r.w)*32-8,(r.y+y)*32);}
   g.save();g.beginPath();g.rect(r.x*32+8,r.y*32+17,r.w*32-16,r.h*32-49);g.clip();
   for(const [k,x,y,lv] of MAP_ROOMS[f.type].furniture)if(f.lv>=lv){const asset=spr(k);g.drawImage(asset,r.x*32+x,r.y*32+y,asset.width*.65,asset.height*.65);}
-  g.restore();g.fillStyle='#27243edb';g.fillRect(r.x*32+6,r.y*32+3,r.w*32-12,17);g.fillStyle='#fff';g.font='bold 10px sans-serif';g.textAlign='left';g.fillText(D.FLOORS[f.type].name+' Lv'+f.lv,r.x*32+10,r.y*32+15);
+  g.restore();
  }
  if(S.district==='harbor')for(let x=0;x<32;x++)for(let y=46;y<48;y++)if(!O.ownsTile(S,x,y)){g.drawImage(spr('floor_wood'),x*32,y*32);}
  if(S.district==='shops')for(const x of [25,890])g.drawImage(streetSprite('shop_awning'),x,1450);
@@ -190,7 +201,7 @@ function draw(){
  ctx.setTransform(cam.dpr,0,0,cam.dpr,0,0);ctx.fillStyle='#242637';ctx.fillRect(0,0,cam.w,cam.h);cam.apply(ctx);ctx.drawImage(bgCanvas,0,0);
  ctx.drawImage(streetSprite(Math.floor(sceneTime/8)%3?'car':'bus'),-70+(sceneTime%16)*75,1580);
  for(const a of [...actors.values()].sort((a,b)=>a.y-b.y)){drawActor(a.st,a);if(a.st.id==='assistant'||S.walkins.some(st=>st.id===a.st.id)){ctx.fillStyle='#fff';ctx.font='14px sans-serif';ctx.fillText(a.st.id==='assistant'?'💡':'❔',a.x-7,a.y-35);}}
- S.floors.forEach((f,i)=>{const r=O.roomRect(S,i),count=[...actors.values()].filter(a=>a.fi===i).length;ctx.fillStyle='#fff';ctx.font='10px sans-serif';ctx.textAlign='right';ctx.fillText('👥 '+count+(['sing','dance','act','talk','style'].includes(f.type)?'/'+(f.lv+1):''),(r.x+r.w)*32-10,r.y*32+30);});
+ S.floors.forEach((f,i)=>{const r=O.roomRect(S,i);ctx.font=`bold ${10*cam.kz()}px sans-serif`;ctx.textAlign='left';ctx.fillStyle='#27243eee';ctx.fillRect(r.x*32+6,r.y*32+3,ctx.measureText(D.FLOORS[f.type].name+' Lv'+f.lv).width+8,16*cam.kz());ctx.fillStyle='#fff';ctx.fillText(D.FLOORS[f.type].name+' Lv'+f.lv,r.x*32+10,r.y*32+3+12*cam.kz());const count=[...actors.values()].filter(a=>a.fi===i).length;ctx.fillStyle='#fff';ctx.font=`${10*cam.kz()}px sans-serif`;ctx.textAlign='right';ctx.fillText('👥 '+count+(['sing','dance','act','talk','style'].includes(f.type)?'/'+(f.lv+1):''),(r.x+r.w)*32-10,r.y*32+30);});
  if(landMode)for(let cy=0;cy<6;cy++)for(let cx=0;cx<4;cx++)if(O.adjacentLand(S,cx,cy)){ctx.fillStyle=landPick?.cx===cx&&landPick?.cy===cy?'#80efb966':'#f9d78133';ctx.fillRect(cx*256,cy*256,256,256);ctx.strokeStyle='#ffe9a2';ctx.strokeRect(cx*256,cy*256,256,256);ctx.fillStyle='#fff';ctx.font='bold 18px sans-serif';ctx.textAlign='center';ctx.fillText('$'+fmt(O.landCost(S)),cx*256+128,cy*256+128);}
  if(placer.active){const p=placer.p;ctx.fillStyle=p.reason?'#ff526d88':'#60efa488';ctx.fillRect(p.x*32,p.y*32,p.w*32,p.h*32);ctx.strokeStyle=p.reason?'#ff5577':'#b4ffd1';ctx.lineWidth=3;ctx.strokeRect(p.x*32,p.y*32,p.w*32,p.h*32);}
  ctx.globalAlpha=1;
@@ -245,7 +256,7 @@ $('skipBtn').onclick=skip;
 let landMode=false,landPick=null;
 const placer=new Placer({canPlace:p=>O.canPlaceRoom(S,p.type,p.x,p.y,p.index),onChange:p=>{ $('placeBar').hidden=false;$('placeText').textContent=p.reason?'⚠ '+p.reason:'用手指拖曳房間,綠色就能蓋';$('placeOk').disabled=!!p.reason;$('placeOk').textContent=p.index>=0?'✅ 搬到這裡(免費)':'✅ 蓋在這裡 $'+fmt(E.floorCost(S,p.type));}});
 function closeSheet(){$('sheet').classList.remove('on');}
-function openSheet(){$('sheet').classList.add('on');}
+function openSheet(){cancelPlace();$('sheet').classList.add('on');}
 function startRoom(type,index=-1){if(playback)return false;if(index>=0&&type==='lobby'){toast('大廳不能搬動');return false;}landMode=false;closeSheet();const spot=index<0&&O.findSpot(S,type);if(index<0&&!spot)toast('地不夠了,可以先到 🏗 建造 → 🗺 買地');if(spot){const k=D.ROOM_SIZE[type];cam.x=(spot.x+k.w/2)*32-cam.w/cam.s/2;cam.y=(spot.y+k.h/2)*32-(cam.h-140)/cam.s/2;cam.clamp();}const r=index>=0?O.roomRect(S,index):spot?{...spot,...D.ROOM_SIZE[type]}:{x:Math.round((cam.x+cam.w/cam.s/2)/32-D.ROOM_SIZE[type].w/2),y:Math.round((cam.y+cam.h/cam.s/2)/32-D.ROOM_SIZE[type].h/2),...D.ROOM_SIZE[type]};placer.start({...r,type,index});return true;}
 function cancelPlace(){placer.cancel();landMode=false;landPick=null;$('placeBar').hidden=true;}
 function confirmPlace(){let err;if(landMode){if(!landPick)return;err=O.buyLand(S,landPick.cx,landPick.cy);}else{const p=placer.confirm();if(!p)return;err=p.index>=0?E.moveRoom(S,p.index,p.x,p.y):E.buildFloor(S,p.type,p.x,p.y);}if(err){toast(err);return;}cancelPlace();sceneKey='';save();render();}
@@ -254,13 +265,23 @@ $('placeOk').onclick=confirmPlace;$('placeCancel').onclick=cancelPlace;$('sheetC
 let sheetDown=0;$('sheetHandle').addEventListener('pointerdown',e=>{sheetDown=e.clientY;$('sheetHandle').setPointerCapture?.(e.pointerId);});$('sheetHandle').addEventListener('pointerup',e=>{if(e.clientY-sheetDown>45)closeSheet();});
 $('zoomIn').onclick=()=>cam.zoomAt(1.25,cam.w/2,cam.h/2);$('zoomOut').onclick=()=>cam.zoomAt(.8,cam.w/2,cam.h/2);
 const roomAt=(x,y)=>S.floors.findIndex((f,i)=>{const r=O.roomRect(S,i);return x>=r.x*32&&x<(r.x+r.w)*32&&y>=r.y*32&&y<(r.y+r.h)*32;});
-const pointerHandlers={blocked:()=>!S,ghostHit:(x,y)=>placer.active&&x>=placer.p.x*32&&x<(placer.p.x+placer.p.w)*32&&y>=placer.p.y*32&&y<(placer.p.y+placer.p.h)*32,onGhostGrab:(x,y)=>placer.grab(x,y),onGhostDrag:(x,y)=>placer.dragTo(x,y),onHold:(x,y)=>{if(playback||landMode)return false;const i=roomAt(x,y);return i>=0&&startRoom(S.floors[i].type,i);},onTap:(x,y)=>{
+const pointerHandlers={blocked:()=>!S,ghostHit:(x,y)=>placer.active&&x>=placer.p.x*32&&x<(placer.p.x+placer.p.w)*32&&y>=placer.p.y*32&&y<(placer.p.y+placer.p.h)*32,onGhostGrab:(x,y)=>placer.grab(x,y),onGhostDrag:(x,y)=>placer.dragTo(x,y),onHold:(x,y)=>{if($('sheet').classList.contains('on')||playback||landMode)return false;const i=roomAt(x,y);return i>=0&&startRoom(S.floors[i].type,i);},onTap:(x,y)=>{
+ if($('sheet').classList.contains('on')){closeSheet();return;}
  if(landMode){const cx=Math.floor(x/256),cy=Math.floor(y/256);if(!O.adjacentLand(S,cx,cy))return;landPick={cx,cy};$('placeOk').disabled=S.lv<O.landNeed(S)||S.money<O.landCost(S);$('placeText').textContent='買下這塊地? 需要公司 Lv'+O.landNeed(S);return;}
  if(placer.active||playback)return;
  for(const [id,a] of actors)if(Math.abs(a.x-x)<17&&Math.abs(a.y-16-y)<21){if(id==='assistant')openAssistant();else if(S.walkins.some(st=>st.id===id))openWalkin(id);else if(id.startsWith('rep:')){openCompany('partners');toast(S.offers[0]?.greeting||'期待一起合作!');}else if(id.startsWith('npc:'))openNpc(id.slice(4));else if(S.scouted.some(st=>st.id===id))openCompany('scouted');else if(E.starById(S,id))openInteract(id);else openCompany();return;}
  const i=roomAt(x,y);if(i>=0)openFloor(i);
 }};
 bindPointer(cv,cam,pointerHandlers);
+
+for(const id of ['trend','goal']){
+ const el=$(id);el.setAttribute?.('role','button');el.tabIndex=0;
+ const expand=()=>{ $('roomTitle').textContent=id==='trend'?'📈 趨勢':'🎯 目標';$('roomBody').innerHTML=el.innerHTML;$('roomBox').classList.add('on'); };
+ el.addEventListener('click',expand);el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();expand();}});
+}
+// 點視窗外緣可收起,事件選擇仍保留,下次可從看事件重開。
+for(const id of ['evBox','repBox','pickBox','starBox','endBox','ngBox','helpBox','codeBox','awardBox','roomBox'])$(id).addEventListener('click',e=>{if(e.target===$(id))$(id).classList.remove('on');});
+
 
 // ---------- 對話泡泡 ----------
 const bubQ = new Map();          // 明星 id → 等著講的話
@@ -278,8 +299,8 @@ function updateBubbles(now) {
   for(const n of notifications){n.el.style.opacity=Math.max(0,Math.min(1,(n.until-now)/600));if(now>=n.until)n.el.remove();}notifications=notifications.filter(n=>now<n.until);
   const box = $('bubbles');
   for (const [id, b] of bubOn) if (now > b.until || !actors.has(id)) { b.el.remove(); bubOn.delete(id); }
-  if (bubOn.size < 3) for (const [id, q] of bubQ) {
-    if (bubOn.size >= 3) break;
+  if (bubOn.size < (cam.w<900?2:3)) for (const [id, q] of bubQ) {
+    if (bubOn.size >= (cam.w<900?2:3)) break;
     if (bubOn.has(id) || !q.length || !actors.has(id)) continue;
     const f = q.shift(), st = id==='assistant'?S.assistant:E.starById(S, id); if (!st) continue;
     const el = document.createElement('div'); el.className = 'bub'; el.style.setProperty('--c', st.glow);
@@ -1111,7 +1132,7 @@ function openVisit(i){
 const streetCache={};
 function streetSprite(k){return streetCache[k] ||= toCanvas(STREET_KIT[k].make());}
 let notifications=[];
-function notify(f){const el=document.createElement('div');el.className='notice';el.textContent=f.text;$('notifications').appendChild(el);notifications.push({el,until:performance.now()+4000});while(notifications.length>3)notifications.shift().el.remove();}
+function notify(f){const el=document.createElement('div');el.className='notice';el.textContent=f.text;$('notifications').appendChild(el);notifications.push({el,until:performance.now()+4000});while(notifications.length>(cam.w<900?2:3))notifications.shift().el.remove();}
 $('logBtn').onclick=()=>{feedSeen=S.seq;$('bFeed').style.display='none';$('roomTitle').textContent='📜 紀錄';$('roomBody').innerHTML=feedHTML();$('roomBox').classList.add('on');};
 const conditionText=st=>({lead:'想當主角',album:'想要自己的單曲',off:'每週至少一天放假'}[st.walkinCondition]||'沒有額外條件');
 function walkinHTML(st){return `<div class="card2">${ptImg(st)}<b>${esc(st.name)} · ${st.trainee?'🌱 素人':'⭐ 有經驗的明星'}</b><p>${esc(st.intro)}</p><p>${st.traits.map(t=>D.TRAITS[t].name).join(' · ')} · ${careerTag(st)}</p><p>${D.SKILL_IDS.map(k=>D.SKILLS[k].name+':'+(S.assistant.lv>=2||!st.trainee||k===E.bestSkill(st)?st.skills[k].toFixed(1):'?')).join(' · ')}</p><p>潛力 ${S.assistant.lv>=1||E.roomLv(S,'scout')>=2?E.potentialStars(st):'?'} · ${conditionText(st)}</p><button class="sbtn" data-walkin-sign="${st.id}">簽約 $${fmt(st.signCost)}</button> <button class="sbtn ghost" data-walkin-no="${st.id}">婉拒</button></div>`;}

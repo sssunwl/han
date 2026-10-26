@@ -15,7 +15,7 @@ import { Camera } from '../../shared/tycoon/camera.js';
 import { bindPointer } from '../../shared/tycoon/input.js';
 import { botWeek } from '../../tools/aistar_autoplay.mjs';
 const noop=()=>{};
-const context2d=new Proxy({createLinearGradient:()=>({addColorStop:noop})},{get:(t,k)=>t[k]||noop});
+const context2d=new Proxy({measureText:s=>({width:s.length*10}),createLinearGradient:()=>({addColorStop:noop})},{get:(t,k)=>t[k]||noop});
 const nodes=new Map();
 function node(id='') {
   const classes=new Set(), listeners={};
@@ -31,12 +31,13 @@ document.getElementById('tabs').children=['ops','stars','prod','build','co'].map
 globalThis.document=document;globalThis.devicePixelRatio=1;globalThis.ImageData=class {constructor(data,w,h){Object.assign(this,{data,width:w,height:h});}};
 const storage=new Map();
 const localStorage={getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,String(v))};
+const viewportListeners={};
 const sandbox={localStorage,O,Placer,goTo,moveAgent,STREET_KIT,E,D,Bmp,toCanvas,makeFrame,FW,FH,ST,makeAccessory,stWall,Camera,bindPointer,document,devicePixelRatio:1,ImageData:globalThis.ImageData,
   console,performance,Date,Math,Map,Set,addEventListener:noop,ResizeObserver:class {observe(){}},requestAnimationFrame:noop,setInterval:noop,setTimeout:()=>1,clearTimeout:noop,
   saveKey:()=> 'test',currentProfile:()=>({name:'測試'}),tone:noop,fanfare:noop,renderWho:noop,lockGestures:noop,escapeHTML:s=>String(s),
   audioPrefs:{sfx:false,music:'off'},saveAudioPrefs:noop,TRACKS:{},playMusic:noop,stopMusic:noop,nowPlaying:()=>null,
   loadBest:async()=>null,saveBoth:()=>({ls:true,idb:Promise.resolve(true)}),encodeSave:async()=>'',decodeSave:async()=>null,
-  confirm:()=>true,window:{},navigator:{}};
+  confirm:()=>true,window:{visualViewport:{addEventListener:(k,f)=>viewportListeners[k]=f}},navigator:{}};
 const code=readFileSync(new URL('./main.js',import.meta.url),'utf8').replace(/^import .+;\n/gm,'').replace('import.meta.env?.DEV !== false','true');
 vm.createContext(sandbox);vm.runInContext(code,sandbox,{filename:'main.js'});
 const AS=sandbox.window.AS, S=E.newGame({seed:1234});AS.boot(S);
@@ -71,7 +72,7 @@ AS.openWalkin(U.walkins[0].id);assert.match(document.getElementById('roomBody').
 const rookie=U.walkins.find(st=>st.trainee);if(rookie)assert.match(AS.walkinHTML(rookie),/\?/);
 document.getElementById('logBtn').onclick();assert.equal(document.getElementById('roomTitle').textContent,'📜 紀錄');assert.match(document.getElementById('roomBody').innerHTML,/class="feed"/);
 E.feed(U,null,'新通知','sys');AS.render();assert.equal(document.getElementById('bFeed').style.display,'');
-for(let i=0;i<5;i++)AS.notify({text:'公司通知 '+i});assert.equal(vm.runInContext('notifications.length',sandbox),3);AS.tick(5);assert.equal(vm.runInContext('notifications.length',sandbox),0);
+for(let i=0;i<5;i++)AS.notify({text:'公司通知 '+i});assert.equal(vm.runInContext('notifications.length',sandbox),2);AS.tick(5);assert.equal(vm.runInContext('notifications.length',sandbox),0);
 const company=document.getElementById('tabs').children.find(b=>b.dataset.tab==='co');document.getElementById('tabs').fire('click',{target:{closest:()=>company}});assert.match(document.getElementById('panel').innerHTML,/🚚 地區/);
 assert.equal(AS.cam.worldW,1024);assert.equal(AS.cam.worldH,1760);
 // 走到街道端點,返程使用同一張通行表。
@@ -133,3 +134,35 @@ let moved;for(let y=0;y<48&&!moved;y++)for(let x=0;x<32&&!moved;x++)if((x!==f.x|
 AS.openFloor(1);assert.doesNotMatch(document.getElementById('roomTitle').textContent,/\dF/);
 AS.tick(20);const walking=AS.actors.get(V.stars[0].id),before={x:walking.x,y:walking.y};V.stars[0].sched[0]='off';AS.tick(.05);assert.ok(Math.hypot(walking.x-before.x,walking.y-before.y)<=8);AS.tick(30);assert.equal(Math.floor(walking.y/32),48);
 console.log('v4 假 DOM:六鍵、全螢幕樣式、五抽屜、建造確認/取消、買地、長按搬移及人物逐步行走通過');
+
+// v4.1 手機版契約與實際抽屜關閉手勢。
+assert.match(html,/viewport-fit=cover/);assert.match(html,/user-scalable=no/);
+for(const area of ['top','bottom','left','right'])assert.ok(html.includes('env(safe-area-inset-'+area+')'));
+assert.match(html,/height:100vh;height:-webkit-fill-available;height:100dvh/);
+assert.match(html,/height:62dvh/);assert.match(html,/86dvh/);assert.match(html,/touch-action:pan-y/);
+assert.match(code,/window.visualViewport\?\.addEventListener\('resize',\(\)=>layout\(\)\)/);
+assert.match(code,/function boot\(sv\)[\s\S]*?layout\(true\)/);
+const canvas=document.getElementById('cv'), oldRect=canvas.getBoundingClientRect;
+canvas.getBoundingClientRect=()=>({width:390,height:844,left:0,top:0});viewportListeners.resize();assert.equal(AS.cam.w,390);assert.equal(AS.cam.h,844);
+for(const [width,height] of [[360,640],[375,667],[390,844],[430,932],[844,390]]){
+ canvas.getBoundingClientRect=()=>({width,height,left:0,top:0});AS.boot(E.newGame({seed:41}));assert.equal(AS.cam.w,width);assert.equal(AS.cam.h,height);assert.ok(Number.isFinite(AS.cam.s));
+ AS.openBuild();document.getElementById('sheetClose').onclick();assert.equal(document.getElementById('sheet').classList.contains('on'),false);
+ AS.openBuild();document.getElementById('sheetHandle').fire('pointerdown',{clientY:10,pointerId:1});document.getElementById('sheetHandle').fire('pointerup',{clientY:70});assert.equal(document.getElementById('sheet').classList.contains('on'),false);
+ AS.openBuild();AS.pointerHandlers.onTap(0,0);assert.equal(document.getElementById('sheet').classList.contains('on'),false);
+}
+canvas.getBoundingClientRect=()=>({width:0,height:0});vm.runInContext('layout(true)',sandbox);assert.equal(vm.runInContext('initialLayoutPending',sandbox),true);
+canvas.getBoundingClientRect=oldRect;viewportListeners.resize();assert.equal(vm.runInContext('initialLayoutPending',sandbox),false);
+console.log('v4.1 假 DOM:五種尺寸、動態視窗、零尺寸重試狀態、安全區與抽屜三種關閉方式通過');
+
+// 共用離線更新:首次安裝不提示,舊 controller 換版才提示,返回前景檢查更新。
+const offline=readFileSync(new URL('../../shared/offline.js',import.meta.url),'utf8').replaceAll('import.meta.env.PROD','true').replaceAll('import.meta.env.BASE_URL',"'/han/'");
+for(const hadController of [false,true]){
+ const events={},docEvents={},bars=[];let updates=0,reloads=0;
+ const doc={readyState:'complete',hidden:false,getElementById:id=>bars.find(b=>b.id===id),body:{appendChild:b=>bars.push(b)},createElement:()=>({style:{},addEventListener:(k,f)=>events['bar-'+k]=f}),addEventListener:(k,f)=>docEvents[k]=f};
+ const sw={controller:hadController?{}:null,addEventListener:(k,f)=>events[k]=f,register:async()=>({update:async()=>{updates++;}})};
+ vm.runInNewContext(offline,{navigator:{serviceWorker:sw},document:doc,location:{reload:()=>reloads++},addEventListener:noop});
+ await Promise.resolve();events.controllerchange();events.controllerchange();assert.equal(bars.length,hadController?1:0);
+ if(hadController){assert.equal(bars[0].textContent,'有新版本 · 點一下更新');events['bar-click']();assert.equal(reloads,1);}
+ doc.hidden=true;docEvents.visibilitychange();assert.equal(updates,0);doc.hidden=false;docEvents.visibilitychange();assert.equal(updates,1);
+}
+console.log('共用離線更新:首次安裝不提示、更新提示去重、點擊 reload 與前景 update 通過');

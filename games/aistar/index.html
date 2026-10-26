@@ -225,6 +225,32 @@
 /* v4: 全螢幕地圖、六鍵工具列及可收合抽屜 */
 #gameScreen{height:100dvh;position:fixed;inset:0;overflow:hidden}.main,.left,.stage{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;min-height:0!important;max-height:none!important}.main{display:block}.stage #cv{width:100%;height:100dvh;display:block;touch-action:none}#bubbles{position:absolute;inset:0;pointer-events:none}.bar{position:absolute;inset:0 0 auto;z-index:4;min-height:58px;padding:4px 6px;display:flex;flex-wrap:wrap;gap:3px;background:#181638ed}.bar .icon{width:29px;height:29px;font-size:16px;padding:0}.bar #coName{font-size:10px;flex:1;min-width:120px}.bar #coName b{font-size:13px;display:block}.bar .stats{display:flex;order:5;width:100%;gap:5px}.bar .chip{font-size:12px;flex:1;padding:2px 6px}.bar #saveDot{position:absolute;display:block;left:6px;bottom:-12px;font-size:9px;background:#222b;z-index:3}.trend,.goal{position:absolute;z-index:3;left:5px;right:48px;height:23px;min-height:0;padding:3px 6px;font-size:10px;border:0;border-radius:7px;white-space:nowrap;overflow:hidden;background:#211b44cb}.trend{top:74px}.goal{top:100px}.trend .nx{display:none}.goal span{font-size:10px}#notifications{top:158px;left:6px}.clock{top:129px;left:6px;right:auto;font-size:9px}.clock button{padding:3px}#zoom{position:fixed;right:7px;top:101px;z-index:5;display:grid;gap:5px}#zoom button{width:38px;height:38px;font-size:25px;background:#242657;color:#fff;border:2px solid #8accf6;border-radius:8px}.tools2{position:fixed;z-index:7;bottom:0;left:0;right:0;display:grid;grid-template-columns:repeat(5,1fr) 1.35fr;gap:3px;padding:5px 4px calc(5px + env(safe-area-inset-bottom));background:#171431;border-top:2px solid #8ca8df}.tools2 button{position:relative;min-width:0;min-height:53px;border:2px solid #96caff;border-radius:8px;background:#29336a;color:#fff;font: bold 11px sans-serif;padding:3px 1px}.tools2 i{display:block;font-style:normal;font-size:22px}.tools2 #nextBtn{background:#9e437f;border-color:#ff9cd5;font-size:12px;white-space:normal}.tools2 .badge{position:absolute;right:1px;top:0}.right#sheet{position:fixed;z-index:6;left:0;right:0;bottom:65px;width:100%;height:62dvh;max-width:none;background:#211b44;border:2px solid #9a8ac7;border-radius:18px 18px 0 0;display:none;overflow:hidden}#sheet.on{display:flex;flex-direction:column}#sheetHandle{height:32px;flex-shrink:0;display:flex;align-items:center;justify-content:center;position:relative;touch-action:none;color:#bcaed9}#sheetClose{position:absolute;right:6px;top:3px;min-width:38px;height:28px;border:0;border-radius:8px;background:#443767;color:white}#panel{flex:1;overflow:auto;padding:8px;touch-action:pan-y}.choice{min-height:48px}#placeBar{position:fixed;z-index:8;bottom:72px;left:6px;right:6px;padding:9px;background:#26213fee;border:2px solid #a9ccfa;border-radius:12px;text-align:center;font-size:13px}#placeBar[hidden]{display:none}#placeText{color:#fff;font-weight:bold}.rowMore{margin-top:8px;padding-top:8px;border-top:1px dashed #d9cfe8}#placeBar button{font:inherit;min-height:44px;margin:5px 3px 0;border:0;border-radius:8px;padding:6px 12px;background:#b6e6c1;color:#26384a}#tutorialCard{bottom:75px}.screen.start{z-index:9}
 @media(min-width:900px){#sheet.right{left:auto;right:8px;bottom:77px;top:155px;width:380px;height:auto;border-radius:16px}.tools2{right:auto;width:600px}.bar{max-width:780px}.trend,.goal{right:auto;max-width:680px}.clock{top:129px}#placeBar{right:auto;width:570px}#zoom{right:400px}}
+
+/* v4.1:手機安全區與瀏覽器動態高度。 */
+html,body,#gameScreen{height:100vh;height:-webkit-fill-available;height:100dvh;background:#120e2c}
+:root{--tools-h:calc(65px + env(safe-area-inset-bottom));--hud-top:calc(70px + env(safe-area-inset-top))}
+.stage #cv{height:100%;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+button{touch-action:manipulation}
+.bar{padding:calc(4px + env(safe-area-inset-top)) calc(6px + env(safe-area-inset-right)) 4px calc(6px + env(safe-area-inset-left));min-height:0}
+.bar #coName{min-width:0}.bar .stats{min-width:0}.bar .chip{min-width:0;overflow:hidden;text-overflow:ellipsis}.bar .chip b{font-size:13px}
+.trend,.goal{top:var(--hud-top);height:24px;cursor:pointer;touch-action:manipulation;width:calc((100% - 65px)/2);right:auto;max-width:none;font-size:9px;gap:3px;padding:4px}
+.goal{left:calc((100% - 65px)/2 + 10px)}.goal span{display:none}.trend>span:first-child{display:none}.trend .hot{flex:none}.trend .nx{display:none}
+#notifications{top:calc(var(--hud-top) + 28px);max-width:calc(100% - 70px);gap:2px}.notice{font-size:10px;line-height:12px;padding:2px 6px;-webkit-line-clamp:1}
+.clock{top:auto;bottom:calc(var(--tools-h) + 4px);left:calc(6px + env(safe-area-inset-left));max-width:calc(100% - 65px)}.clock button{min-height:32px}
+#zoom{top:var(--hud-top);right:calc(7px + env(safe-area-inset-right))}
+.tools2{padding-left:calc(4px + env(safe-area-inset-left));padding-right:calc(4px + env(safe-area-inset-right))}.tools2 button{min-height:53px;white-space:nowrap}.tools2 #nextBtn{white-space:nowrap;font-size:10px}
+.right#sheet{bottom:var(--tools-h);height:62vh;height:62dvh;max-height:calc(100% - var(--hud-top) - var(--tools-h));padding-left:env(safe-area-inset-left);padding-right:env(safe-area-inset-right)}
+#sheetHandle{height:44px}#sheetClose{top:0;height:44px;min-width:44px}#panel{min-height:0;overscroll-behavior:contain;touch-action:pan-y}
+#placeBar{bottom:calc(var(--tools-h) + 7px);left:calc(6px + env(safe-area-inset-left));right:calc(6px + env(safe-area-inset-right))}
+#tutorialCard{bottom:calc(var(--tools-h) + 7px);max-height:38vh;max-height:38dvh;overflow:auto;touch-action:pan-y}
+.modal{padding:calc(10px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left))}
+.modal .card{max-height:86vh;max-height:min(86dvh,100%);overscroll-behavior:contain;touch-action:pan-y}.modal button{min-height:44px}
+#repBox .card{max-height:45vh;max-height:45dvh}#repBox{padding-bottom:calc(var(--tools-h) + 5px)}
+@media(min-width:900px),(orientation:landscape) and (max-height:540px){
+ #sheet.right{left:auto;right:calc(8px + env(safe-area-inset-right));top:calc(var(--hud-top) + 28px);bottom:var(--tools-h);height:auto;width:min(380px,48vw);max-height:none;border-radius:16px}
+ .trend,.goal{width:260px}.goal{left:270px}.bar{max-width:780px}#zoom{right:calc(7px + env(safe-area-inset-right))}
+ #tutorialCard{left:8px;transform:none;width:min(330px,43vw)}
+}
 </style>
 </head>
 <body>

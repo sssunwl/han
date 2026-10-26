@@ -43,7 +43,7 @@ self.addEventListener('fetch', (e) => {
   if (url.origin !== location.origin || !url.pathname.startsWith(BASE)) return;
 
   // 快取優先:有網路沒網路都一樣快,也不會因為網路慢卡在白畫面。
-  // 新版本會在下次打開時生效(新的 sw.js 裝好後自動換掉整份快取)。
+  // 新版接手後,offline.js 會提示已開啟的頁面點一下重新載入。
   e.respondWith(
     caches.open(CACHE).then(async (c) => {
       const hit = await c.match(cacheKey(url));
